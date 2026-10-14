@@ -1,0 +1,61 @@
+{
+  "name": "个人部署默认影视源",
+  "version": 2,
+  "sources": [
+    {
+      "name": "非凡资源",
+      "url": "https://cj.ffzyapi.com/api.php/provide/vod/from/ffm3u8",
+      "isAdult": false
+    },
+    {
+      "name": "量子资源",
+      "url": "https://cj.lziapi.com/api.php/provide/vod/from/lzm3u8",
+      "isAdult": false
+    },
+    {
+      "name": "暴风资源（起播较慢）",
+      "url": "https://bfzyapi.com/api.php/provide/vod",
+      "isAdult": false
+    },
+    {
+      "name": "360资源",
+      "url": "https://360zy.com/api.php/provide/vod",
+      "isAdult": false
+    },
+    {
+      "name": "魔都资源",
+      "url": "https://www.mdzyapi.com/api.php/provide/vod",
+      "isAdult": false
+    },
+    {
+      "name": "极速资源",
+      "url": "https://jszyapi.com/api.php/provide/vod/from/jsm3u8",
+      "isAdult": false
+    },
+    {
+      "name": "速播资源",
+      "url": "https://subocaiji.com/api.php/provide/vod",
+      "isAdult": false
+    },
+    {
+      "name": "豪华资源",
+      "url": "https://hhzyapi.com/api.php/provide/vod",
+      "isAdult": false
+    },
+    {
+      "name": "金鹰资源",
+      "url": "https://jyzyapi.com/provide/vod/from/jinyingm3u8/at/json",
+      "isAdult": false
+    },
+    {
+      "name": "红牛资源",
+      "url": "https://www.hongniuzy2.com/api.php/provide/vod/from/hnm3u8",
+      "isAdult": false
+    },
+    {
+      "name": "光速资源",
+      "url": "https://api.guangsuapi.com/api.php/provide/vod/from/gsm3u8",
+      "isAdult": false
+    }
+  ]
+}
