@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from 'react';
 import Artplayer from 'artplayer';
 import Hls, { type HlsConfig } from 'hls.js';
 
+import { PlaybackTracker } from '@/lib/playback-quality';
+import { usePlaybackQuality } from '@/lib/playback-quality-store';
 import { PlaybackRecovery, describeHlsError } from '@/lib/playback-recovery';
 import { createHlsLoader } from '@/lib/hls-loader';
 import {
@@ -25,6 +27,7 @@ import { formatTime } from '@/lib/utils';
 
 interface PlayerShellProps {
   url: string;
+  qualitySource?: string;
   title: string;
   adFilter: boolean;
   autoplayNext: boolean;
@@ -44,6 +47,7 @@ interface PlayerShellProps {
 
 export function PlayerShell({
   url,
+  qualitySource,
   title,
   adFilter,
   autoplayNext,
@@ -70,11 +74,11 @@ export function PlayerShell({
 
   // 始终持有最新 props/回调，避免重建播放器
   const propsRef = useRef({
-    url, title, adFilter, autoplayNext, episodeKey, nextUrl, nextEpisodeKey,
+    url, qualitySource, title, adFilter, autoplayNext, episodeKey, nextUrl, nextEpisodeKey,
     getRestorePosition, onTimeUpdate, onEnded, onPause, onRequestSwitchSource,
   });
   propsRef.current = {
-    url, title, adFilter, autoplayNext, episodeKey, nextUrl, nextEpisodeKey,
+    url, qualitySource, title, adFilter, autoplayNext, episodeKey, nextUrl, nextEpisodeKey,
     getRestorePosition, onTimeUpdate, onEnded, onPause, onRequestSwitchSource,
   };
 
@@ -95,6 +99,20 @@ export function PlayerShell({
   const recoveryRef = useRef<PlaybackRecovery | null>(null);
   // 自然播完标记，卸载时不回写进度（避免覆盖「已看完」记录）
   const endedRef = useRef(false);
+  const qualityRef = useRef<{ source: string; tracker: PlaybackTracker; failed: boolean } | null>(null);
+  const flushQuality = (failed = false) => {
+    const q = qualityRef.current; if (!q || (failed && q.failed)) return;
+    const delta = q.tracker.drain(performance.now(), failed);
+    if (failed) q.failed = true;
+    if (delta.startupMs !== undefined || delta.playedMs > 0 || delta.stalledMs > 0 || delta.failed)
+      usePlaybackQuality.getState().record(q.source, delta);
+  };
+  const startQuality = () => {
+    flushQuality();
+    const source = propsRef.current.qualitySource;
+    qualityRef.current = source ? { source, tracker: new PlaybackTracker(performance.now()), failed: false } : null;
+    qualityRef.current?.tracker.visibility(performance.now(), document.hidden);
+  };
 
   const showHint = (text: string) => {
     setHint(text);
@@ -166,26 +184,9 @@ export function PlayerShell({
 
     hls.on(Hls.Events.MANIFEST_PARSED, async () => {
       recoveryRef.current?.markHealthy();
-      // 预取锚点：恢复进度时直接取恢复目标。赋值后 video.currentTime 未必立刻反映
-      // （Safari 系），而 ensure 是以「锚点未变」为前提复用 parsing 中的运行的——
-      // 这里读到旧值会把窗口建在片头，且白等一次纠错重建。
-      let prefetchAnchor = video.currentTime;
-      // 进度恢复（每集一次）：优先 URL position，其次 IndexedDB 记录
-      if (!restoredRef.current) {
-        restoredRef.current = true;
-        try {
-          const saved = (await propsRef.current.getRestorePosition?.()) ?? 0;
-          const duration = artRef.current?.duration || 0;
-          if (saved > 10 && duration > 0 && saved < duration - 2) {
-            if (artRef.current) artRef.current.currentTime = saved;
-            prefetchAnchor = saved;
-            showHint(`已从 ${formatTime(saved)} 继续播放`);
-          }
-        } catch { /* 忽略恢复失败 */ }
-      }
-      // 新集立即预取（否则要等 timeupdate 的 30s 节流，起播初期无缓存）
-      ensurePrefetch(mediaUrl, prefetchAnchor);
-      video.play().catch(() => {});
+      // HLS 在 manifest 解析时尚未必有 duration；等 loadedmetadata 再恢复进度。
+      ensurePrefetch(mediaUrl, video.currentTime);
+      video.play().catch((err) => { if (err.name === 'NotAllowedError') qualityRef.current?.tracker.pause(performance.now()); });
     });
     // 播放链路恢复（FRAG_LOADED / MANIFEST_PARSED）：静默窗外清零连续失败计数
     hls.on(Hls.Events.FRAG_LOADED, () => recoveryRef.current?.markHealthy());
@@ -227,6 +228,7 @@ export function PlayerShell({
         case 'switch-source': {
           // 覆盖播放开始后的场景：起播失败走 setError 遮罩；
           // 播放中失败走回调弹换源面板（父级未提供回调时同样 setError）
+          flushQuality(true);
           const message = `${describeHlsError(data.type, data.details)}：${decision.reason}`;
           if (playbackStartedRef.current) {
             showHint(message);
@@ -265,10 +267,10 @@ export function PlayerShell({
       if (type === 'mp4') {
         video.src = mediaUrl;
         video.load();
-        video.play().catch(() => {});
+        video.play().catch((err) => { if (err.name === 'NotAllowedError') qualityRef.current?.tracker.pause(performance.now()); });
       } else setupHls(video, mediaUrl, true);
     } catch (err) {
-      if (!controller.signal.aborted) setError(err instanceof Error ? err.message : '播放解析失败');
+      if (!controller.signal.aborted) { flushQuality(true); setError(err instanceof Error ? err.message : '播放解析失败'); }
     }
   };
 
@@ -287,6 +289,7 @@ export function PlayerShell({
     setShowPoster(true);
     const art = artRef.current;
     if (!art) return;
+    startQuality();
     void setupMedia(art.video, targetUrl);
   };
 
@@ -305,6 +308,7 @@ export function PlayerShell({
 
     let lastSave = 0;
 
+    startQuality();
     const art = new Artplayer({
       container: containerRef.current,
       url: initialUrl,
@@ -336,12 +340,16 @@ export function PlayerShell({
     });
     artRef.current = art;
     art.on('video:loadedmetadata', async () => {
-      if (mediaTypeRef.current === 'mp4' && !restoredRef.current) {
+      if (!restoredRef.current) {
         restoredRef.current = true;
         const media = currentMediaUrlRef.current;
         try {
           const saved = await propsRef.current.getRestorePosition?.() || 0;
-          if (media === currentMediaUrlRef.current && saved > 10 && saved < art.duration - 2) art.currentTime = saved;
+          if (media === currentMediaUrlRef.current && saved > 10 && saved < art.duration - 2) {
+            art.currentTime = saved;
+            ensurePrefetch(media, saved);
+            showHint(`已从 ${formatTime(saved)} 继续播放`);
+          }
         } catch { /* ignore unavailable progress */ }
       }
       // ArtPlayer 运行时支持 title 选项（类型定义未覆盖），用于界面标题展示
@@ -351,7 +359,11 @@ export function PlayerShell({
       } catch { /* 忽略 */ }
     });
 
+    art.on('video:play', () => qualityRef.current?.tracker.play(performance.now()));
+    art.on('video:seeking', () => qualityRef.current?.tracker.seek(performance.now(), true));
+    art.on('video:seeked', () => qualityRef.current?.tracker.seek(performance.now(), false));
     art.on('video:playing', () => {
+      if (art.video.videoWidth > 0) { qualityRef.current?.tracker.playing(performance.now()); flushQuality(); }
       playbackStartedRef.current = true;
       if (mediaTypeRef.current === 'mp4') mediaHealthyRef.current = true;
       setShowPoster(false);
@@ -368,7 +380,7 @@ export function PlayerShell({
           currentMediaUrlRef.current = `/api/proxy?url=${encodeURIComponent(target)}`;
           art.video.src = currentMediaUrlRef.current;
           art.video.addEventListener('loadedmetadata', () => { art.currentTime = position; art.play().catch(() => {}); }, { once: true });
-        } else setError('视频播放失败，请尝试其他视频源');
+        } else { flushQuality(true); setError('视频播放失败，请尝试其他视频源'); }
         return;
       }
       // 起播阶段的 video 元素级错误（MSE/解码偶发失败）：重建一次播放链路自愈，
@@ -379,6 +391,7 @@ export function PlayerShell({
         setupHls(art.video, currentMediaUrlRef.current, true);
         return;
       }
+      flushQuality(true);
       setError('视频播放失败，请尝试其他视频源');
     });
     art.on('video:timeupdate', () => {
@@ -399,6 +412,7 @@ export function PlayerShell({
       ensurePrefetch(currentMediaUrlRef.current, art.currentTime);
     });
     art.on('video:pause', () => {
+      qualityRef.current?.tracker.pause(performance.now()); flushQuality();
       propsRef.current.onPause?.(art.currentTime, art.duration);
       // 暂停 = 预取黄金窗口：解除限速并无限铺满整集（用户主动行为，带宽占用可接受）
       // waiting 触发的限速在此解除，否则黄金窗口会被 500ms 轮询冻结
@@ -406,6 +420,7 @@ export function PlayerShell({
       ensurePrefetch(currentMediaUrlRef.current, art.currentTime, 0);
     });
     art.on('video:waiting', () => {
+      qualityRef.current?.tracker.waiting(performance.now());
       // 卡顿：预取临时让出带宽给播放
       getVideoPrefetcher().setThrottled(true);
     });
@@ -413,6 +428,7 @@ export function PlayerShell({
       getVideoPrefetcher().setThrottled(false);
     });
     art.on('video:ended', () => {
+      qualityRef.current?.tracker.pause(performance.now()); flushQuality();
       endedRef.current = true;
       propsRef.current.onEnded?.();
     });
@@ -491,7 +507,10 @@ export function PlayerShell({
     el?.addEventListener('contextmenu', onContextMenu);
 
     // 卸载与页面隐藏时保存进度
+    const qualityTimer = setInterval(() => flushQuality(), 15000);
     const saveOnHide = () => {
+      qualityRef.current?.tracker.visibility(performance.now(), document.visibilityState === 'hidden');
+      flushQuality();
       if (document.visibilityState === 'hidden') {
         propsRef.current.onPause?.(art.currentTime, art.duration);
       }
@@ -499,6 +518,7 @@ export function PlayerShell({
     document.addEventListener('visibilitychange', saveOnHide);
 
     return () => {
+      clearInterval(qualityTimer); flushQuality(); qualityRef.current = null;
       // 卸载前刷一次最终进度，避免丢失最后几秒。
       // 已自然播完的集数不回写，避免覆盖 onEnded 里清除的「已看完」记录
       if (!endedRef.current) {

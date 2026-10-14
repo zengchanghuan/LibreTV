@@ -58,6 +58,7 @@ function WatchContent() {
 
   const [reversed, setReversed] = useState(false);
   const [switchOpen, setSwitchOpen] = useState(false);
+  const latestPosition = useRef(0);
 
   const source = resolveSource(store, sourceKey, {
     url: searchParams.get('sourceUrl') || undefined,
@@ -240,6 +241,7 @@ function WatchContent() {
               {currentUrl ? (
                 <PlayerShell
                   url={currentUrl}
+                  qualitySource={source.url}
                   title={videoTitle}
                   adFilter={store.adFilter}
                   autoplayNext={store.autoplayNext}
@@ -247,8 +249,8 @@ function WatchContent() {
                   nextUrl={currentIndex + 1 < episodes.length ? episodes[currentIndex + 1] : undefined}
                   nextEpisodeKey={currentIndex + 1 < episodes.length ? `${sourceKey}:${vodId}:${currentIndex + 1}` : undefined}
                   getRestorePosition={getRestorePosition}
-                  onTimeUpdate={handleProgress}
-                  onPause={handleProgress}
+                  onTimeUpdate={(position, duration) => { latestPosition.current = position; handleProgress(position, duration); }}
+                  onPause={(position, duration) => { latestPosition.current = position; handleProgress(position, duration); }}
                   onEnded={handleEnded}
                 />
               ) : (
@@ -345,6 +347,7 @@ function WatchContent() {
           currentSourceKey={sourceKey}
           currentVodId={vodId}
           currentIndex={currentIndex}
+          getCurrentPosition={() => latestPosition.current}
           onClose={() => setSwitchOpen(false)}
         />
       )}

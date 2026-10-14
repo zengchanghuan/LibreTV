@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useRankedSources } from './use-ranked-sources';
+import { qualityLabel } from '@/lib/playback-quality';
 import { api } from '@/lib/client-api';
 import type { SourceConfig, SearchResultItem } from '@/lib/types';
 import { buildWatchUrl, cn } from '@/lib/utils';
@@ -13,7 +15,7 @@ import { EmptyState, LoadingState } from './states';
 import { useFocusTrap } from './use-focus-trap';
 
 /**
- * 换源面板：跨源按标题搜索 → 匹配同名/同前缀资源 → 并发测速（详情接口耗时）→ 按速度排序展示。
+ * 换源面板：跨源按标题搜索 → 匹配同名/同前缀资源 → 限并发媒体测速 + 本机实播记录 → 按质量排序展示。
  * 切换时保留当前集数索引（旧版 switchToResource 逻辑的去 DOM 化重写）。
  */
 
@@ -30,19 +32,22 @@ export function SwitchSourceModal({
   currentSourceKey,
   currentVodId,
   currentIndex,
+  getCurrentPosition,
   onClose,
 }: {
   currentTitle: string;
   currentSourceKey: string;
   currentVodId: string;
   currentIndex: number;
+  getCurrentPosition?: () => number;
   onClose: () => void;
 }) {
   const store = useAppStore();
   const router = useRouter();
   const { toast } = useToast();
   const [candidates, setCandidates] = useState<Candidate[]>([]);
-  const [phase, setPhase] = useState<'searching' | 'testing' | 'done'>('searching');
+  const [phase, setPhase] = useState<'searching' | 'done'>('searching');
+  const quality = useRankedSources(candidates.map(c => c.result), phase === 'done', currentIndex);
   /** 封面加载失败记录（按卡片 key）；失败后降级为占位图标，避免破图 */
   const [imgFailed, setImgFailed] = useState<Record<string, boolean>>({});
   const panelRef = useRef<HTMLDivElement>(null);
@@ -104,18 +109,6 @@ export function SwitchSourceModal({
           if (exact) matched.push({ source: s, result: exact });
         }
 
-        // 2) 并发测速（详情接口耗时）并获取集数
-        setPhase('testing');
-        await Promise.all(
-          matched.map(async (c) => {
-            const r = await api.detailSpeed(c.result.vodId, c.source, controller.signal);
-            if (cancelled) return;
-            c.ok = r.ok;
-            c.ms = r.ms;
-            c.episodes = r.detail?.episodes.length ?? 0;
-          })
-        );
-        if (cancelled) return;
         setCandidates(matched);
         setPhase('done');
       } catch (err) {
@@ -135,21 +128,21 @@ export function SwitchSourceModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentTitle, store.yellowFilter]);
 
-  const sorted = [...candidates].sort((a, b) => {
-    const aCurrent = a.source.key === currentSourceKey && String(a.result.vodId) === String(currentVodId);
-    const bCurrent = b.source.key === currentSourceKey && String(b.result.vodId) === String(currentVodId);
-    if (aCurrent !== bCurrent) return aCurrent ? -1 : 1;
-    const msA = a.ok ? a.ms ?? 99_999 : 99_999;
-    const msB = b.ok ? b.ms ?? 99_999 : 99_999;
-    return msA - msB;
+  const sorted = quality.ranked.map(item => {
+    const candidate = candidates.find(c => c.result === item)!;
+    const probe = quality.probes[`${item.sourceKey}:${item.vodId}`];
+    return { ...candidate, ...probe };
   });
+  const recommended = sorted.find(c => c.ok && !(c.source.key === currentSourceKey && c.result.vodId === currentVodId));
 
   const switchTo = (c: Candidate) => {
     if (!c.episodes) {
       toast('该源无可用播放资源', 'warning');
       return;
     }
-    const targetIndex = currentIndex < c.episodes ? currentIndex : 0;
+    if (currentIndex >= c.episodes) { toast('该源缺少当前集', 'warning'); return; }
+    const targetIndex = currentIndex;
+    const currentPosition = getCurrentPosition?.() || 0;
     onClose(); // 先关闭面板，避免路由参数变化后弹窗残留旧数据
     router.push(
       buildWatchUrl({
@@ -159,7 +152,7 @@ export function SwitchSourceModal({
         title: c.result.name || currentTitle,
         sourceUrl: c.source.url,
         detail: c.source.detail,
-      })
+      }) + (currentPosition > 10 ? `&position=${Math.floor(currentPosition)}` : '')
     );
   };
 
@@ -186,8 +179,8 @@ export function SwitchSourceModal({
             <p className="text-xs text-faint">
               {phase === 'searching'
                 ? '正在搜索各资源...'
-                : phase === 'testing'
-                  ? '正在测试各资源速率...'
+                : quality.testing
+                  ? '正在测试视频列表和媒体速度…'
                   : `共 ${sorted.length} 个来源 · ${sorted.filter((c) => c.ok).length} 个可用`}
             </p>
           </div>
@@ -198,6 +191,11 @@ export function SwitchSourceModal({
           </button>
         </div>
 
+        {phase === 'done' && <div className="mb-3 flex items-center justify-between gap-3">
+          <p className="text-xs text-faint">按实际起播、卡顿记录和媒体测速排序；测速不保证全片流畅。</p>
+          <button className="btn-primary btn-sm shrink-0" disabled={!recommended}
+            onClick={() => recommended && switchTo(recommended)}>切换推荐源</button>
+        </div>}
         {phase !== 'done' ? (
           <LoadingState label={phase === 'searching' ? '搜索各资源中...' : '测速中...'} />
         ) : sorted.length === 0 ? (
@@ -234,10 +232,10 @@ export function SwitchSourceModal({
                     <span
                       className={cn(
                         'absolute top-1.5 right-1.5 tag',
-                        !c.ok ? 'bg-danger-solid/85 text-white' : c.ms! > 2000 ? 'bg-warning-solid/85 text-white' : 'bg-success-solid/85 text-white'
+                        c.ok === undefined ? 'bg-black/70 text-white' : !c.ok ? 'bg-danger-solid/85 text-white' : c.ms! > 2000 ? 'bg-warning-solid/85 text-white' : 'bg-success-solid/85 text-white'
                       )}
                     >
-                      {!c.ok ? '失败' : `${c.ms}ms`}
+                      {c.ok === undefined ? '测速中' : !c.ok ? '测速未通过' : `媒体 ${(c.ms! / 1000).toFixed(1)}s`}
                     </span>
                     {isCurrent && (
                       <span className="absolute inset-x-0 bottom-0 bg-accent/90 text-on-accent text-xs text-center py-1">当前播放</span>
@@ -245,9 +243,10 @@ export function SwitchSourceModal({
                   </div>
                   <div className="p-2">
                     <div className="text-xs font-medium text-content truncate" title={c.source.name}>
-                      {c.source.name}
+                      {c.source.name}{recommended === c ? ' · 推荐' : ''}
                     </div>
-                    <div className="text-xs text-faint mt-0.5">{c.episodes ? `${c.episodes} 集` : '无资源'}</div>
+                    <div className="text-xs text-faint mt-0.5">{qualityLabel(quality.entries[c.source.url])}</div>
+                    <div className="text-xs text-faint">{c.episodes ? `${c.episodes} 集` : '待获取剧集'}</div>
                   </div>
                 </button>
               );

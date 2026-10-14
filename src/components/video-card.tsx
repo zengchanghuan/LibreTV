@@ -1,4 +1,6 @@
 'use client';
+import { useRankedSources } from './use-ranked-sources';
+import { qualityLabel } from '@/lib/playback-quality';
 
 import { useEffect, useMemo, useState } from 'react';
 import type { SearchResultItem } from '@/lib/types';
@@ -76,6 +78,7 @@ export function AggregatedCard({
   const [imgFailed, setImgFailed] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const showImg = !!group.pic && !imgFailed;
+  const quality = useRankedSources(group.items, expanded);
 
   const multi = group.items.length > 1;
   const adult = useMemo(() => group.items.some((i) => i.isAdult), [group.items]);
@@ -164,9 +167,13 @@ export function AggregatedCard({
 
       {multi && expanded && (
         <div className="border-t border-line p-2.5 animate-fade-in">
-          <p className="text-[10px] text-faint mb-1.5">选择来源播放</p>
+          <div className="flex items-center justify-between gap-2 mb-2">
+            <p className="text-[10px] text-faint">{quality.testing ? '正在测试媒体速度…' : '按起播和流畅度排序'}</p>
+            <button className="btn-primary btn-sm" disabled={!quality.best}
+              onClick={() => quality.best && onOpen(quality.best)}>智能优选</button>
+          </div>
           <div className="flex flex-wrap gap-1.5">
-            {group.items.map((item) => (
+            {quality.ranked.map((item) => (
               <button
                 key={`${item.sourceKey}_${item.vodId}`}
                 className={cn(
@@ -181,8 +188,8 @@ export function AggregatedCard({
                 }}
                 aria-label={`使用 ${item.sourceName} 播放`}
               >
-                <span className="font-medium text-content truncate max-w-[9em]">{item.sourceName}</span>
-                <span className="text-faint truncate max-w-[7em]">{item.remarks || '暂无介绍'}</span>
+                <span className="font-medium text-content truncate max-w-[9em]">{item.sourceName}{quality.best === item ? ' · 推荐' : ''}</span>
+                <span className="text-faint truncate max-w-[7em]">{qualityLabel(quality.entries[quality.keyOf(item)])}</span>
                 <svg
                   className="w-3.5 h-3.5 text-accent shrink-0 transition-transform group-hover:scale-110"
                   fill="currentColor"
