@@ -86,6 +86,7 @@ export async function handleProxyRequest(req: Request, targetUrl: string): Promi
     }
   } catch { /* 忽略非法 URL */ }
 
+  const isMp4 = /\.mp4$/i.test(new URL(targetUrl).pathname);
   const range = req.headers.get('range');
   if (range) headers.Range = range;
 
@@ -96,8 +97,8 @@ export async function handleProxyRequest(req: Request, targetUrl: string): Promi
     try {
       const result = await fetchWithSafeRedirects(targetUrl, {
         headers,
-        signal: AbortSignal.timeout(TIMEOUT_MS),
-      });
+        signal: isMp4 ? req.signal : AbortSignal.any([req.signal, AbortSignal.timeout(TIMEOUT_MS)]),
+      }, isMp4 ? { headerTimeoutMs: HEADER_TIMEOUT_MS } : {});
       response = result.res;
       finalUrl = result.finalUrl;
       lastError = null;
@@ -116,7 +117,7 @@ export async function handleProxyRequest(req: Request, targetUrl: string): Promi
   const contentType = response.headers.get('content-type') || '';
   const isM3u8 =
     contentType.includes('mpegurl') || contentType.includes('x-mpegurl') ||
-    targetUrl.toLowerCase().endsWith('.m3u8');
+    new URL(targetUrl).pathname.toLowerCase().endsWith('.m3u8');
 
   // m3u8 文本：重写为代理地址（以重定向后的最终 URL 为 base 解析相对地址）
   if (isM3u8) {
@@ -137,11 +138,13 @@ export async function handleProxyRequest(req: Request, targetUrl: string): Promi
     const v = response.headers.get(name);
     if (v) outHeaders.set(name, v);
   }
+  if (isMp4 && !response.headers.get('content-encoding') && response.headers.get('content-length'))
+    outHeaders.set('Content-Length', response.headers.get('content-length')!);
   // fetch 会自动解压，转发时必须去掉长度相关头避免浏览器二次解压
   // 图片基本不变：长缓存交给浏览器与边缘 CDN（分片 / key 仍保守 1 小时）
   outHeaders.set(
     'Cache-Control',
-    contentType.startsWith('image/') ? 'public, max-age=2592000' : 'public, max-age=3600'
+    isMp4 ? 'private, no-store' : contentType.startsWith('image/') ? 'public, max-age=2592000' : 'public, max-age=3600'
   );
   outHeaders.set('Access-Control-Allow-Origin', '*');
 

@@ -1,3 +1,4 @@
+import { siteAdapterFor, searchSite } from '@/lib/site-adapters/site-adapters';
 import { NextResponse } from 'next/server';
 import { guardRequest } from '@/lib/api-guard';
 import { checkUpstreamAllowed } from '@/lib/ssrf';
@@ -29,6 +30,10 @@ export async function POST(req: Request) {
 
   const start = Date.now();
   try {
+    if (siteAdapterFor(url)) {
+      const list = await searchSite({ key: 'test', name: 'test', url }, 'test', AbortSignal.timeout(15000));
+      return NextResponse.json({ ok: true, ms: Date.now() - start, count: list.length });
+    }
     const res = await fetchUpstream(`${url}?ac=videolist&wd=test`, {
       timeoutMs: 6000,
       headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/122.0.0.0 Safari/537.36', Accept: 'application/json' },

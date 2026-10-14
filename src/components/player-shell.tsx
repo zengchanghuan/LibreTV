@@ -60,6 +60,8 @@ export function PlayerShell({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const artRef = useRef<any>(null);
   const hlsRef = useRef<Hls | null>(null);
+  const mediaTypeRef = useRef<'m3u8' | 'mp4'>('m3u8');
+  const resolveControllerRef = useRef<AbortController | null>(null);
   const [error, setError] = useState('');
   const [hint, setHint] = useState('');
   // 起播前的品牌占位图（沿用旧版 nomedia 素材），实际开始播放后隐藏
@@ -128,7 +130,7 @@ export function PlayerShell({
   // 当前集预取（episodeKey 缺省 = 关闭，见 ensure 内部 settings.enabled 判断）
   const ensurePrefetch = (mediaUrl: string, currentTime: number, horizonSeconds?: number) => {
     const p = propsRef.current;
-    if (!p.episodeKey) return;
+    if (mediaTypeRef.current === 'mp4' || !p.episodeKey) return;
     getVideoPrefetcher().ensure({
       m3u8Url: mediaUrl,
       currentTime,
@@ -136,7 +138,7 @@ export function PlayerShell({
       horizonSeconds,
       onProgress: (stats) => {
         // 当前集预取完成且存在下一集：用独立预取器预热下一集前 7 分钟
-        if (stats.state === 'done' && p.nextUrl && p.nextEpisodeKey) {
+        if (stats.state === 'done' && p.nextUrl && !p.nextUrl.startsWith('/api/site-playback?') && p.nextEpisodeKey) {
           getNextEpisodePrefetcher().ensure({
             m3u8Url: p.nextUrl,
             currentTime: 0,
@@ -238,6 +240,38 @@ export function PlayerShell({
     });
   };
 
+  // Resolve site episode tokens only when selected. Abort stale resolutions on rapid episode changes.
+  const setupMedia = async (video: HTMLVideoElement, targetUrl: string) => {
+    resolveControllerRef.current?.abort();
+    const controller = new AbortController();
+    resolveControllerRef.current = controller;
+    hlsRef.current?.destroy(); hlsRef.current = null;
+    video.pause();
+    video.removeAttribute('src');
+    try {
+      let mediaUrl = targetUrl;
+      let type: 'm3u8' | 'mp4' = /\.mp4(?:\?|$)/i.test(targetUrl) ? 'mp4' : 'm3u8';
+      if (targetUrl.startsWith('/api/site-playback?')) {
+        showHint('正在解析播放线路...');
+        const res = await fetch(targetUrl, { signal: controller.signal });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || '播放解析失败');
+        if (!/^https?:\/\//.test(data.url || '') || !['mp4', 'm3u8'].includes(data.type)) throw new Error('无效的播放地址');
+        mediaUrl = data.url; type = data.type;
+      }
+      if (controller.signal.aborted) return;
+      mediaTypeRef.current = type;
+      currentMediaUrlRef.current = mediaUrl;
+      if (type === 'mp4') {
+        video.src = mediaUrl;
+        video.load();
+        video.play().catch(() => {});
+      } else setupHls(video, mediaUrl, true);
+    } catch (err) {
+      if (!controller.signal.aborted) setError(err instanceof Error ? err.message : '播放解析失败');
+    }
+  };
+
   /** 换集：重置每集状态并切换到新 HLS 源（不重建 ArtPlayer）。 */
   const loadEpisode = (targetUrl: string) => {
     if (!targetUrl) return;
@@ -253,7 +287,7 @@ export function PlayerShell({
     setShowPoster(true);
     const art = artRef.current;
     if (!art) return;
-    setupHls(art.video, targetUrl, true);
+    void setupMedia(art.video, targetUrl);
   };
 
   // —— 创建播放器（仅一次，挂载即创建） ——
@@ -296,12 +330,20 @@ export function PlayerShell({
       moreVideoAttr: { crossOrigin: 'anonymous', playsInline: true },
       customType: {
         m3u8: (video: HTMLVideoElement, mediaUrl: string) => {
-          setupHls(video, mediaUrl, true);
+          void setupMedia(video, mediaUrl);
         },
       },
     });
     artRef.current = art;
-    art.on('video:loadedmetadata', () => {
+    art.on('video:loadedmetadata', async () => {
+      if (mediaTypeRef.current === 'mp4' && !restoredRef.current) {
+        restoredRef.current = true;
+        const media = currentMediaUrlRef.current;
+        try {
+          const saved = await propsRef.current.getRestorePosition?.() || 0;
+          if (media === currentMediaUrlRef.current && saved > 10 && saved < art.duration - 2) art.currentTime = saved;
+        } catch { /* ignore unavailable progress */ }
+      }
       // ArtPlayer 运行时支持 title 选项（类型定义未覆盖），用于界面标题展示
       try {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -311,6 +353,7 @@ export function PlayerShell({
 
     art.on('video:playing', () => {
       playbackStartedRef.current = true;
+      if (mediaTypeRef.current === 'mp4') mediaHealthyRef.current = true;
       setShowPoster(false);
       // 仅在媒体真正恢复（有分片进入 buffer）后清错误遮罩：
       // 否则「视频轨挂了、音频轨先播出来」时会清掉遮罩，留下黑屏假死态
@@ -318,6 +361,16 @@ export function PlayerShell({
     });
     art.on('video:error', () => {
       mediaHealthyRef.current = false;
+      if (mediaTypeRef.current === 'mp4') {
+        const target = currentMediaUrlRef.current;
+        if (!target.startsWith('/api/proxy?')) {
+          const position = art.currentTime || 0;
+          currentMediaUrlRef.current = `/api/proxy?url=${encodeURIComponent(target)}`;
+          art.video.src = currentMediaUrlRef.current;
+          art.video.addEventListener('loadedmetadata', () => { art.currentTime = position; art.play().catch(() => {}); }, { once: true });
+        } else setError('视频播放失败，请尝试其他视频源');
+        return;
+      }
       // 起播阶段的 video 元素级错误（MSE/解码偶发失败）：重建一次播放链路自愈，
       // 而不是直接钉死错误遮罩——重建后视频轨重新 append，黑屏有声即可解除
       if (!playbackStartedRef.current && !videoErrorRetryUsedRef.current) {
@@ -461,6 +514,7 @@ export function PlayerShell({
       el?.removeEventListener('touchcancel', onTouchEnd);
       el?.removeEventListener('touchmove', onTouchMove);
       el?.removeEventListener('contextmenu', onContextMenu);
+      resolveControllerRef.current?.abort();
       hlsRef.current?.destroy();
       hlsRef.current = null;
       recoveryRef.current?.dispose();

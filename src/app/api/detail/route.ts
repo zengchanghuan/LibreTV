@@ -1,3 +1,4 @@
+import { siteAdapterFor, detailSite } from '@/lib/site-adapters/site-adapters';
 import { NextResponse } from 'next/server';
 import { guardRequest } from '@/lib/api-guard';
 import { cmsRequestHeaders, parseDetail, parseDetailPageHtml } from '@/lib/cms-parser';
@@ -54,6 +55,12 @@ export async function GET(req: Request) {
     const listVerdict = await checkUpstreamAllowed(source.url);
     if (!listVerdict.ok) {
       return NextResponse.json({ error: listVerdict.reason }, { status: 400 });
+    }
+
+    if (siteAdapterFor(source.url)) {
+      const detail = await detailSite(source, id, AbortSignal.any([req.signal, AbortSignal.timeout(30000)]));
+      setCache(cacheKey, detail, DETAIL_CACHE_TTL);
+      return NextResponse.json(detail);
     }
 
     let resolved: VideoDetail | null = null;

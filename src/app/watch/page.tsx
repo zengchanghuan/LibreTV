@@ -210,6 +210,8 @@ function WatchContent() {
           <div className="ml-auto flex items-center gap-2">
             <button
               className="btn-ghost btn-sm"
+              disabled={currentUrl.startsWith('/api/site-playback?')}
+              title={currentUrl.startsWith('/api/site-playback?') ? '该网站暂不支持站内下载' : undefined}
               onClick={() => {
                 if (!currentUrl) return;
                 enqueueDownload({

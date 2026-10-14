@@ -56,6 +56,16 @@
       "name": "光速资源",
       "url": "https://api.guangsuapi.com/api.php/provide/vod/from/gsm3u8",
       "isAdult": false
+    },
+    {
+      "name": "4K影视",
+      "url": "https://www.4kvm.tv",
+      "isAdult": false
+    },
+    {
+      "name": "白嫖者",
+      "url": "https://baipiaozhe.ai",
+      "isAdult": false
     }
   ]
 }
