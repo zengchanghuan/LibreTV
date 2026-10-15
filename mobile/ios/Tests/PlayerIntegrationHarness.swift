@@ -146,8 +146,16 @@ import AVFoundation
             engine.seek(toTime: 10, completionHandler: nil); await wait()
             controls.playButton.sendActions(for: .touchUpInside); await wait()
             check("seek-after-end-resumes-selected-position", engine.isPlaying && engine.currentTime >= 10 && engine.currentTime < 14)
-            controller.closePlayer(); await wait(0.6)
-            check("close-releases-player", engine.player == nil && host.presentedViewController == nil && !UIApplication.shared.isIdleTimerDisabled)
+            var closeCompleted = false
+            controller.onClose = { closeCompleted = true }
+            controller.closePlayer()
+            // Dismissal is asynchronous; CI may take longer than a fixed 0.6s.
+            // Keep the deadline and all resource checks, but wait for completion.
+            let dismissed = await until { closeCompleted && host.presentedViewController == nil }
+            results["close-completion-received"] = closeCompleted
+            results["close-player-released"] = engine.player == nil
+            results["close-idle-timer-restored"] = !UIApplication.shared.isIdleTimerDisabled
+            check("close-releases-player", dismissed && engine.player == nil && !UIApplication.shared.isIdleTimerDisabled)
             let restoredPortrait = await until { scene.interfaceOrientation == .portrait && host.view.bounds.height > host.view.bounds.width }
             check("landscape-close-restores-portrait-home", restoredPortrait)
             check("home-tab-bar-visible-after-return", descendants(host.view).compactMap { $0 as? UITabBar }.contains { $0.window != nil && !$0.isHidden && $0.frame.maxY <= host.view.bounds.height + 1 && $0.frame.minY > host.view.bounds.midY })
