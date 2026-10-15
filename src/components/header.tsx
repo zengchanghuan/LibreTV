@@ -12,11 +12,13 @@ import { SearchHistoryDropdown, useSearchHistory } from './search-history';
 import { cn } from '@/lib/utils';
 import { InstallBanner, InstallButton } from './pwa';
 import { FamilyButton } from './family';
+import { useNativeApp } from './native-player';
 
 /** 顶部导航：Logo、搜索框（首页外）、历史、设置 */
 export function Header({ showSearch = false }: { showSearch?: boolean }) {
   const router = useRouter();
   const pathname = usePathname();
+  const native = useNativeApp();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -99,27 +101,27 @@ export function Header({ showSearch = false }: { showSearch?: boolean }) {
           <div className="flex-1 sm:hidden" />
 
           <nav className="flex items-center gap-1 ml-auto">
-            <span className="hidden sm:contents"><InstallButton /></span>
-            <FamilyButton />
+            {!native && <><span className="hidden sm:contents"><InstallButton /></span><FamilyButton /></>}
             <HeaderLink href="/live" active={pathname === '/live'}>
               直播
             </HeaderLink>
-            <span className="hidden sm:contents"><HeaderLink href="/about" active={pathname === '/about'}>
+            {!native && <><span className="hidden sm:contents"><HeaderLink href="/about" active={pathname === '/about'}>
               关于
             </HeaderLink></span>
-            <span className="hidden sm:contents"><ThemeToggle /></span>
+            <span className="hidden sm:contents"><ThemeToggle /></span></>}
             <IconButton label="观看历史" onClick={() => setHistoryOpen(true)}>
               <Icon name="clock" />
+              {native && <span className="text-sm">历史</span>}
             </IconButton>
-            <IconButton label="下载管理" onClick={requestShowDownloadManager}>
+            {!native && <><IconButton label="下载管理" onClick={requestShowDownloadManager}>
               <Icon name="download" />
             </IconButton>
             <IconButton label="设置" onClick={() => setSettingsOpen(true)}>
               <Icon name="gear" />
-            </IconButton>
+            </IconButton></>}
           </nav>
         </div>
-        <InstallBanner />
+        {!native && <InstallBanner />}
       </header>
 
       <SourceManagerDrawer open={settingsOpen} onClose={() => setSettingsOpen(false)} />
@@ -145,7 +147,7 @@ function HeaderLink({ href, active, children }: { href: string; active: boolean;
 function IconButton({ label, onClick, children }: { label: string; onClick: () => void; children: React.ReactNode }) {
   return (
     <button
-      className="p-2 rounded-md text-muted hover:text-content hover:bg-hover transition-colors"
+      className="inline-flex items-center justify-center gap-1 p-2 rounded-md text-muted hover:text-content hover:bg-hover transition-colors"
       title={label}
       aria-label={label}
       onClick={onClick}

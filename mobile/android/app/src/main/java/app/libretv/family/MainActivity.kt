@@ -1,7 +1,6 @@
 package app.libretv.family
 
 import android.app.Activity
-import android.app.AlertDialog
 import android.content.Intent
 import android.graphics.Color
 import android.net.Uri
@@ -20,9 +19,11 @@ class MainActivity : Activity() {
     private lateinit var root: FrameLayout
     private lateinit var web: WebView
     private lateinit var status: TextView
+    private lateinit var retry: Button
     private val prefs by lazy { getSharedPreferences("libretv", MODE_PRIVATE) }
     private var origin: Uri? = null
     private var playback: NativePlayback? = null
+    private var navigationFailed = false
     private var pending = JSONObject()
     private val pendingKey get() = "pending:${origin}"
     private val bridgeScript = """window.__LIBRETV_NATIVE__={version:1,platform:'android',postMessage:m=>libretvNative.postMessage(JSON.stringify(m))};window.dispatchEvent(new Event('libretv:native-ready'));"""
@@ -45,39 +46,39 @@ class MainActivity : Activity() {
         }
         val column = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         val toolbar = LinearLayout(this)
-        listOf("首页" to { origin?.let { web.loadUrl(it.toString()) } }, "刷新" to { web.reload() }, "设置" to { settings() }).forEach { (title, action) ->
+        listOf("首页" to { origin?.let { connect(it) } }, "设置" to { settings() }).forEach { (title, action) ->
             toolbar.addView(Button(this).apply { text = title; setOnClickListener { action() } }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         }
-        column.addView(toolbar)
         web = WebView(this)
         web.settings.apply { javaScriptEnabled = true; domStorageEnabled = true; mediaPlaybackRequiresUserGesture = true; allowFileAccess = false; allowContentAccess = false; mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW; userAgentString += " LibreTVNative/1" }
         CookieManager.getInstance().setAcceptThirdPartyCookies(web, false)
-        column.addView(web, LinearLayout.LayoutParams(-1, 0, 1f)); root.addView(column, FrameLayout.LayoutParams(-1, -1))
+        column.addView(web, LinearLayout.LayoutParams(-1, 0, 1f)); column.addView(toolbar)
+        root.addView(column, FrameLayout.LayoutParams(-1, -1))
         status = TextView(this).apply { setTextColor(Color.WHITE); gravity = android.view.Gravity.CENTER; text = "请设置家庭服务的 HTTPS 地址" }
-        root.addView(status, FrameLayout.LayoutParams(-1, -2, android.view.Gravity.CENTER))
+        retry = Button(this).apply { text = "重试"; visibility = View.GONE; setOnClickListener { origin?.let { connect(it) } } }
+        val connectionStatus = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL; gravity = android.view.Gravity.CENTER
+            addView(status); addView(retry)
+        }
+        root.addView(connectionStatus, FrameLayout.LayoutParams(-1, -2, android.view.Gravity.CENTER))
         web.webViewClient = object : WebViewClient() {
+            override fun onPageStarted(view: WebView, url: String, favicon: android.graphics.Bitmap?) { navigationFailed = false }
             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
                 if (origin?.let { sameOrigin(request.url, it) } == true) return false
                 if (request.isForMainFrame && request.hasGesture() && request.url.scheme in listOf("http", "https")) runCatching { startActivity(Intent(Intent.ACTION_VIEW, request.url)) }
                 return true
             }
             override fun onPageFinished(view: WebView, url: String) {
-                if (origin?.let { sameOrigin(Uri.parse(url), it) } == true) { status.text = ""; web.evaluateJavascript(bridgeScript, null) }
+                if (!navigationFailed && origin?.let { sameOrigin(Uri.parse(url), it) } == true) { status.text = ""; retry.visibility = View.GONE; web.evaluateJavascript(bridgeScript, null) }
             }
-            override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) { if (request.isForMainFrame) status.text = "连接失败，请检查服务地址与网络后刷新" }
-            override fun onReceivedSslError(view: WebView, handler: SslErrorHandler, error: android.net.http.SslError) { handler.cancel(); status.text = "服务证书校验失败" }
+            override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) { if (request.isForMainFrame) { navigationFailed = true; status.text = "连接失败，请检查地址和网络后重试"; retry.visibility = View.VISIBLE } }
+            override fun onReceivedSslError(view: WebView, handler: SslErrorHandler, error: android.net.http.SslError) { handler.cancel(); navigationFailed = true; status.text = "服务证书校验失败"; retry.visibility = View.VISIBLE }
         }
         val saved = prefs.getString("serviceURL", null)?.let { serviceOrigin(it) }
-        (saved ?: serviceOrigin(BuildConfig.DEFAULT_SERVICE_URL))?.let { connect(it) }
+        (serviceOrigin(BuildConfig.DEFAULT_SERVICE_URL) ?: saved)?.let { connect(it) }
     }
     private fun settings() {
-        AlertDialog.Builder(this).setTitle("设置").setItems(arrayOf("更换服务器")) { _, _ -> configure() }.setNegativeButton("取消", null).show()
-    }
-    private fun configure() {
-        val field = EditText(this).apply { setSingleLine(); hint = "https://tv.example.com"; setText(origin?.toString() ?: ""); inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_URI }
-        AlertDialog.Builder(this).setTitle("更换服务器").setView(field).setNegativeButton("取消", null).setPositiveButton("连接") { _, _ ->
-            val url = serviceOrigin(field.text.toString()); if (url == null) status.text = "请输入有效的 HTTPS 服务地址" else connect(url)
-        }.show()
+        origin?.let { web.loadUrl(it.buildUpon().path("/settings").build().toString()) }
     }
     private fun connect(url: Uri) {
         if (!WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) { status.text = "请更新 Android System WebView 后重试"; return }
@@ -87,7 +88,7 @@ class MainActivity : Activity() {
         WebViewCompat.addWebMessageListener(web, "libretvNative", setOf(url.toString())) { _, message, sourceOrigin, isMainFrame, _ ->
             if (isMainFrame && sameOrigin(sourceOrigin, url)) runCatching { command(JSONObject(message.data ?: "{}")) }
         }
-        status.text = "正在连接…"; web.loadUrl(url.toString())
+        retry.visibility = View.GONE; status.text = "正在连接…"; web.loadUrl(url.toString())
     }
     private fun command(body: JSONObject) {
         when (body.optString("type")) {

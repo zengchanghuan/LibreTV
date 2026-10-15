@@ -23,6 +23,22 @@ export function nativePost(message: unknown): boolean {
   if (typeof window === 'undefined' || window.__LIBRETV_NATIVE__?.version !== 1) return false;
   window.__LIBRETV_NATIVE__.postMessage(message); return true;
 }
+
+/** Defer until mount settles and the bridge is ready; a closed player stays closed. */
+export function scheduleNativeAutoOpen(open: () => void, attempted: { current: boolean }, ready: boolean): () => void {
+  if (!ready) return () => {};
+  const attempt = () => {
+    if (attempted.current || window.__LIBRETV_NATIVE__?.version !== 1) return;
+    attempted.current = true;
+    open();
+  };
+  const timer = setTimeout(attempt, 0);
+  window.addEventListener('libretv:native-ready', attempt);
+  return () => {
+    clearTimeout(timer);
+    window.removeEventListener('libretv:native-ready', attempt);
+  };
+}
 export function parseNativeProgress(value: unknown): NativeProgress | null {
   if (!value || typeof value !== 'object') return null;
   const p = value as NativeProgress;

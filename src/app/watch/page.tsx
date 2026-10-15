@@ -248,6 +248,7 @@ function WatchContent() {
                 nativeApp && !webPlayback ? <NativePlayerPanel
                   key={`${sourceKey}:${vodId}`} title={videoTitle} sourceKey={sourceKey} sourceUrl={source.url}
                   vodId={vodId || currentUrl} episodes={episodes.length ? episodes : [currentUrl]} index={episodes.length ? currentIndex : 0}
+                  ready={!vodId || detailQuery.isSuccess || detailQuery.isError}
                   autoplayNext={store.autoplayNext} getPosition={getRestorePosition} onEpisode={goEpisode}
                   onSleep={() => store.updateSettings({ autoplayNext: false })} onWeb={() => setWebPlayback(true)}
                 /> : <PlayerShell
