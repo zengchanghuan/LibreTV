@@ -10,9 +10,10 @@ import { useAppStore } from '@/lib/store';
 import {
   isSlowSource,
   matchesAlive,
-  matchesKeyword,
   normalizeForSearch,
   sortChannels,
+  selectLiveChannels,
+  type LiveChannelView,
   type AliveFilter,
   type LiveSortMode,
 } from '@/lib/live-channel-filter';
@@ -59,7 +60,7 @@ interface ChannelListProps {
   onFilteredChange?: (list: LiveChannelItem[]) => void;
 }
 
-type View = 'all' | 'fav' | 'recent';
+type View = LiveChannelView;
 
 function useDebouncedValue<T>(value: T, delay: number): T {
   const [debounced, setDebounced] = useState(value);
@@ -111,23 +112,7 @@ export function LiveChannelList({ channels, groups, currentUrl, onSelect, onFilt
   // 先做视图/分组/搜索/排序（不含可用性筛选）：可用性计数必须基于这份列表，
   // 否则点击筛选后 filtered 收缩，两个计数会跟着变小、与实际展示对不上
   const matched = useMemo(() => {
-    let list: LiveChannelItem[];
-    if (view === 'fav') {
-      list = channels.filter((c) => favSet.has(c.url));
-    } else if (view === 'recent') {
-      // 按最近观看时间倒序
-      list = liveRecent
-        .map((r) => channels.find((c) => c.url === r.url))
-        .filter((c): c is LiveChannelItem => Boolean(c));
-    } else {
-      list = channels;
-    }
-    if (view !== 'recent' && group) {
-      list = list.filter((c) => c.group === group);
-    }
-    if (normalizedKeyword) {
-      list = list.filter((c) => matchesKeyword(c, normalizedKeyword));
-    }
+    const list = selectLiveChannels(channels, view, favSet, liveRecent, group, normalizedKeyword);
     return sortChannels(list, sortMode, { recentOrder, probeOf: (url) => probeResults.get(url) });
   }, [channels, favSet, liveRecent, view, group, normalizedKeyword, sortMode, recentOrder, probeResults]);
 

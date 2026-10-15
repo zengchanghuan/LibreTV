@@ -70,7 +70,7 @@ final class BrowserController: UIViewController, WKScriptMessageHandler, WKNavig
         tabBar.selectedItem = tabBar.items?.first
     }
     func tabBar(_ tabBar: UITabBar, didSelect item: UITabBarItem) {
-        guard let origin, let url = NativeNavigation.url(forTab: item.tag, origin: origin) else { return }
+        guard let origin, let url = NativeNavigation.url(forTab: item.tag, origin: origin, currentURL: web.url, retrying: !retry.isHidden) else { return }
         retry.isHidden = true; status.text = "正在连接…"
         web.load(URLRequest(url: url))
     }

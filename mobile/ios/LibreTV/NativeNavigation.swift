@@ -30,7 +30,11 @@ enum NativeNavigation {
         return path == "/settings" || path.hasPrefix("/settings/") || path == "/about" || path == "/about/" ? 2 : 0
     }
 
-    static func url(forTab index: Int, origin: URL) -> URL? {
+    static func url(forTab index: Int, origin: URL, currentURL: URL? = nil, retrying: Bool = false) -> URL? {
+        // A live page owns playback and search state. Reselecting its tab must
+        // not replace the document; a failed navigation still needs a retry.
+        if index == 1, !retrying, let currentURL,
+           tabIndex(for: currentURL, origin: origin) == 1 { return nil }
         switch index {
         case 0: return origin
         case 1: return origin.appendingPathComponent("live")

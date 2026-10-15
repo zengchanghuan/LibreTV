@@ -6,6 +6,7 @@ import {
   normalizeForSearch,
   probeRank,
   sortChannels,
+  selectLiveChannels,
   type ProbeLike,
 } from './live-channel-filter';
 
@@ -155,5 +156,37 @@ describe('sortChannels', () => {
       ['u1', 1],
     ]);
     expect(sortChannels(list, 'recent', { recentOrder }).map((c) => c.url)).toEqual(['u3', 'u1', 'u2']);
+  });
+});
+
+
+describe('channel view transitions', () => {
+  const cctv = channel({ name: 'CCTV-1 综合', group: '央视', url: 'cctv' });
+  const hunan = channel({ name: '湖南卫视', group: '卫视', url: 'hunan' });
+  const other = channel({ name: 'CCTV-2', group: '央视', url: 'other' });
+  const channels = [cctv, hunan, other];
+  const favorites = new Set(['cctv', 'hunan']);
+  const recent = [{ url: 'hunan' }, { url: 'removed' }, { url: 'cctv' }];
+  const select = (view: 'all' | 'fav' | 'recent', keyword = '') =>
+    selectLiveChannels(channels, view, favorites, recent, '央视', normalizeForSearch(keyword));
+
+  it('switching from a group to favorites shows favorites across groups', () => {
+    expect(select('all')).toEqual([cctv, other]);
+    expect(select('fav')).toEqual([cctv, hunan]);
+  });
+  it('favorites still respect visible search and exclude non-favorites', () => {
+    expect(select('fav', '湖南')).toEqual([hunan]);
+    expect(select('fav', 'CCTV')).toEqual([cctv]);
+  });
+  it('returning to All retains the selected group without mutating channels', () => {
+    select('fav');
+    expect(select('all')).toEqual([cctv, other]);
+    expect(channels).toEqual([cctv, hunan, other]);
+  });
+  it('recent ignores the hidden group and preserves watch order', () => {
+    expect(select('recent')).toEqual([hunan, cctv]);
+  });
+  it('an empty favorite list does not leak non-favorite channels', () => {
+    expect(selectLiveChannels(channels, 'fav', new Set(), [], '央视', '')).toEqual([]);
   });
 });

@@ -18,6 +18,28 @@ export interface ProbeLike {
 export type LiveSortMode = 'default' | 'name' | 'group' | 'probe' | 'recent';
 export type AliveFilter = 'off' | 'ok' | 'green';
 
+export type LiveChannelView = 'all' | 'fav' | 'recent';
+
+/** Only the All view exposes group filters; favorites/recent ignore that hidden state. */
+export function selectLiveChannels<T extends KeywordMatchable & { url: string }>(
+  channels: T[],
+  view: LiveChannelView,
+  favorites: ReadonlySet<string>,
+  recent: readonly { url: string }[],
+  group: string,
+  normalizedKeyword: string,
+): T[] {
+  let list: T[];
+  if (view === 'fav') list = channels.filter((c) => favorites.has(c.url));
+  else if (view === 'recent') {
+    const byUrl = new Map(channels.map((c) => [c.url, c]));
+    list = recent.map((r) => byUrl.get(r.url)).filter((c): c is T => Boolean(c));
+  } else list = channels;
+  if (view === 'all' && group) list = list.filter((c) => c.group === group);
+  if (normalizedKeyword) list = list.filter((c) => matchesKeyword(c, normalizedKeyword));
+  return list;
+}
+
 /**
  * 「源限速」阈值（kbps）：分片可达但吞吐低于该值的源无法流畅缓冲。
  * 低于 1Mbps 的直播流基本必然卡顿，标记为琥珀色（介于绿点与不可达之间）。
