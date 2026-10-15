@@ -29,7 +29,8 @@ xcodebuild -project mobile/ios/LibreTV.xcodeproj -scheme LibreTV \
   -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' \
   -derivedDataPath /tmp/libretv-ios-device CODE_SIGNING_ALLOWED=NO build
 xcrun swiftc -module-cache-path /tmp/libretv-swift-cache \
-  mobile/ios/LibreTV/SleepTimer.swift mobile/ios/Tests/main.swift -o /tmp/libretv-sleep-tests
+  mobile/ios/LibreTV/SleepTimer.swift mobile/ios/LibreTV/PlaybackPosition.swift \
+  mobile/ios/Tests/PlaybackPositionTests.swift mobile/ios/Tests/main.swift -o /tmp/libretv-sleep-tests
 /tmp/libretv-sleep-tests
 ```
 
@@ -88,6 +89,10 @@ Release 只接受 HTTPS 服务及媒体，HTTP 媒体需通过 HTTPS 服务代�
 | 部署 | 无 | 按用户要求先不部署 |
 
 定时测试用可注入时钟覆盖边界到点、延迟回调不重复停止、挂起后补查、取消、重新设置。尚未通过真机验证定时与自然片尾同刻发生、耳机中断和系统终止进程。
+
+2026-10-15 代理重试进度修复：双端在替换失败媒体前保存当前播放位置，恢复期间的临时零值不会覆盖续播目标。新增双端各 6 个回归场景，覆盖续播后中途失败、恢复期间再次失败、无效时钟、初次加载失败、主动回到开头及跨集/片尾隔离。
+
+本轮验证：Web 365 项测试、lint、类型检查、生产构建通过；iOS 6 个进度场景及 5 个定时场景通过，模拟器 Debug 与真机 Release 未签名构建通过；Android 使用临时 Java 21 / Kotlin 2.1.20 工具链直接编译并运行 JUnit，6 个进度测试及 3 个定时测试通过。本机缺少 Android SDK，未重跑 APK 构建或 Android lint；未进行真机代理故障注入验收。
 
 后续真机验收顺序：登录选头像 → HLS/MP4 → 全屏内换集及各集续播 → 1.5 倍速跨集 → 定时暂停且不连播 → 横竖屏/后台返回 → 断网与代理回退 → 独立浏览器同成员同步 → Ad Hoc/APK 安装与覆盖更新。
 

@@ -48,13 +48,11 @@ class NativePlayback(
     private var sequence = 0L
     private var ticks = 0
     private var dragging = false
-    private var loading = true
-    private var restore = 0.0
     private var proxied = false
     private var resolved: String? = null
     private var resolvedType: String? = null
     private var call: Call? = null
-    private val positions = session.episodes.map { it.position }.toMutableList()
+    private val playbackPosition = PlaybackPosition(session.episodes.map { it.position })
     private val ticker = object : Runnable {
         override fun run() {
             if (closed) return
@@ -102,15 +100,16 @@ class NativePlayback(
         player.addListener(object : Player.Listener {
             override fun onPlaybackStateChanged(state: Int) {
                 if (closed) return
-                if (state == Player.STATE_READY && loading) {
-                    loading = false; info.text = ""
+                if (state == Player.STATE_READY && playbackPosition.isRestoring) {
+                    playbackPosition.didRestore(); info.text = ""
+                    val restore = playbackPosition.restorePosition
                     if (restore > 0 && restore < duration - 2) player.seekTo((restore * 1000).toLong())
                     player.setPlaybackSpeed(session.rate)
                     if (!checkDeadline() && !sleeping && !userPaused) player.play()
                 }
                 if (state == Player.STATE_ENDED) {
                     if (checkDeadline()) return
-                    finished = true; positions[session.index] = 0.0; emit("ended")
+                    finished = true; playbackPosition.record(0.0); emit("ended")
                     if (session.autoplayNext && session.index < session.episodes.lastIndex) load(session.index + 1)
                 }
             }
@@ -118,6 +117,8 @@ class NativePlayback(
                 val target = resolved
                 if (!proxied && target != null && !(sameOrigin(Uri.parse(target), origin) && Uri.parse(target).path == "/api/proxy")) {
                     proxied = true; info.text = "直连失败，正在通过服务重试…"
+                    // Capture before setMediaItem resets the failed player's clock.
+                    playbackPosition.prepareRetry(player.currentPosition / 1000.0)
                     val proxy = origin.buildUpon().path("/api/proxy").appendQueryParameter("url", target).build().toString()
                     attach(proxy)
                 } else { player.pause(); info.text = "无法播放此源，请返回换源或使用网页播放器"; emit("error") }
@@ -131,7 +132,8 @@ class NativePlayback(
         if (closed || index !in session.episodes.indices) return
         call?.cancel(); generation++; val token = generation
         player.pause(); player.stop(); player.clearMediaItems()
-        session.index = index; userPaused = false; sleeping = false; finished = false; proxied = false; resolvedType = null; loading = true; restore = positions[index]
+        session.index = index; userPaused = false; sleeping = false; finished = false; proxied = false; resolvedType = null
+        playbackPosition.selectEpisode(index)
         title.text = "${session.title} · 第 ${index + 1}/${session.episodes.size} 集"; info.text = "正在加载…"; emit("episode")
         val raw = session.episodes[index].url; val uri = Uri.parse(raw)
         if (sameOrigin(uri, origin) && uri.path == "/api/site-playback") {
@@ -152,7 +154,6 @@ class NativePlayback(
         } else { resolved = raw; attach(raw) }
     }
     private fun attach(url: String) {
-        loading = true
         val item = MediaItem.Builder().setUri(url).apply {
             // Proxy query paths have no media extension; infer from the original resolved URL.
             val original = Uri.parse(resolved ?: url).path ?: ""
@@ -161,11 +162,11 @@ class NativePlayback(
         }.build()
         player.setMediaItem(item); player.prepare()
     }
-    private val position get() = if (loading || player.currentMediaItem == null) positions[session.index] else (player.currentPosition.coerceAtLeast(0) / 1000.0)
+    private val position get() = if (playbackPosition.isRestoring || player.currentMediaItem == null) playbackPosition.savedPosition else (player.currentPosition.coerceAtLeast(0) / 1000.0)
     private val duration get() = player.duration.let { if (it > 0) it / 1000.0 else 0.0 }
     private fun emit(reason: String) {
         if (closed) return
-        sequence++; if (!finished) positions[session.index] = position
+        sequence++; if (!finished) playbackPosition.record(position)
         val event = JSONObject()
         listOf("profileId", "sourceKey", "sourceUrl", "vodId", "title", "baseRevision", "openedAt").forEach { if (session.json.has(it)) event.put(it, session.json.get(it)) }
         event.put("eventId", UUID.randomUUID().toString()).put("sessionId", session.id).put("index", session.index).put("total", session.episodes.size)

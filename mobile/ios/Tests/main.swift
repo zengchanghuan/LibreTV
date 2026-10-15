@@ -22,3 +22,4 @@ timer.set(minutes: 30)
 now += 900
 assert(!timer.consumeExpired() && timer.minutesRemaining == 15, "Replacing a timer starts a new deadline")
 print("iOS sleep timer: 5 scenarios passed")
+runPlaybackPositionTests()

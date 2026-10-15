@@ -24,10 +24,10 @@ final class PlayerController: UIViewController, UITableViewDataSource, UITableVi
     private var userPaused = false, sleeping = false, closed = false, finished = false
     private var resolvedURL: URL?, proxied = false
     private var episodePicker: UIViewController?
-    private var positions: [Double]
+    private let playbackPosition: PlaybackPosition
 
     init(session: PlaybackSession, origin: URL, cookies: [HTTPCookie]) {
-        self.session = session; self.origin = origin; self.cookies = cookies; self.positions = session.episodes.map(\.position)
+        self.session = session; self.origin = origin; self.cookies = cookies; self.playbackPosition = PlaybackPosition(positions: session.episodes.map(\.position))
         super.init(nibName: nil, bundle: nil)
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
@@ -85,6 +85,7 @@ final class PlayerController: UIViewController, UITableViewDataSource, UITableVi
         if let observer = endedObserver { NotificationCenter.default.removeObserver(observer); endedObserver = nil }
         player.replaceCurrentItem(with: nil)
         session.index = index; userPaused = false; sleeping = false; finished = false; proxied = false
+        playbackPosition.selectEpisode(index)
         titleLabel.text = "\(session.title) · 第 \(index + 1)/\(session.episodes.count) 集"
         info.text = "正在加载…"; emit("episode")
         let raw = URL(string: session.episodes[index].url)!
@@ -105,11 +106,12 @@ final class PlayerController: UIViewController, UITableViewDataSource, UITableVi
                     url = result
                 }
                 guard !Task.isCancelled, self.generation == token, !self.closed else { return }
-                self.resolvedURL = url; self.attach(url, position: self.positions[index], token: token)
+                self.resolvedURL = url; self.attach(url, token: token)
             } catch { if !Task.isCancelled && self.generation == token { self.fail() } }
         }
     }
-    private func attach(_ url: URL, position: Double, token: UUID) {
+    private func attach(_ url: URL, token: UUID) {
+        let position = playbackPosition.restorePosition
         let asset = AVURLAsset(url: url, options: sameOrigin(url, origin) ? [AVURLAssetHTTPCookiesKey: cookies] : nil)
         let item = AVPlayerItem(asset: asset); player.replaceCurrentItem(with: item)
         itemObservation = item.observe(\.status, options: [.new, .initial]) { [weak self] item, _ in
@@ -119,15 +121,21 @@ final class PlayerController: UIViewController, UITableViewDataSource, UITableVi
                     self.info.text = ""
                     let duration = item.duration.seconds
                     let start = position.isFinite && position > 0 && duration.isFinite && position < duration - 2 ? position : 0
-                    self.player.seek(to: CMTime(seconds: start, preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] _ in
-                        DispatchQueue.main.async { guard let self, self.generation == token, !self.closed else { return }; if !self.checkDeadline() && !self.userPaused && !self.sleeping { self.player.playImmediately(atRate: self.session.rate) } }
+                    self.player.seek(to: CMTime(seconds: start, preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] completed in
+                        DispatchQueue.main.async {
+                            guard let self, completed, self.generation == token, self.player.currentItem === item, !self.closed else { return }
+                            self.playbackPosition.didRestore()
+                            if !self.checkDeadline() && !self.userPaused && !self.sleeping { self.player.playImmediately(atRate: self.session.rate) }
+                        }
                     }
                 } else if item.status == .failed {
                     if !self.proxied, let target = self.resolvedURL, !(sameOrigin(target, self.origin) && target.path == "/api/proxy") {
                         self.proxied = true
+                        // Capture before replacing the failed item; its clock resets on replacement.
+                        self.playbackPosition.prepareRetry(currentPosition: self.player.currentTime().seconds)
                         var proxy = URLComponents(url: self.origin.appendingPathComponent("api/proxy"), resolvingAgainstBaseURL: false)!
                         proxy.queryItems = [URLQueryItem(name: "url", value: target.absoluteString)]
-                        self.info.text = "直连失败，正在通过服务重试…"; self.attach(proxy.url!, position: position, token: token)
+                        self.info.text = "直连失败，正在通过服务重试…"; self.attach(proxy.url!, token: token)
                     } else { self.fail() }
                 }
             }
@@ -136,16 +144,16 @@ final class PlayerController: UIViewController, UITableViewDataSource, UITableVi
         endedObserver = NotificationCenter.default.addObserver(forName: .AVPlayerItemDidPlayToEndTime, object: item, queue: .main) { [weak self] _ in
             guard let self, self.generation == token, !self.closed else { return }
             if self.checkDeadline() { return }
-            self.finished = true; self.positions[self.session.index] = 0; self.emit("ended")
+            self.finished = true; self.playbackPosition.record(0); self.emit("ended")
             if self.session.autoplayNext && self.session.index + 1 < self.session.episodes.count { self.load(self.session.index + 1) }
         }
     }
     private func fail() { player.pause(); info.text = "无法播放此源，请返回换源或使用网页播放器"; emit("error") }
-    private var position: Double { guard player.currentItem?.status == .readyToPlay else { return positions[session.index] }; let n = player.currentTime().seconds; return n.isFinite && n >= 0 ? n : positions[session.index] }
+    private var position: Double { guard !playbackPosition.isRestoring, player.currentItem?.status == .readyToPlay else { return playbackPosition.savedPosition }; let n = player.currentTime().seconds; return n.isFinite && n >= 0 ? n : playbackPosition.savedPosition }
     private var duration: Double { let n = player.currentItem?.duration.seconds ?? 0; return n.isFinite && n >= 0 ? n : 0 }
     private func emit(_ reason: String) {
         sequence += 1
-        if !finished { positions[session.index] = position }
+        if !finished { playbackPosition.record(position) }
         var event: [String: Any] = ["eventId": UUID().uuidString, "sessionId": session.id, "profileId": session.profileId as Any? ?? NSNull(),
           "sourceKey": session.sourceKey, "vodId": session.vodId, "title": session.title, "index": session.index,
           "total": session.episodes.count, "position": position, "duration": duration, "sequence": sequence, "rate": session.rate,
