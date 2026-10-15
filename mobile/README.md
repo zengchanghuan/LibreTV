@@ -1,8 +1,8 @@
 # HomeTV 家庭混合 App
 
-iOS 与 Android 的 App 显示名称为 HomeTV。工程目录、构建 scheme 和应用标识沿用 LibreTV，便于覆盖安装并保留已有登录与观看记录。
+iOS 与 Android 的 App 显示名称为 HomeTV。iOS 工程目录、构建 scheme 和产物名也统一为 HomeTV。应用标识仍使用 `app.libretv.family`，以支持覆盖安装并保留登录与观看记录。
 
-业务页面连接现有 LibreTV Node 服务；点播跳转到原生全屏播放器。iOS 使用 WKWebView + AVPlayerLayer，Android 使用 WebView + Media3 ExoPlayer。2026-10-15 服务端提交 `40c602e` 已部署至 `https://tv.fixepub.com`，iPhone’VIP 已安装开发签名 Release 测试版；尚未进行家庭正式分发。下方初次构建记录中的「未部署」描述当时状态，当前部署记录见 `PERSONALIZATION.md`。
+业务页面连接现有 HomeTV Node 服务；点播跳转到原生全屏播放器。iOS 使用 WKWebView + ZFPlayer（AVPlayer 内核），Android 使用 WebView + Media3 ExoPlayer。2026-10-15 服务端提交 `40c602e` 已部署至 `https://tv.fixepub.com`，iPhone’VIP 已安装开发签名 Release 测试版；尚未进行家庭正式分发。下方初次构建记录中的「未部署」描述当时状态，当前部署记录见 `PERSONALIZATION.md`。
 
 ## 已实现
 
@@ -23,21 +23,21 @@ iOS Tab 高亮由同源页面路由驱动，包含 Next.js 的内部跳转、替
 
 ## iOS 本地构建
 
-最低 iOS 16，本轮使用 Xcode 27。工程可直接打开 `ios/LibreTV.xcodeproj`。新增 Swift 文件后重新生成工程；生成器会覆盖工程配置，因此 Team ID 等本地值建议使用命令行参数或本地 xcconfig 管理。
+最低 iOS 16，本轮使用 Xcode 27。工程可直接打开 `ios/HomeTV.xcodeproj`。新增 Swift 文件后重新生成工程；生成器会覆盖工程配置，因此 Team ID 等本地值建议使用命令行参数或本地 xcconfig 管理。
 
 从仓库根目录执行：
 
 ```bash
 python3 mobile/scripts/generate-ios-project.py
-xcodebuild -project mobile/ios/LibreTV.xcodeproj -scheme LibreTV \
+xcodebuild -project mobile/ios/HomeTV.xcodeproj -scheme HomeTV \
   -configuration Debug -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
   -derivedDataPath /tmp/libretv-ios-sim CODE_SIGNING_ALLOWED=NO build
-xcodebuild -project mobile/ios/LibreTV.xcodeproj -scheme LibreTV \
+xcodebuild -project mobile/ios/HomeTV.xcodeproj -scheme HomeTV \
   -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' \
   -derivedDataPath /tmp/libretv-ios-device CODE_SIGNING_ALLOWED=NO build
 xcrun swiftc -module-cache-path /tmp/libretv-swift-cache \
-  mobile/ios/LibreTV/SleepTimer.swift mobile/ios/LibreTV/PlaybackPosition.swift \
-  mobile/ios/LibreTV/PlaybackSession.swift mobile/ios/LibreTV/NativeNavigation.swift \
+  mobile/ios/HomeTV/SleepTimer.swift mobile/ios/HomeTV/PlaybackPosition.swift \
+  mobile/ios/HomeTV/PlaybackSession.swift mobile/ios/HomeTV/NativeNavigation.swift \
   mobile/ios/Tests/PlaybackPositionTests.swift mobile/ios/Tests/NativeNavigationTests.swift \
   mobile/ios/Tests/main.swift -o /tmp/libretv-sleep-tests
 /tmp/libretv-sleep-tests
@@ -67,21 +67,23 @@ python3 mobile/scripts/run-player-integration.py SIMULATOR_UDID
 前后集切换、自然片尾、后台暂停、定时停止和失败代理回退；输出 JSON 与横竖屏截图。
 测试不会连接生产服务，截图和构建日志保留在脚本输出的临时目录。
 
-本次接入验证：24 个原生逻辑场景、26 个播放器集成检查通过；已检查横竖屏截图，真机 Release 构建及签名验证通过。真实站点的解码效果仍以真机验收为准。
+初次接入验证：24 个原生逻辑场景、26 个播放器集成检查通过；已检查横竖屏截图，真机 Release 构建及签名验证通过。真实站点的解码效果仍以真机验收为准。
+
+2026-10-15 后续修复：用户拖动会取代初始续播定位；缓冲重试随暂停、停止和切集失效；切集或取消定位会清除拖动状态，旧回调不能干扰新手势。回归测试现覆盖 45 个播放器集成检查，包含连续横竖屏切换、选集与快速切集、续播定位中拖动、缓冲后暂停/后台/退出。HomeTV 工程改名后，24 个基础场景和 45 个集成检查再次通过。
 
 ## iOS Ad Hoc
 
 1. 在用户的 Apple 开发团队中确定唯一 Bundle ID，登记家人的 iPhone UDID，准备包含这些设备的 Ad Hoc 描述文件和有效分发证书。本轮未替用户登记或访问账号。
-2. 在 Xcode 的 Signing & Capabilities 选择团队及 Bundle ID；也可向下面命令传入真实值。默认 `app.libretv.family` 是可修改占位值。
+2. 在 Xcode 的 Signing & Capabilities 选择团队及 Bundle ID；也可向下面命令传入真实值。现有安装使用 `app.libretv.family`，更新测试机时应保留此标识。
 3. 复制 `ios/ExportOptions.example.plist` 为 `ios/ExportOptions.local.plist`，填写真实 `teamID`；模板采用 Xcode 27 的 `release-testing`（Ad Hoc）导出方式。手动签名时还需按 Xcode 提示选择描述文件。
 4. 完成签名配置后本地 Archive / Export；以下命令不包含上传或自动注册设备参数。
 
 ```bash
-xcodebuild -project mobile/ios/LibreTV.xcodeproj -scheme LibreTV \
+xcodebuild -project mobile/ios/HomeTV.xcodeproj -scheme HomeTV \
   -configuration Release -destination 'generic/platform=iOS' \
-  -archivePath mobile/artifacts/LibreTV.xcarchive \
+  -archivePath mobile/artifacts/HomeTV.xcarchive \
   DEVELOPMENT_TEAM=YOUR_TEAM_ID PRODUCT_BUNDLE_IDENTIFIER=YOUR_BUNDLE_ID archive
-xcodebuild -exportArchive -archivePath mobile/artifacts/LibreTV.xcarchive \
+xcodebuild -exportArchive -archivePath mobile/artifacts/HomeTV.xcarchive \
   -exportOptionsPlist mobile/ios/ExportOptions.local.plist \
   -exportPath mobile/artifacts/ios-ad-hoc
 ```

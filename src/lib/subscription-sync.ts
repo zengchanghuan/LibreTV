@@ -86,11 +86,11 @@ export async function syncEnvSubscriptions(subs: { url: string; name?: string }[
       }
       // 预置订阅对用户是静默的，跳过/截断情况写入控制台供部署者排查（只记计数，不打印配置内容）
       if (result?.stats && result.stats.skipped > 0) {
-        console.info('[LibreTV] 预置订阅部分条目未导入：', sub.url, describeParseStats(result.stats));
+        console.info('[HomeTV] 预置订阅部分条目未导入：', sub.url, describeParseStats(result.stats));
       }
       useAppStore.getState().markEnvSubsSeen([sub.url]);
     } catch (err) {
-      console.warn('[LibreTV] 预置订阅同步失败（下次启动将重试）：', sub.url, err instanceof Error ? err.message : err);
+      console.warn('[HomeTV] 预置订阅同步失败（下次启动将重试）：', sub.url, err instanceof Error ? err.message : err);
     }
   }
 }

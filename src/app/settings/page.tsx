@@ -23,7 +23,7 @@ export default function SettingsPage() {
       <label className={row}><span>外观</span><select aria-label="外观" value={theme} onChange={event => setTheme(event.target.value as ThemeChoice)} className="input text-sm">
         <option value="dark">深色</option><option value="light">浅色</option><option value="system">跟随系统</option>
       </select></label>
-      <Link href="/about" className={row}><span>关于 LibreTV</span><span aria-hidden>›</span></Link>
+      <Link href="/about" className={row}><span>关于 HomeTV</span><span aria-hidden>›</span></Link>
     </section>
     <button className="btn-ghost w-full" onClick={() => verified ? void logout() : openLogin()}>{verified ? '退出登录' : '登录'}</button>
     <SourceManagerDrawer open={sourcesOpen} onClose={() => setSourcesOpen(false)} />

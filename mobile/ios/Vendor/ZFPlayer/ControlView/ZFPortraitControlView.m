@@ -50,6 +50,7 @@
 @property (nonatomic, strong) UIButton *fullScreenBtn;
 
 @property (nonatomic, assign) BOOL isShow;
+@property (nonatomic, assign) NSUInteger seekGeneration;
 
 @end
 
@@ -178,6 +179,7 @@
 #pragma mark - ZFSliderViewDelegate
 
 - (void)sliderTouchBegan:(float)value {
+    self.seekGeneration++;
     self.slider.isdragging = YES;
 }
 
@@ -186,12 +188,15 @@
         self.slider.isdragging = YES;
         if (self.sliderValueChanging) self.sliderValueChanging(value, self.slider.isForward);
         @zf_weakify(self)
+        NSUInteger generation = ++self.seekGeneration;
         [self.player seekToTime:self.player.totalTime*value completionHandler:^(BOOL finished) {
-            @zf_strongify(self)
-            self.slider.isdragging = NO;
-            if (finished) {
-                if (self.sliderValueChanged) self.sliderValueChanged(value);
-            }
+            dispatch_async(dispatch_get_main_queue(), ^{
+                @zf_strongify(self)
+                if (!self || self.seekGeneration != generation) return;
+                self.slider.isdragging = NO;
+                // Release the mirrored slider even when AVPlayer cancels seeking.
+                if (self.sliderValueChanged) self.sliderValueChanged(self.player.progress);
+            });
         }];
         if (self.seekToPlay) {
             [self.player.currentPlayerManager play];
@@ -203,6 +208,7 @@
 }
 
 - (void)sliderValueChanged:(float)value {
+    self.seekGeneration++;
     if (self.player.totalTime == 0) {
         self.slider.value = 0;
         return;
@@ -223,6 +229,9 @@
 
 /** 重置ControlView */
 - (void)resetControlView {
+    self.seekGeneration++;
+    self.slider.isdragging = NO;
+    self.slider.sliderBtn.transform = CGAffineTransformIdentity;
     self.bottomToolView.alpha        = 1;
     self.slider.value                = 0;
     self.slider.bufferValue          = 0;
@@ -282,6 +291,7 @@
 
 /// 调节播放进度slider和当前时间更新
 - (void)sliderValueChanged:(CGFloat)value currentTimeString:(NSString *)timeString {
+    self.seekGeneration++;
     self.slider.value = value;
     self.currentTimeLabel.text = timeString;
     self.slider.isdragging = YES;

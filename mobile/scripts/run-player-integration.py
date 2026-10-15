@@ -14,7 +14,7 @@ project = work / 'mobile'
 shutil.copytree(repo / 'mobile/ios', project / 'ios', ignore=shutil.ignore_patterns('xcuserdata'))
 (project / 'scripts').mkdir()
 shutil.copy2(repo / 'mobile/scripts/generate-ios-project.py', project / 'scripts')
-code = project / 'ios/LibreTV'
+code = project / 'ios/HomeTV'
 shutil.copy2(project / 'ios/Tests/PlayerIntegrationHarness.swift', code)
 p = code / 'AppDelegate.swift'
 s = p.read_text().replace('window.rootViewController = BrowserController()', 'window.rootViewController = UIViewController()')
@@ -46,8 +46,8 @@ def sim(*args):
     return subprocess.check_output(['xcrun', 'simctl', *args], text=True).strip()
 try:
     with (work / 'build.log').open('w') as log:
-        subprocess.run(['xcodebuild', '-project', str(project / 'ios/LibreTV.xcodeproj'), '-scheme', 'LibreTV', '-configuration', 'Debug', '-sdk', 'iphonesimulator', '-destination', 'generic/platform=iOS Simulator', '-derivedDataPath', str(work / 'build'), 'CODE_SIGNING_ALLOWED=NO', 'PRODUCT_BUNDLE_IDENTIFIER='+bundle, 'build'], stdout=log, stderr=subprocess.STDOUT, check=True)
-    sim('install', device, str(work / 'build/Build/Products/Debug-iphonesimulator/LibreTV.app'))
+        subprocess.run(['xcodebuild', '-project', str(project / 'ios/HomeTV.xcodeproj'), '-scheme', 'HomeTV', '-configuration', 'Debug', '-sdk', 'iphonesimulator', '-destination', 'generic/platform=iOS Simulator', '-derivedDataPath', str(work / 'build'), 'CODE_SIGNING_ALLOWED=NO', 'PRODUCT_BUNDLE_IDENTIFIER='+bundle, 'build'], stdout=log, stderr=subprocess.STDOUT, check=True)
+    sim('install', device, str(work / 'build/Build/Products/Debug-iphonesimulator/HomeTV.app'))
     container = Path(sim('get_app_container', device, bundle, 'data')) / 'Documents'
     # Reinstalls preserve simulator data; never accept a previous run's report.
     (container / 'player-integration.json').unlink(missing_ok=True)

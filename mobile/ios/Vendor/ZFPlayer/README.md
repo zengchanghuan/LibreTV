@@ -8,3 +8,14 @@ Core, AVPlayer and ControlView are copied from upstream. One Xcode 27 compatibil
 Xcode project generator compiles their Objective-C sources with ARC and copies
 ZFPlayer.bundle into the application. No CocoaPods installation is required.
 HomeTV-specific controls and playback policy live outside this directory.
+
+Local playback fixes:
+- Buffer retries preserve playback intent and are bound to an item/generation;
+  play, pause and stop invalidate queued retries. Queued KVO events from a
+  replaced item are ignored.
+- Pan and slider seek completions use gesture generations, release dragging on
+  cancellation and reset both orientations on an episode change. Late callbacks
+  cannot release a newer drag.
+
+Regression coverage: `mobile/ios/Tests/PlayerIntegrationHarness.swift` exercises
+real AVPlayer seeks, cancellations, item replacement and delayed buffer recovery.

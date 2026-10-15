@@ -13,7 +13,7 @@ const InstallContext = createContext({ installed: false, show: () => {} });
 export function InstallButton() {
   const { installed, show } = useContext(InstallContext);
   if (installed) return null;
-  return <button className="btn-ghost btn-sm" onClick={show} aria-label="安装 LibreTV">安装</button>;
+  return <button className="btn-ghost btn-sm" onClick={show} aria-label="安装 HomeTV">安装</button>;
 }
 
 export function InstallBanner() {
@@ -96,7 +96,7 @@ export function PwaProvider({ children }: { children: ReactNode }) {
       <span>{notice || '新版已就绪，更新会重新打开当前页面。'}</span>
       <button className="btn-primary shrink-0" onClick={activate}>更新</button>
     </div>}
-    <Drawer open={open} onClose={() => setOpen(false)} title="安装 LibreTV">
+    <Drawer open={open} onClose={() => setOpen(false)} title="安装 HomeTV">
       <div className="space-y-5 text-sm leading-7">
         <p>放到主屏幕，下次点图标即可打开。各设备登录同一服务并选择同一家庭成员，即可同步观看记录。</p>
         {ios ? <ol className="list-decimal pl-5 space-y-3">

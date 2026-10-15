@@ -3,7 +3,7 @@ import { runInNewContext } from 'node:vm';
 import { describe, expect, it, vi } from 'vitest';
 
 // Run the actual script injected by WKWebView, rather than a second implementation.
-const source = readFileSync(new URL('../../mobile/ios/LibreTV/NativeNavigation.swift', import.meta.url), 'utf8');
+const source = readFileSync(new URL('../../mobile/ios/HomeTV/NativeNavigation.swift', import.meta.url), 'utf8');
 const script = source.match(/static let script = """([\s\S]*?)"""/)![1];
 
 function browser() {

@@ -87,8 +87,8 @@ import AVFoundation
         let autoNext = await until { controller.session.index == 1 && engine.isPlaying }
         check("natural-end-autoplays-next", autoNext && events.contains { $0["reason"] as? String == "ended" })
         timer.set(minutes: 1); now += 60
-        await wait(1.2)
-        check("sleep-deadline-stops-and-disables-autoplay", !engine.isPlaying && !controller.session.autoplayNext && events.last?["reason"] as? String == "sleep")
+        let slept = await until { events.contains { $0["reason"] as? String == "sleep" } }
+        check("sleep-deadline-stops-and-disables-autoplay", slept && !engine.isPlaying && !controller.session.autoplayNext)
         controls.playButton.sendActions(for: .touchUpInside)
         engine.seek(toTime: 19.5, completionHandler: nil)
         let finalEnd = await until { !engine.isPlaying && events.last?["reason"] as? String == "ended" }
@@ -120,6 +120,137 @@ import AVFoundation
         let retried = await until { errors == 2 }
         check("retry-button-reloads-failed-source", retried && !failControls.failBtn.isHidden)
         failed.closePlayer(); await wait(0.5)
+        // Regression: rapid rotation and picker selection while playback continues.
+        let rotation = PlayerController(session: session(), origin: URL(string: "http://127.0.0.1:18085")!, cookies: [])
+        rotation.modalPresentationStyle = .fullScreen
+        host.present(rotation, animated: false); await wait()
+        let rc = descendants(rotation.view).compactMap { $0 as? HomeTVPlayerControls }.first!
+        let re = rc.player!.currentPlayerManager as! ZFAVPlayerManager
+        _ = await until { re.isPlaying }
+        let itemBeforeRotation = re.playerItem
+        let positionBeforeRotation = re.currentTime
+        for _ in 0..<4 {
+            rc.rotateButton.sendActions(for: .touchUpInside); await wait(0.7)
+        }
+        check("rotation-keeps-item-and-progress", re.playerItem === itemBeforeRotation && re.currentTime >= positionBeforeRotation && re.isPlaying)
+        rc.episodesButton.sendActions(for: .touchUpInside); await wait(0.4)
+        if let nav = rotation.presentedViewController as? UINavigationController, let table = nav.topViewController as? UITableViewController {
+            rotation.tableView(table.tableView, didSelectRowAt: IndexPath(row: 1, section: 0))
+            _ = await until { rotation.session.index == 1 && re.isPlaying }
+            check("picker-selects-episode", rotation.session.index == 1 && re.currentTime >= 2 && re.currentTime < 6)
+        } else { check("picker-selects-episode", false) }
+        rc.previousButton.sendActions(for: .touchUpInside)
+        rc.nextButton.sendActions(for: .touchUpInside)
+        rc.previousButton.sendActions(for: .touchUpInside)
+        _ = await until { rotation.session.index == 0 && re.isPlaying }
+        check("rapid-switch-keeps-last-choice", rotation.session.index == 0 && re.assetURL?.query == nil)
+        rc.gestureBeganPan(rc.player!.gestureControl, panDirection: .H, panLocation: .left)
+        rc.gestureChangedPan(rc.player!.gestureControl, panDirection: .H, panLocation: .left, withVelocity: CGPoint(x: 600, y: 0))
+        rc.gestureEndedPan(rc.player!.gestureControl, panDirection: .H, panLocation: .left)
+        rc.nextButton.sendActions(for: .touchUpInside)
+        _ = await until { rotation.session.index == 1 && re.isPlaying }
+        await wait(0.5)
+        results["drag-switch-clock"] = re.currentTime
+        results["drag-switch-label"] = rc.portraitControlView.currentTimeLabel.text
+        check("drag-switch-clears-slider-state", !rc.portraitControlView.slider.isdragging && !rc.landScapeControlView.slider.isdragging && !rc.bottomPgrogress.isdragging)
+        check("drag-switch-updates-progress-label", re.currentTime >= 2 && rc.portraitControlView.currentTimeLabel.text != "00:00")
+        // Cancel a same-item pan seek, then begin another before its callback.
+        func pan(_ end: Bool) {
+            rc.gestureBeganPan(rc.player!.gestureControl, panDirection: .H, panLocation: .left)
+            rc.gestureChangedPan(rc.player!.gestureControl, panDirection: .H, panLocation: .left, withVelocity: CGPoint(x: 200, y: 0))
+            if end { rc.gestureEndedPan(rc.player!.gestureControl, panDirection: .H, panLocation: .left) }
+        }
+        pan(true)
+        re.pause()
+        await wait()
+        check("cancelled-pan-releases-all-sliders", !rc.portraitControlView.slider.isdragging && !rc.landScapeControlView.slider.isdragging && !rc.bottomPgrogress.isdragging)
+        pan(true)
+        pan(false)
+        await wait()
+        check("old-pan-completion-preserves-new-drag", rc.portraitControlView.slider.isdragging && rc.bottomPgrogress.isdragging)
+        rc.gestureEndedPan(rc.player!.gestureControl, panDirection: .H, panLocation: .left)
+        await wait()
+        check("new-pan-completion-releases-sliders", !rc.portraitControlView.slider.isdragging && !rc.bottomPgrogress.isdragging)
+        // Slider completions must obey the same reset/new-gesture boundary.
+        rc.portraitControlView.slider.delegate?.sliderTouchEnded?(0.5)
+        pan(false)
+        await wait()
+        check("old-slider-completion-preserves-new-pan", rc.portraitControlView.slider.isdragging && rc.bottomPgrogress.isdragging)
+        rc.nextButton.sendActions(for: .touchUpInside) // Last episode: no-op.
+        rc.previousButton.sendActions(for: .touchUpInside)
+        _ = await until { rotation.session.index == 0 && re.isPlaying }
+        check("switch-resets-active-pan", !rc.portraitControlView.slider.isdragging && !rc.bottomPgrogress.isdragging)
+        rotation.closePlayer(); await wait(0.6)
+
+        // Regression: a real user seek supersedes the initial AVPlayer restore seek.
+        let seeking = PlayerController(session: session(), origin: URL(string: "http://127.0.0.1:18085")!, cookies: [])
+        seeking.loadViewIfNeeded()
+        let sc = Mirror(reflecting: seeking).children.first { $0.label == "controls" }!.value as! HomeTVPlayerControls
+        let se = sc.player!.currentPlayerManager as! ZFAVPlayerManager
+        var injectedSeek = false
+        var seekEvents: [[String: Any]] = []
+        seeking.onProgress = { seekEvents.append($0) }
+        let observation = se.observe(\.assetURL, options: [.new]) { _, _ in
+            guard se.assetURL != nil, !injectedSeek else { return }
+            let original = sc.player!.playerReadyToPlay
+            sc.player!.playerReadyToPlay = { asset, url in
+                original?(asset, url)
+                injectedSeek = true
+                sc.portraitControlView.slider.delegate?.sliderTouchEnded?(0.5)
+            }
+        }
+        seeking.modalPresentationStyle = .fullScreen
+        host.present(seeking, animated: false)
+        _ = await until { injectedSeek && se.currentTime >= 10 }
+        sc.playButton.sendActions(for: .touchUpInside)
+        await wait(0.7)
+        check("superseded-restore-still-allows-play", se.isPlaying)
+        results["superseded-restore-clock"] = se.currentTime
+        seeking.closePlayer(); await wait(0.6)
+        results["superseded-restore-saved"] = seekEvents.last?["position"]
+        check("superseded-restore-saves-new-position", (seekEvents.last?["position"] as? Double ?? 0) >= 10)
+        observation.invalidate()
+
+        // Fault-inject a buffer-empty event, then use actual episode/pause buttons.
+        let buffering = PlayerController(session: session(), origin: URL(string: "http://127.0.0.1:18085")!, cookies: [])
+        buffering.modalPresentationStyle = .fullScreen
+        host.present(buffering, animated: false); await wait()
+        let bc = descendants(buffering.view).compactMap { $0 as? HomeTVPlayerControls }.first!
+        let be = bc.player!.currentPlayerManager as! ZFAVPlayerManager
+        _ = await until { be.isPlaying }
+        be.setValue(NSNumber(value: 8), forKey: "loadState")
+        be.perform(NSSelectorFromString("bufferingSomeSecond"))
+        bc.nextButton.sendActions(for: .touchUpInside)
+        _ = await until { buffering.session.index == 1 && be.isPlaying }
+        bc.playButton.sendActions(for: .touchUpInside)
+        check("next-episode-paused-before-old-buffer-retry", !be.isPlaying)
+        await wait(3.5)
+        check("old-buffer-retry-respects-paused-next-episode", !be.isPlaying)
+        // A same-item manual pause must also cancel retries after load recovers.
+        bc.playButton.sendActions(for: .touchUpInside)
+        func stall() {
+            be.setValue(NSNumber(value: 8), forKey: "loadState")
+            be.perform(NSSelectorFromString("bufferingSomeSecond"))
+        }
+        stall()
+        check("buffering-retains-play-intent", be.isPlaying && be.player.rate == 0)
+        bc.playButton.sendActions(for: .touchUpInside)
+        be.setValue(NSNumber(value: 2), forKey: "loadState")
+        await wait(3.3)
+        check("buffer-retry-respects-same-item-pause", !be.isPlaying && be.player.rate == 0)
+        bc.playButton.sendActions(for: .touchUpInside)
+        stall()
+        let recoveredBuffer = await until { be.player.rate > 0 }
+        check("buffer-retry-recovers-when-play-intended", recoveredBuffer && be.isPlaying)
+        stall()
+        NotificationCenter.default.post(name: UIApplication.willResignActiveNotification, object: nil)
+        await wait(3.3)
+        check("buffer-retry-respects-background-pause", !be.isPlaying && be.player.rate == 0)
+        bc.playButton.sendActions(for: .touchUpInside)
+        stall()
+        buffering.closePlayer(); await wait(3.3)
+        check("buffer-retry-after-close-does-not-recreate-player", be.player == nil && !be.isPlaying)
+
         results["failures"] = failures
         try? JSONSerialization.data(withJSONObject: results, options: [.prettyPrinted, .sortedKeys]).write(to: output.appendingPathComponent("player-integration.json"))
         print("PLAYER_INTEGRATION_DONE failures=\(failures.count)")

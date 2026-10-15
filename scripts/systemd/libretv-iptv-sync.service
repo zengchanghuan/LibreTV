@@ -1,5 +1,5 @@
 [Unit]
-Description=Synchronize IPTV-org English playlist for LibreTV
+Description=Synchronize IPTV-org English playlist for HomeTV
 Wants=network-online.target
 After=network-online.target
 

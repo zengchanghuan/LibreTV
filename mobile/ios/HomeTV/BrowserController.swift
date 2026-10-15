@@ -47,7 +47,7 @@ final class BrowserController: UIViewController, WKScriptMessageHandler, WKNavig
             connectionStatus.centerXAnchor.constraint(equalTo: web.centerXAnchor), connectionStatus.centerYAnchor.constraint(equalTo: web.centerYAnchor), connectionStatus.widthAnchor.constraint(lessThanOrEqualTo: web.widthAnchor, constant: -40)
         ])
         let saved = UserDefaults.standard.string(forKey: "serviceURL").flatMap(serviceOrigin)
-        let bundled = (Bundle.main.object(forInfoDictionaryKey: "LibreTVServiceURL") as? String).flatMap(serviceOrigin)
+        let bundled = (Bundle.main.object(forInfoDictionaryKey: "HomeTVServiceURL") as? String).flatMap(serviceOrigin)
         if let url = bundled ?? saved { connect(url) }
         else { status.text = "请先设置家庭服务的 HTTPS 地址" }
         NotificationCenter.default.addObserver(self, selector: #selector(flush), name: UIApplication.didBecomeActiveNotification, object: nil)

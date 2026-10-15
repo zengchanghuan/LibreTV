@@ -40,7 +40,17 @@ final class PlayerController: UIViewController, UITableViewDataSource, UITableVi
         player.pauseWhenAppResignActive = false
         player.customAudioSession = true
         player.resumePlayRecord = false
-        controls.onSeek = { [weak self] in self?.finished = false }
+        controls.onSeek = { [weak self] in
+            guard let self, self.engine.playerItem?.status == .readyToPlay else { return }
+            self.finished = false
+            // A deliberate seek supersedes the initial resume operation. Its late
+            // completion must neither lock the controls nor start playback.
+            if self.playbackPosition.isRestoring {
+                self.restoreAttempt = UUID()
+                self.playbackPosition.didRestore()
+                self.engine.playerItem?.cancelPendingSeeks()
+            }
+        }
         controls.onToggle = { [weak self] in self?.toggle() }
         controls.backButton.addTarget(self, action: #selector(closePlayer), for: .touchUpInside)
         controls.rotateButton.addTarget(self, action: #selector(rotate), for: .touchUpInside)
@@ -112,7 +122,10 @@ final class PlayerController: UIViewController, UITableViewDataSource, UITableVi
             } catch { if !Task.isCancelled && self.generation == token { self.fail() } }
         }
     }
+    private var restoreAttempt = UUID()
     private func attach(_ url: URL, token: UUID) {
+        restoreAttempt = UUID()
+        let attempt = restoreAttempt
         let restorePosition = playbackPosition.restorePosition
         engine.requestHeader = sameOrigin(url, origin) ? [AVURLAssetHTTPCookiesKey: cookies] : [:]
         player.playerReadyToPlay = { [weak self] _, assetURL in
@@ -123,7 +136,7 @@ final class PlayerController: UIViewController, UITableViewDataSource, UITableVi
             let start = restorePosition.isFinite && restorePosition > 0 && duration.isFinite && restorePosition < duration - 2 ? restorePosition : 0
             self.engine.player?.seek(to: CMTime(seconds: start, preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] completed in
                 DispatchQueue.main.async {
-                    guard let self, completed, self.generation == token, self.engine.playerItem === item, !self.closed else { return }
+                    guard let self, completed, self.restoreAttempt == attempt, self.generation == token, self.engine.playerItem === item, !self.closed else { return }
                     self.playbackPosition.didRestore()
                     if !self.checkDeadline() && !self.userPaused && !self.sleeping { self.engine.rate = self.session.rate; self.engine.play() }
                 }

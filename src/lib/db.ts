@@ -1,3 +1,4 @@
+import { SETTINGS_FORMAT, isSettingsFormat } from './settings-format';
 import Dexie, { type EntityTable } from 'dexie';
 import type { SourceConfig } from './types';
 // 仅类型引入：store.ts 运行时会引用本模块，反向只取类型不会形成运行时循环
@@ -311,7 +312,7 @@ export async function exportConfig(): Promise<string> {
   if (settings) data[PERSIST_KEY] = settings;
 
   return JSON.stringify({
-    name: 'LibreTV-Settings',
+    name: SETTINGS_FORMAT,
     time: Date.now().toString(),
     cfgVer: '2.0.0',
     data,
@@ -323,7 +324,7 @@ export async function importConfig(content: string): Promise<void> {
     name?: string;
     data?: Record<string, string>;
   };
-  if (config.name !== 'LibreTV-Settings') throw new Error('配置文件格式不正确');
+  if (!isSettingsFormat(config.name)) throw new Error('配置文件格式不正确');
   const data = config.data || {};
 
   if (typeof data[PERSIST_KEY] === 'string') {

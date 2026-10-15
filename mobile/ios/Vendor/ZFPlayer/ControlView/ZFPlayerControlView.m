@@ -65,6 +65,7 @@
 @property (nonatomic, assign) BOOL controlViewAppeared;
 
 @property (nonatomic, assign) NSTimeInterval sumTime;
+@property (nonatomic, assign) NSUInteger panGeneration;
 
 @property (nonatomic, strong) dispatch_block_t afterBlock;
 
@@ -260,6 +261,9 @@
 
 /// 重置控制层
 - (void)resetControlView {
+    self.panGeneration++;
+    self.sumTime = 0;
+    self.bottomPgrogress.isdragging = NO;
     [self.portraitControlView resetControlView];
     [self.landScapeControlView resetControlView];
     [self cancelAutoFadeOutControlView];
@@ -368,6 +372,7 @@
 /// 开始滑动手势事件
 - (void)gestureBeganPan:(ZFPlayerGestureControl *)gestureControl panDirection:(ZFPanDirection)direction panLocation:(ZFPanLocation)location {
     if (direction == ZFPanDirectionH) {
+        self.panGeneration++;
         self.sumTime = self.player.currentTime;
     }
 }
@@ -404,17 +409,17 @@
 - (void)gestureEndedPan:(ZFPlayerGestureControl *)gestureControl panDirection:(ZFPanDirection)direction panLocation:(ZFPanLocation)location {
     @zf_weakify(self)
     if (direction == ZFPanDirectionH && self.sumTime >= 0 && self.player.totalTime > 0) {
+        NSUInteger generation = self.panGeneration;
         [self.player seekToTime:self.sumTime completionHandler:^(BOOL finished) {
-            if (finished) {
+            dispatch_async(dispatch_get_main_queue(), ^{
                 @zf_strongify(self)
-                /// 左右滑动调节播放进度
+                if (!self || self.panGeneration != generation) return;
+                // A cancelled seek also ends this drag, but never a newer one.
                 [self.portraitControlView sliderChangeEnded];
                 [self.landScapeControlView sliderChangeEnded];
                 self.bottomPgrogress.isdragging = NO;
-                if (self.controlViewAppeared) {
-                    [self autoFadeOutControlView];
-                }
-            }
+                if (self.controlViewAppeared) [self autoFadeOutControlView];
+            });
         }];
         if (self.seekToPlay) {
             [self.player.currentPlayerManager play];
@@ -683,6 +688,7 @@
         _portraitControlView = [[ZFPortraitControlView alloc] init];
         _portraitControlView.sliderValueChanging = ^(CGFloat value, BOOL forward) {
             @zf_strongify(self)
+            self.panGeneration++;
             NSString *draggedTime = [ZFUtilities convertTimeSecond:self.player.totalTime*value];
             /// 更新滑杆和时间
             [self.landScapeControlView sliderValueChanged:value currentTimeString:draggedTime];
@@ -709,6 +715,7 @@
         _landScapeControlView = [[ZFLandScapeControlView alloc] init];
         _landScapeControlView.sliderValueChanging = ^(CGFloat value, BOOL forward) {
             @zf_strongify(self)
+            self.panGeneration++;
             NSString *draggedTime = [ZFUtilities convertTimeSecond:self.player.totalTime*value];
             /// 更新滑杆和时间
             [self.portraitControlView sliderValueChanged:value currentTimeString:draggedTime];

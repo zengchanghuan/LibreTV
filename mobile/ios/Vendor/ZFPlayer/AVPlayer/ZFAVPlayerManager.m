@@ -88,6 +88,7 @@ static NSString *const kPresentationSize         = @"presentationSize";
 }
 @property (nonatomic, strong) AVPlayerLayer *playerLayer;
 @property (nonatomic, assign) BOOL isBuffering;
+@property (nonatomic, assign) NSUInteger bufferGeneration;
 @property (nonatomic, assign) BOOL isReadyToPlay;
 @property (nonatomic, strong) AVAssetImageGenerator *imageGenerator;
 
@@ -147,6 +148,9 @@ static NSString *const kPresentationSize         = @"presentationSize";
 }
 
 - (void)play {
+    // Explicit transport actions invalidate any queued buffering retry.
+    self.bufferGeneration++;
+    self.isBuffering = NO;
     if (!_isPreparedToPlay) {
         [self prepareToPlay];
     } else {
@@ -158,6 +162,9 @@ static NSString *const kPresentationSize         = @"presentationSize";
 }
 
 - (void)pause {
+    // Explicit transport actions invalidate any queued buffering retry.
+    self.bufferGeneration++;
+    self.isBuffering = NO;
     [self.player pause];
     self->_isPlaying = NO;
     self.playState = ZFPlayerPlayStatePaused;
@@ -166,6 +173,9 @@ static NSString *const kPresentationSize         = @"presentationSize";
 }
 
 - (void)stop {
+    // Explicit transport actions invalidate any queued buffering retry.
+    self.bufferGeneration++;
+    self.isBuffering = NO;
     [_playerItemKVO safelyRemoveAllObservers];
     self.loadState = ZFPlayerLoadStateUnknown;
     self.playState = ZFPlayerPlayStatePlayStopped;
@@ -300,24 +310,21 @@ static NSString *const kPresentationSize         = @"presentationSize";
  *  缓冲较差时候回调这里
  */
 - (void)bufferingSomeSecond {
-    // playbackBufferEmpty会反复进入，因此在bufferingOneSecond延时播放执行完之前再调用bufferingSomeSecond都忽略
-    if (self.isBuffering || self.playState == ZFPlayerPlayStatePlayStopped) return;
-    /// 没有网络
+    if (self.isBuffering || !self.isPlaying || !self.playerItem) return;
     if ([ZFReachabilityManager sharedManager].networkReachabilityStatus == ZFReachabilityStatusNotReachable) return;
     self.isBuffering = YES;
-    
-    // 需要先暂停一小会之后再播放，否则网络状况不好的时候时间在走，声音播放不出来
-    [self pause];
+    NSUInteger generation = ++self.bufferGeneration;
+    AVPlayerItem *item = self.playerItem;
+    // Keep playback intent while temporarily pausing the clock. A user pause,
+    // stop, or episode replacement cancels this retry instead of being undone.
+    [self.player pause];
+    @zf_weakify(self)
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(3.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-        // 如果此时用户已经暂停了，则不再需要开启播放了
-        if (!self.isPlaying && self.loadState == ZFPlayerLoadStateStalled) {
-            self.isBuffering = NO;
-            return;
-        }
-        [self play];
-        // 如果执行了play还是没有播放则说明还没有缓存好，则再次缓存一段时间
+        @zf_strongify(self)
+        if (!self || self.bufferGeneration != generation || self.playerItem != item || !self.isPlaying) return;
         self.isBuffering = NO;
-        if (!self.playerItem.isPlaybackLikelyToKeepUp) [self bufferingSomeSecond];
+        [self play];
+        if (!item.isPlaybackLikelyToKeepUp) [self bufferingSomeSecond];
     });
 }
 
@@ -351,7 +358,7 @@ static NSString *const kPresentationSize         = @"presentationSize";
         @zf_strongify(self)
         if (!self) return;
         NSArray *loadedRanges = self.playerItem.seekableTimeRanges;
-        if (self.isPlaying && self.loadState == ZFPlayerLoadStateStalled) self.player.rate = self.rate;
+        if (self.isPlaying && !self.isBuffering && self.loadState == ZFPlayerLoadStateStalled) self.player.rate = self.rate;
         if (loadedRanges.count > 0) {
             if (self.playerPlayTimeChanged) self.playerPlayTimeChanged(self, self.currentTime, self.totalTime);
         }
@@ -367,6 +374,7 @@ static NSString *const kPresentationSize         = @"presentationSize";
 
 - (void)observeValueForKeyPath:(NSString *)keyPath ofObject:(id)object change:(NSDictionary<NSKeyValueChangeKey,id> *)change context:(void *)context {
     dispatch_async(dispatch_get_main_queue(), ^{
+        if (object != self.playerItem) return;
         if ([keyPath isEqualToString:kStatus]) {
             if (self.player.currentItem.status == AVPlayerItemStatusReadyToPlay) {
                 if (!self.isReadyToPlay) {
