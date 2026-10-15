@@ -1,6 +1,8 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { LiveChannelName } from './live-channel-name';
 import Artplayer from 'artplayer';
 import Hls, { type HlsConfig } from 'hls.js';
 import { Spinner } from './states';
@@ -53,6 +55,7 @@ export function LivePlayer({ url, title, onPrevChannel, onNextChannel }: LivePla
   const containerRef = useRef<HTMLDivElement>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const artRef = useRef<any>(null);
+  const restoreFullscreenWebRef = useRef(false);
   const hlsRef = useRef<Hls | null>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const mpegtsRef = useRef<any>(null);
@@ -65,6 +68,7 @@ export function LivePlayer({ url, title, onPrevChannel, onNextChannel }: LivePla
   const [showPoster, setShowPoster] = useState(true);
   // 换台 OSD：切台后短暂显示频道名（键盘换台/控制条换台时的视觉反馈，全屏内同样可见）
   const [osdTitle, setOsdTitle] = useState('');
+  const [osdHost, setOsdHost] = useState<HTMLDivElement | null>(null);
   const osdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hintTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -332,6 +336,13 @@ export function LivePlayer({ url, title, onPrevChannel, onNextChannel }: LivePla
       },
     });
     artRef.current = art;
+    // Keep the notice inside ArtPlayer's fullscreen root, rather than a sibling
+    // that disappears behind web fullscreen or outside the fullscreen element.
+    const noticeHost = document.createElement('div');
+    noticeHost.className = 'absolute inset-0 pointer-events-none z-[45]';
+    art.template.$player.appendChild(noticeHost);
+    setOsdHost(noticeHost);
+    if (restoreFullscreenWebRef.current) art.fullscreenWeb = true;
     art.on('video:loadedmetadata', () => {
       try {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -368,6 +379,12 @@ export function LivePlayer({ url, title, onPrevChannel, onNextChannel }: LivePla
       clearTimeout(startTimer);
       if (hintTimerRef.current) clearTimeout(hintTimerRef.current);
       cleanupEngines();
+      // ArtPlayer moves web-fullscreen content into body. Return it to its
+      // container before destroy, otherwise a stale fullscreen player survives.
+      restoreFullscreenWebRef.current = art.fullscreenWeb;
+      if (art.fullscreenWeb) art.fullscreenWeb = false;
+      setOsdHost(null);
+      noticeHost.remove();
       art.destroy();
       artRef.current = null;
       destroyed = true;
@@ -398,10 +415,11 @@ export function LivePlayer({ url, title, onPrevChannel, onNextChannel }: LivePla
         </div>
       )}
       {/* 换台 OSD：频道名（全屏内同样可见） */}
-      {osdTitle && !error && (
-        <div className="absolute top-3 left-3 flex items-center max-w-[70%] bg-black/60 px-3 py-1.5 rounded-full pointer-events-none animate-fade-in">
-          <span className="text-sm font-medium text-white truncate">{osdTitle}</span>
-        </div>
+      {osdHost && osdTitle && !error && createPortal(
+        <div data-channel-notice role="status" className="absolute top-3 left-3 max-w-[70%] min-w-0 bg-black/70 px-3 py-2 rounded-xl pointer-events-none animate-fade-in text-sm font-medium text-white">
+          <LiveChannelName name={osdTitle} tone="video" />
+        </div>,
+        osdHost,
       )}
       {loading && !error && (
         <div className="absolute inset-0 flex items-center justify-center bg-black/40 pointer-events-none">

@@ -45,6 +45,30 @@ xcrun swiftc -module-cache-path /tmp/libretv-swift-cache \
 
 未签名的真机 `.app` 仅证明可以编译，不能安装到 iPhone。模拟器不能代替真机解码和后台验收。
 
+## iOS 原生播放器
+
+影片点播使用 [ZFPlayer](https://github.com/renzifeng/ZFPlayer) 4.1.4 的
+`ZFAVPlayerManager`、`ZFPlayerController` 和 `ZFPlayerControlView`。底层解码仍为
+AVFoundation；播放控件、缓冲进度及滑动手势由 ZFPlayer 提供。HomeTV 保留选集、
+倍速、定时停止、同源认证与代理回退、观看进度桥接，并通过系统 scene API 管理横竖屏。
+直播仍使用网页 ArtPlayer。
+
+固定的上游源码及 MIT 许可在 `ios/Vendor/ZFPlayer`，工程生成器直接编译，
+无需安装 CocoaPods。新增文件后仍执行 `generate-ios-project.py`，不要只改生成的工程。
+
+原生播放器集成测试使用独立 bundle ID，不影响 HomeTV 数据或真机：
+
+```bash
+# 先启动一个 iOS 模拟器，传入它的 UDID。
+python3 mobile/scripts/run-player-integration.py SIMULATOR_UDID
+```
+
+脚本从当前源码构建测试 App，使用本地合成视频验证播放、续播、暂停拖动、
+前后集切换、自然片尾、后台暂停、定时停止和失败代理回退；输出 JSON 与横竖屏截图。
+测试不会连接生产服务，截图和构建日志保留在脚本输出的临时目录。
+
+本次接入验证：24 个原生逻辑场景、26 个播放器集成检查通过；已检查横竖屏截图，真机 Release 构建及签名验证通过。真实站点的解码效果仍以真机验收为准。
+
 ## iOS Ad Hoc
 
 1. 在用户的 Apple 开发团队中确定唯一 Bundle ID，登记家人的 iPhone UDID，准备包含这些设备的 Ad Hoc 描述文件和有效分发证书。本轮未替用户登记或访问账号。

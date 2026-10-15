@@ -1,32 +1,27 @@
 import UIKit
 import AVFoundation
 
-private final class VideoSurface: UIView {
-    override class var layerClass: AnyClass { AVPlayerLayer.self }
-    var playerLayer: AVPlayerLayer { layer as! AVPlayerLayer }
-}
-
 final class PlayerController: UIViewController, UITableViewDataSource, UITableViewDelegate {
     var session: PlaybackSession
     let origin: URL
     let cookies: [HTTPCookie]
     var onProgress: (([String: Any]) -> Void)?
     var onClose: (() -> Void)?
-    private let player = AVPlayer()
-    private let surface = VideoSurface()
-    private let titleLabel = UILabel(), info = UILabel(), timeLabel = UILabel()
-    private let playButton = UIButton(type: .system), speedButton = UIButton(type: .system), sleepButton = UIButton(type: .system)
-    private let slider = UISlider()
-    private var tick: Timer?, itemObservation: NSKeyValueObservation?, endedObserver: NSObjectProtocol?
+    private let engine = ZFAVPlayerManager()
+    private let surface = UIView()
+    private let controls = HomeTVPlayerControls()
+    private var player: ZFPlayerController!
+    private var tick: Timer?
     private var resolveTask: Task<Void, Never>?
     private var generation = UUID(), sequence = 0, ticks = 0
-    private let sleepTimer = SleepTimer()
+    private let sleepTimer: SleepTimer
     private var userPaused = false, sleeping = false, closed = false, finished = false
     private var resolvedURL: URL?, proxied = false
     private var episodePicker: UIViewController?
     private let playbackPosition: PlaybackPosition
 
-    init(session: PlaybackSession, origin: URL, cookies: [HTTPCookie]) {
+    init(session: PlaybackSession, origin: URL, cookies: [HTTPCookie], sleepTimer: SleepTimer = SleepTimer()) {
+        self.sleepTimer = sleepTimer
         self.session = session; self.origin = origin; self.cookies = cookies; self.playbackPosition = PlaybackPosition(positions: session.episodes.map(\.position))
         super.init(nibName: nil, bundle: nil)
     }
@@ -36,46 +31,42 @@ final class PlayerController: UIViewController, UITableViewDataSource, UITableVi
     override var supportedInterfaceOrientations: UIInterfaceOrientationMask { .allButUpsideDown }
     override func viewDidLoad() {
         super.viewDidLoad(); view.backgroundColor = .black
-        surface.playerLayer.player = player; surface.playerLayer.videoGravity = .resizeAspect
         surface.translatesAutoresizingMaskIntoConstraints = false; view.addSubview(surface)
         NSLayoutConstraint.activate([surface.topAnchor.constraint(equalTo: view.topAnchor), surface.bottomAnchor.constraint(equalTo: view.bottomAnchor), surface.leadingAnchor.constraint(equalTo: view.leadingAnchor), surface.trailingAnchor.constraint(equalTo: view.trailingAnchor)])
-        let top = UIStackView(); top.axis = .horizontal; top.spacing = 12
-        let close = button("返回", #selector(closePlayer)); titleLabel.textColor = .white; titleLabel.numberOfLines = 2; titleLabel.font = .systemFont(ofSize: 15)
-        top.addArrangedSubview(close); top.addArrangedSubview(titleLabel); top.addArrangedSubview(button("横竖屏", #selector(rotate)))
-        let controls = UIStackView(); controls.axis = .vertical; controls.spacing = 10
-        let row = UIStackView(); row.axis = .horizontal; row.spacing = 4; row.distribution = .fill
-        playButton.setTitle("暂停", for: .normal); playButton.addTarget(self, action: #selector(toggle), for: .touchUpInside)
-        speedButton.setTitle("\(session.rate) 倍", for: .normal); speedButton.showsMenuAsPrimaryAction = true
-        speedButton.menu = UIMenu(title: "播放速度", children: [Float(0.5), 0.75, 1, 1.25, 1.5, 1.75, 2, 3].map { rate in
-            UIAction(title: "\(rate) 倍速") { [weak self] _ in guard let self else { return }; self.session.rate = rate; self.speedButton.setTitle("\(rate) 倍", for: .normal); if self.player.rate != 0 { self.player.rate = rate } }
+        engine.shouldAutoPlay = false
+        player = ZFPlayerController(playerManager: engine, containerView: surface)
+        player.controlView = controls
+        player.allowOrentitaionRotation = false
+        player.pauseWhenAppResignActive = false
+        player.customAudioSession = true
+        player.resumePlayRecord = false
+        controls.onSeek = { [weak self] in self?.finished = false }
+        controls.onToggle = { [weak self] in self?.toggle() }
+        controls.backButton.addTarget(self, action: #selector(closePlayer), for: .touchUpInside)
+        controls.rotateButton.addTarget(self, action: #selector(rotate), for: .touchUpInside)
+        controls.previousButton.addTarget(self, action: #selector(previous), for: .touchUpInside)
+        controls.playButton.addTarget(self, action: #selector(toggle), for: .touchUpInside)
+        controls.nextButton.addTarget(self, action: #selector(nextEpisode), for: .touchUpInside)
+        controls.episodesButton.addTarget(self, action: #selector(episodes), for: .touchUpInside)
+        controls.speedButton.showsMenuAsPrimaryAction = true
+        controls.speedButton.menu = UIMenu(title: "播放速度", children: [Float(0.5), 0.75, 1, 1.25, 1.5, 1.75, 2, 3].map { rate in
+            UIAction(title: "\(rate) 倍速") { [weak self] _ in
+                guard let self else { return }; self.session.rate = rate; self.engine.rate = rate; self.updateTime()
+            }
         })
-        sleepButton.setTitle("定时", for: .normal); sleepButton.showsMenuAsPrimaryAction = true
-        sleepButton.menu = UIMenu(title: "定时停止", children: [0, 15, 30, 45, 60, 90, 120].map { minutes in
+        controls.sleepButton.showsMenuAsPrimaryAction = true
+        controls.sleepButton.menu = UIMenu(title: "定时停止", children: [0, 15, 30, 45, 60, 90, 120].map { minutes in
             UIAction(title: minutes == 0 ? "关闭定时" : "\(minutes) 分钟后停止") { [weak self] _ in
                 self?.sleepTimer.set(minutes: minutes); self?.sleeping = false; self?.updateTime()
             }
         })
-        let playbackControls = [button("上一集", #selector(previous)), playButton, button("下一集", #selector(nextEpisode))]
-        let tools = [button("选集", #selector(episodes)), speedButton, sleepButton]
-        for control in playbackControls + tools {
-            control.titleLabel?.font = .systemFont(ofSize: 13)
-            control.setContentHuggingPriority(.defaultHigh, for: .horizontal)
-            control.widthAnchor.constraint(greaterThanOrEqualToConstant: 44).isActive = true
+        controls.failBtn.removeTarget(nil, action: nil, for: .touchUpInside)
+        controls.failBtn.addTarget(self, action: #selector(retry), for: .touchUpInside)
+        controls.failBtn.setTitle("重试播放", for: .normal)
+        player.playerPlayStateChanged = { [weak self] _, _ in
+            guard let self, !self.closed else { return }
+            self.controls.updatePlaying(self.engine.isPlaying)
         }
-        playbackControls.forEach { row.addArrangedSubview($0) }
-        let spacer = UIView()
-        spacer.setContentHuggingPriority(UILayoutPriority(1), for: .horizontal)
-        row.addArrangedSubview(spacer)
-        tools.forEach { row.addArrangedSubview($0) }
-        timeLabel.textColor = .white; timeLabel.font = .monospacedDigitSystemFont(ofSize: 12, weight: .regular)
-        slider.addTarget(self, action: #selector(seek), for: [.touchUpInside, .touchUpOutside, .touchCancel])
-        info.textColor = .white; info.numberOfLines = 3; info.font = .systemFont(ofSize: 13); info.textAlignment = .center
-        controls.addArrangedSubview(info); controls.addArrangedSubview(timeLabel); controls.addArrangedSubview(slider); controls.addArrangedSubview(row)
-        for stack in [top, controls] { stack.translatesAutoresizingMaskIntoConstraints = false; stack.backgroundColor = UIColor.black.withAlphaComponent(0.65); stack.isLayoutMarginsRelativeArrangement = true; stack.layoutMargins = UIEdgeInsets(top: 6, left: 6, bottom: 6, right: 6); view.addSubview(stack) }
-        NSLayoutConstraint.activate([
-            top.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor), top.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor, constant: 8), top.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -8),
-            controls.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -8), controls.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor, constant: 8), controls.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -8), row.heightAnchor.constraint(greaterThanOrEqualToConstant: 44)
-        ])
         NotificationCenter.default.addObserver(self, selector: #selector(background), name: UIApplication.willResignActiveNotification, object: nil)
         NotificationCenter.default.addObserver(self, selector: #selector(foreground), name: UIApplication.didBecomeActiveNotification, object: nil)
         try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .moviePlayback)
@@ -86,19 +77,19 @@ final class PlayerController: UIViewController, UITableViewDataSource, UITableVi
         }
         load(session.index)
     }
-    private func button(_ title: String, _ action: Selector) -> UIButton {
-        let b = UIButton(type: .system); b.setTitle(title, for: .normal); b.setTitleColor(.white, for: .normal); b.titleLabel?.font = .systemFont(ofSize: 13); b.addTarget(self, action: action, for: .touchUpInside); return b
-    }
     private func load(_ index: Int) {
         guard !closed, session.episodes.indices.contains(index) else { return }
         resolveTask?.cancel(); generation = UUID(); let token = generation
-        player.pause(); itemObservation = nil
-        if let observer = endedObserver { NotificationCenter.default.removeObserver(observer); endedObserver = nil }
-        player.replaceCurrentItem(with: nil)
+        player.playerReadyToPlay = nil; player.playerPlayFailed = nil; player.playerDidToEnd = nil
+        engine.stop()
         session.index = index; userPaused = false; sleeping = false; finished = false; proxied = false
         playbackPosition.selectEpisode(index)
-        titleLabel.text = "\(session.title) · 第 \(index + 1)/\(session.episodes.count) 集"
-        info.text = "正在加载…"; emit("episode")
+        controls.heading.text = "\(session.title) · 第 \(index + 1)/\(session.episodes.count) 集"
+        controls.previousButton.isEnabled = index > 0
+        controls.nextButton.isEnabled = index + 1 < session.episodes.count
+        controls.previousButton.alpha = index > 0 ? 1 : 0.35
+        controls.nextButton.alpha = index + 1 < session.episodes.count ? 1 : 0.35
+        controls.message.text = "正在加载…"; emit("episode")
         let raw = URL(string: session.episodes[index].url)!
         resolveTask = Task { [weak self] in
             guard let self else { return }
@@ -122,46 +113,51 @@ final class PlayerController: UIViewController, UITableViewDataSource, UITableVi
         }
     }
     private func attach(_ url: URL, token: UUID) {
-        let position = playbackPosition.restorePosition
-        let asset = AVURLAsset(url: url, options: sameOrigin(url, origin) ? [AVURLAssetHTTPCookiesKey: cookies] : nil)
-        let item = AVPlayerItem(asset: asset); player.replaceCurrentItem(with: item)
-        itemObservation = item.observe(\.status, options: [.new, .initial]) { [weak self] item, _ in
-            DispatchQueue.main.async {
-                guard let self, self.generation == token, self.player.currentItem === item, !self.closed else { return }
-                if item.status == .readyToPlay {
-                    self.info.text = ""
-                    let duration = item.duration.seconds
-                    let start = position.isFinite && position > 0 && duration.isFinite && position < duration - 2 ? position : 0
-                    self.player.seek(to: CMTime(seconds: start, preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] completed in
-                        DispatchQueue.main.async {
-                            guard let self, completed, self.generation == token, self.player.currentItem === item, !self.closed else { return }
-                            self.playbackPosition.didRestore()
-                            if !self.checkDeadline() && !self.userPaused && !self.sleeping { self.player.playImmediately(atRate: self.session.rate) }
-                        }
-                    }
-                } else if item.status == .failed {
-                    if !self.proxied, let target = self.resolvedURL, !(sameOrigin(target, self.origin) && target.path == "/api/proxy") {
-                        self.proxied = true
-                        // Capture before replacing the failed item; its clock resets on replacement.
-                        self.playbackPosition.prepareRetry(currentPosition: self.player.currentTime().seconds)
-                        var proxy = URLComponents(url: self.origin.appendingPathComponent("api/proxy"), resolvingAgainstBaseURL: false)!
-                        proxy.queryItems = [URLQueryItem(name: "url", value: target.absoluteString)]
-                        self.info.text = "直连失败，正在通过服务重试…"; self.attach(proxy.url!, token: token)
-                    } else { self.fail() }
+        let restorePosition = playbackPosition.restorePosition
+        engine.requestHeader = sameOrigin(url, origin) ? [AVURLAssetHTTPCookiesKey: cookies] : [:]
+        player.playerReadyToPlay = { [weak self] _, assetURL in
+            guard let self, self.generation == token, assetURL == url, !self.closed else { return }
+            self.controls.message.text = ""
+            let item = self.engine.playerItem
+            let duration = item?.duration.seconds ?? 0
+            let start = restorePosition.isFinite && restorePosition > 0 && duration.isFinite && restorePosition < duration - 2 ? restorePosition : 0
+            self.engine.player?.seek(to: CMTime(seconds: start, preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] completed in
+                DispatchQueue.main.async {
+                    guard let self, completed, self.generation == token, self.engine.playerItem === item, !self.closed else { return }
+                    self.playbackPosition.didRestore()
+                    if !self.checkDeadline() && !self.userPaused && !self.sleeping { self.engine.rate = self.session.rate; self.engine.play() }
                 }
             }
         }
-        if let observer = endedObserver { NotificationCenter.default.removeObserver(observer) }
-        endedObserver = NotificationCenter.default.addObserver(forName: .AVPlayerItemDidPlayToEndTime, object: item, queue: .main) { [weak self] _ in
-            guard let self, self.generation == token, !self.closed else { return }
-            if self.checkDeadline() { return }
-            self.finished = true; self.playbackPosition.record(0); self.emit("ended")
-            if self.session.autoplayNext && self.session.index + 1 < self.session.episodes.count { self.load(self.session.index + 1) }
+        player.playerPlayFailed = { [weak self] _, _ in
+            // Leave ZFPlayer's failure callback before replacing its current item.
+            DispatchQueue.main.async {
+                guard let self, self.generation == token, self.engine.assetURL == url, !self.closed else { return }
+                if !self.proxied, let target = self.resolvedURL, !(sameOrigin(target, self.origin) && target.path == "/api/proxy") {
+                    self.proxied = true
+                    self.playbackPosition.prepareRetry(currentPosition: self.engine.player?.currentTime().seconds ?? self.playbackPosition.savedPosition)
+                    var proxy = URLComponents(url: self.origin.appendingPathComponent("api/proxy"), resolvingAgainstBaseURL: false)!
+                    proxy.queryItems = [URLQueryItem(name: "url", value: target.absoluteString)]
+                    self.controls.message.text = "直连失败，正在通过服务重试…"; self.attach(proxy.url!, token: token)
+                } else { self.fail() }
+            }
         }
+        player.playerDidToEnd = { [weak self] _ in
+            DispatchQueue.main.async {
+                guard let self, self.generation == token, self.engine.assetURL == url, !self.closed else { return }
+                if self.checkDeadline() { return }
+                self.finished = true; self.engine.pause(); self.playbackPosition.record(0); self.emit("ended")
+                self.controls.updatePlaying(false)
+                if self.session.autoplayNext && self.session.index + 1 < self.session.episodes.count { self.load(self.session.index + 1) }
+            }
+        }
+        engine.rate = session.rate
+        player.assetURL = url
+        controls.showTitle(controls.heading.text ?? session.title, cover: nil, fullScreenMode: .landscape)
     }
-    private func fail() { player.pause(); info.text = "无法播放此源，请返回换源或使用网页播放器"; emit("error") }
-    private var position: Double { guard !playbackPosition.isRestoring, player.currentItem?.status == .readyToPlay else { return playbackPosition.savedPosition }; let n = player.currentTime().seconds; return n.isFinite && n >= 0 ? n : playbackPosition.savedPosition }
-    private var duration: Double { let n = player.currentItem?.duration.seconds ?? 0; return n.isFinite && n >= 0 ? n : 0 }
+    private func fail() { engine.pause(); controls.message.text = "无法播放此源，请重试或返回换源"; controls.failBtn.isHidden = false; emit("error") }
+    private var position: Double { guard !playbackPosition.isRestoring, engine.playerItem?.status == .readyToPlay else { return playbackPosition.savedPosition }; let n = engine.player?.currentTime().seconds ?? 0; return n.isFinite && n >= 0 ? n : playbackPosition.savedPosition }
+    private var duration: Double { let n = engine.playerItem?.duration.seconds ?? 0; return n.isFinite && n >= 0 ? n : 0 }
     private func emit(_ reason: String) {
         sequence += 1
         if !finished { playbackPosition.record(position) }
@@ -175,25 +171,36 @@ final class PlayerController: UIViewController, UITableViewDataSource, UITableVi
     private func checkDeadline() -> Bool {
         guard sleepTimer.consumeExpired() else { return false }
         sleeping = true; userPaused = true; session.autoplayNext = false
-        player.pause(); info.text = "已定时停止，自动连播已关闭"; emit("sleep"); return true
+        engine.pause(); controls.message.text = "已定时停止，自动连播已关闭"; emit("sleep"); return true
     }
     private func updateTime() {
-        if !slider.isTracking { slider.value = duration > 0 ? Float(position / duration) : 0 }
-        let timer = sleepTimer.minutesRemaining.map { " · \($0) 分钟后停止" } ?? ""
-        timeLabel.text = "\(format(position)) / \(format(duration))\(timer)"
-        playButton.setTitle(player.rate == 0 ? "播放" : "暂停", for: .normal)
+        controls.updatePlaying(engine.isPlaying && !finished)
+        controls.speedButton.setTitle("\(session.rate)×", for: .normal)
+        controls.sleepButton.tintColor = sleepTimer.minutesRemaining == nil ? .white : .systemYellow
+        controls.sleepButton.accessibilityLabel = sleepTimer.minutesRemaining.map { "定时停止，剩余 \($0) 分钟" } ?? "定时停止"
     }
-    private func format(_ value: Double) -> String { let seconds = Int(value); return String(format: "%02d:%02d", seconds / 60, seconds % 60) }
     @objc private func toggle() {
         if checkDeadline() { return }
-        if player.rate == 0 { userPaused = false; sleeping = false; if finished { finished = false; player.seek(to: .zero) }; player.playImmediately(atRate: session.rate) }
-        else { userPaused = true; player.pause(); emit("pause") }
+        if !engine.isPlaying || finished {
+            userPaused = false; sleeping = false; controls.message.text = ""
+            if finished { finished = false; engine.replay() }
+            else if !playbackPosition.isRestoring { engine.rate = session.rate; engine.play() }
+        } else { userPaused = true; engine.pause(); emit("pause") }
     }
-    @objc private func seek() { if duration > 0 { finished = false; player.seek(to: CMTime(seconds: Double(slider.value) * duration, preferredTimescale: 600)) } }
+    @objc private func retry() {
+        guard !closed else { return }
+        playbackPosition.prepareRetry(currentPosition: position)
+        load(session.index)
+    }
     @objc private func previous() { selectEpisode(session.index - 1) }
     @objc private func nextEpisode() { selectEpisode(session.index + 1) }
     private func selectEpisode(_ index: Int) { guard session.episodes.indices.contains(index), index != session.index else { return }; emit("pause"); load(index) }
-    @objc private func background() { userPaused = true; player.pause(); emit("pause") }
+    @objc private func background() {
+        userPaused = true
+        // Let an in-flight resume seek finish without cancelling its completion.
+        if playbackPosition.isRestoring { engine.player?.pause() } else { engine.pause() }
+        emit("pause")
+    }
     @objc private func foreground() { _ = checkDeadline(); updateTime() }
     @objc private func rotate() {
         guard let scene = view.window?.windowScene else { return }
@@ -201,7 +208,7 @@ final class PlayerController: UIViewController, UITableViewDataSource, UITableVi
         scene.requestGeometryUpdate(.iOS(interfaceOrientations: landscape ? .portrait : .landscapeRight))
     }
     @objc func closePlayer() {
-        guard !closed else { return }; emit("close"); closed = true; resolveTask?.cancel(); tick?.invalidate(); player.pause(); player.replaceCurrentItem(with: nil)
+        guard !closed else { return }; emit("close"); closed = true; resolveTask?.cancel(); tick?.invalidate(); player.stop()
         UIApplication.shared.isIdleTimerDisabled = false; try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
         dismiss(animated: true) { [weak self] in self?.onClose?() }
     }
@@ -218,7 +225,7 @@ final class PlayerController: UIViewController, UITableViewDataSource, UITableVi
         cell.accessoryType = indexPath.row == session.index ? .checkmark : .none; return cell
     }
     func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) { dismissEpisodes(); selectEpisode(indexPath.row) }
-    deinit { tick?.invalidate(); resolveTask?.cancel(); itemObservation = nil; if let observer = endedObserver { NotificationCenter.default.removeObserver(observer) }; NotificationCenter.default.removeObserver(self) }
+    deinit { tick?.invalidate(); resolveTask?.cancel(); NotificationCenter.default.removeObserver(self) }
 }
 
 private final class SameOriginRedirects: NSObject, URLSessionTaskDelegate {
