@@ -8,7 +8,12 @@ import AVFoundation
         var results: [String: Any] = [:]
         var failures: [String] = []
         func wait(_ seconds: Double = 0.3) async { try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000)) }
-        func check(_ name: String, _ value: Bool) { results[name] = value; if !value { failures.append(name) }; print("PLAYER_CHECK \(name): \(value)") }
+        func check(_ name: String, _ value: Bool) {
+            results[name] = value
+            if !value { failures.append(name) }
+            print("PLAYER_CHECK \(name): \(value)")
+            try? JSONSerialization.data(withJSONObject: results, options: [.prettyPrinted, .sortedKeys]).write(to: output.appendingPathComponent("player-progress.json"))
+        }
         func descendants(_ view: UIView) -> [UIView] { [view] + view.subviews.flatMap(descendants) }
         func until(_ condition: () -> Bool) async -> Bool {
             for _ in 0..<100 { if condition() { return true }; await wait(0.1) }; return false
@@ -167,6 +172,7 @@ import AVFoundation
             if end { rc.gestureEndedPan(rc.player!.gestureControl, panDirection: .H, panLocation: .left) }
         }
         pan(true)
+        re.playerItem?.cancelPendingSeeks()
         re.pause()
         await wait()
         check("cancelled-pan-releases-all-sliders", !rc.portraitControlView.slider.isdragging && !rc.landScapeControlView.slider.isdragging && !rc.bottomPgrogress.isdragging)
@@ -289,6 +295,93 @@ import AVFoundation
             check(scenario + "-restores-home-orientation", returned && scene.interfaceOrientation == entry && (host.view.bounds.width > host.view.bounds.height) == landscapeHome)
             check(scenario + "-closes-once", closeCount == 1)
             if host.presentedViewController != nil { host.dismiss(animated: false); await wait() }
+        }
+
+        // A committed slider or horizontal pan seek must survive immediate
+        // episode replacement or dismissal, before AVPlayer updates its clock.
+        for seekKind in ["slider", "pan"] {
+            let jumping = PlayerController(session: session(), origin: URL(string: "http://127.0.0.1:18085")!, cookies: [])
+            var jumpEvents: [[String: Any]] = []
+            jumping.onProgress = { jumpEvents.append($0) }
+            jumping.modalPresentationStyle = .fullScreen
+            host.present(jumping, animated: false); await wait()
+            let jc = descendants(jumping.view).compactMap { $0 as? HomeTVPlayerControls }.first!
+            let je = jc.player!.currentPlayerManager as! ZFAVPlayerManager
+            _ = await until { je.isPlaying }; jc.playButton.sendActions(for: .touchUpInside)
+            var target = 12.0
+            if seekKind == "slider" {
+                jc.portraitControlView.slider.delegate?.sliderTouchEnded?(0.6)
+            } else {
+                target = je.currentTime + 5
+                jc.gestureBeganPan(jc.player!.gestureControl, panDirection: .H, panLocation: .left)
+                jc.gestureChangedPan(jc.player!.gestureControl, panDirection: .H, panLocation: .left, withVelocity: CGPoint(x: 1000, y: 0))
+                jc.gestureEndedPan(jc.player!.gestureControl, panDirection: .H, panLocation: .left)
+            }
+            jc.nextButton.sendActions(for: .touchUpInside)
+            let saved = jumpEvents.last { ($0["index"] as? Int) == 0 && ($0["reason"] as? String) == "pause" }?["position"] as? Double ?? -1
+            check(seekKind + "-immediate-switch-saves-target", abs(saved - target) < 0.1)
+            _ = await until { jumping.session.index == 1 && je.isPlaying }
+            jc.previousButton.sendActions(for: .touchUpInside)
+            let resumed = await until { jumping.session.index == 0 && je.isPlaying }
+            check(seekKind + "-switch-back-restores-target", resumed && je.currentTime >= target - 0.1 && je.currentTime < target + 2)
+            // A completed seek must stop masking the live clock.
+            jc.portraitControlView.slider.delegate?.sliderTouchEnded?(0.5)
+            await wait(0.8)
+            jc.playButton.sendActions(for: .touchUpInside)
+            let advanced = jumpEvents.last?["position"] as? Double ?? -1
+            check(seekKind + "-completed-seek-progress-advances", advanced > 10.3 && advanced < 13)
+            jc.portraitControlView.slider.delegate?.sliderTouchEnded?(0.3)
+            jc.portraitControlView.slider.delegate?.sliderTouchEnded?(0.65)
+            je.pause()
+            await wait(0.3)
+            check(seekKind + "-replacement-seek-survives-pause", abs(je.currentTime - 13) < 0.1 && !je.isPlaying)
+            jc.portraitControlView.slider.delegate?.sliderTouchEnded?(0.7)
+            jumping.closePlayer()
+            check(seekKind + "-immediate-close-saves-target", abs((jumpEvents.last?["position"] as? Double ?? -1) - 14) < 0.1)
+            await wait(0.7)
+        }
+
+        // Expire the timer synchronously after ready starts a resume seek.
+        // Test initial open and switching episodes, with both an immediate play
+        // request and a play request after the seek has finished while paused.
+        for targetIndex in [0, 1] {
+            for immediatePlay in [false, true] {
+                var deadlineNow = Date(timeIntervalSince1970: 2000)
+                let deadline = SleepTimer(now: { deadlineNow })
+                let timed = PlayerController(session: session(), origin: URL(string: "http://127.0.0.1:18085")!, cookies: [], sleepTimer: deadline)
+                timed.loadViewIfNeeded()
+                let tc = Mirror(reflecting: timed).children.first { $0.label == "controls" }!.value as! HomeTVPlayerControls
+                let te = tc.player!.currentPlayerManager as! ZFAVPlayerManager
+                var injected = false
+                var pausedAtDeadline = false
+                let observation = te.observe(\.assetURL, options: [.new]) { _, _ in
+                    guard te.assetURL != nil, timed.session.index == targetIndex, !injected else { return }
+                    let original = tc.player!.playerReadyToPlay
+                    tc.player!.playerReadyToPlay = { asset, url in
+                        original?(asset, url)
+                        injected = true
+                        deadline.set(minutes: 1); deadlineNow += 60
+                        tc.playButton.sendActions(for: .touchUpInside)
+                        pausedAtDeadline = !te.isPlaying && te.player.rate == 0 && !timed.session.autoplayNext
+                        if immediatePlay { tc.playButton.sendActions(for: .touchUpInside) }
+                    }
+                }
+                timed.modalPresentationStyle = .fullScreen
+                host.present(timed, animated: false)
+                if targetIndex == 1 {
+                    _ = await until { te.isPlaying }
+                    tc.nextButton.sendActions(for: .touchUpInside)
+                }
+                _ = await until { injected }; await wait(0.5)
+                let prefix = "sleep-during-resume-episode-\(targetIndex)-immediate-\(immediatePlay)"
+                check(prefix + "-stops", pausedAtDeadline && (immediatePlay || !te.isPlaying))
+                if !immediatePlay { tc.playButton.sendActions(for: .touchUpInside) }
+                let playing = await until { te.isPlaying && te.player.rate > 0 }
+                let start = targetIndex == 0 ? 4.0 : 2.0
+                await wait(0.3)
+                check(prefix + "-manual-resume", playing && te.currentTime > start && te.currentTime < start + 3)
+                timed.closePlayer(); await wait(0.7); observation.invalidate()
+            }
         }
 
         results["failures"] = failures

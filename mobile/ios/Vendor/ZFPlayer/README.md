@@ -10,6 +10,8 @@ ZFPlayer.bundle into the application. No CocoaPods installation is required.
 HomeTV-specific controls and playback policy live outside this directory.
 
 Local playback fixes:
+- Pause preserves in-flight seeks and asset loading; stop and replacement seeks
+  still cancel. Sleep/background pauses cannot strand resume completion.
 - Buffer retries preserve playback intent and are bound to an item/generation;
   play, pause and stop invalidate queued retries. Queued KVO events from a
   replaced item are ignored.

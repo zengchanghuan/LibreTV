@@ -7,7 +7,7 @@ final class PlayerController: UIViewController, UITableViewDataSource, UITableVi
     let cookies: [HTTPCookie]
     var onProgress: (([String: Any]) -> Void)?
     var onClose: (() -> Void)?
-    private let engine = ZFAVPlayerManager()
+    private let engine = HomeTVPlayerManager()
     private let surface = UIView()
     private let controls = HomeTVPlayerControls()
     private var player: ZFPlayerController!
@@ -66,6 +66,11 @@ final class PlayerController: UIViewController, UITableViewDataSource, UITableVi
             }
         }
         controls.onToggle = { [weak self] in self?.toggle() }
+        engine.onSeek = { [weak self] target in
+            guard let self else { return nil }
+            let id = self.playbackPosition.beginSeek(to: target)
+            return { [weak self] in self?.playbackPosition.finishSeek(id) }
+        }
         controls.backButton.addTarget(self, action: #selector(closePlayer), for: .touchUpInside)
         controls.rotateButton.addTarget(self, action: #selector(rotate), for: .touchUpInside)
         controls.previousButton.addTarget(self, action: #selector(previous), for: .touchUpInside)
@@ -183,7 +188,9 @@ final class PlayerController: UIViewController, UITableViewDataSource, UITableVi
         controls.showTitle(controls.heading.text ?? session.title, cover: nil, fullScreenMode: .landscape)
     }
     private func fail() { engine.pause(); controls.message.text = "无法播放此源，请重试或返回换源"; controls.failBtn.isHidden = false; emit("error") }
-    private var position: Double { guard !playbackPosition.isRestoring, engine.playerItem?.status == .readyToPlay else { return playbackPosition.savedPosition }; let n = engine.player?.currentTime().seconds ?? 0; return n.isFinite && n >= 0 ? n : playbackPosition.savedPosition }
+    private var position: Double {
+        playbackPosition.position(currentTime: engine.playerItem?.status == .readyToPlay ? engine.player?.currentTime().seconds ?? .nan : .nan)
+    }
     private var duration: Double { let n = engine.playerItem?.duration.seconds ?? 0; return n.isFinite && n >= 0 ? n : 0 }
     private func emit(_ reason: String) {
         sequence += 1
@@ -224,8 +231,7 @@ final class PlayerController: UIViewController, UITableViewDataSource, UITableVi
     private func selectEpisode(_ index: Int) { guard session.episodes.indices.contains(index), index != session.index else { return }; emit("pause"); load(index) }
     @objc private func background() {
         userPaused = true
-        // Let an in-flight resume seek finish without cancelling its completion.
-        if playbackPosition.isRestoring { engine.player?.pause() } else { engine.pause() }
+        engine.pause()
         emit("pause")
     }
     @objc private func foreground() { _ = checkDeadline(); updateTime() }

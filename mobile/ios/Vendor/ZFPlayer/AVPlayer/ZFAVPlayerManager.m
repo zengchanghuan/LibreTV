@@ -168,8 +168,9 @@ static NSString *const kPresentationSize         = @"presentationSize";
     [self.player pause];
     self->_isPlaying = NO;
     self.playState = ZFPlayerPlayStatePaused;
-    [_playerItem cancelPendingSeeks];
-    [_asset cancelLoading];
+    // Pausing changes transport intent, not the requested position. Cancelling
+    // here strands an initial resume seek (or discards a user's pending seek).
+    // Item teardown and replacement seeks still cancel in stop/seekToTime.
 }
 
 - (void)stop {
