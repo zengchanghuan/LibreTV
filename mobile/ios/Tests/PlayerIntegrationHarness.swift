@@ -23,6 +23,8 @@ import AVFoundation
               rate: 1.5, autoplayNext: autoplay, baseRevision: 0, openedAt: 1)
         }
         let host = window.rootViewController!
+        scene.requestGeometryUpdate(.iOS(interfaceOrientations: .portrait))
+        _ = await until { scene.interfaceOrientation == .portrait && host.view.bounds.height > host.view.bounds.width }
         var now = Date(timeIntervalSince1970: 1000)
         let timer = SleepTimer(now: { now })
         let controller = PlayerController(session: session(), origin: URL(string: "http://127.0.0.1:18085")!, cookies: [], sleepTimer: timer)
@@ -99,6 +101,10 @@ import AVFoundation
         check("seek-after-end-resumes-selected-position", engine.isPlaying && engine.currentTime >= 10 && engine.currentTime < 14)
         controller.closePlayer(); await wait(0.6)
         check("close-releases-player", engine.player == nil && host.presentedViewController == nil && !UIApplication.shared.isIdleTimerDisabled)
+        let restoredPortrait = await until { scene.interfaceOrientation == .portrait && host.view.bounds.height > host.view.bounds.width }
+        check("landscape-close-restores-portrait-home", restoredPortrait)
+        check("home-tab-bar-visible-after-return", descendants(host.view).compactMap { $0 as? UITabBar }.contains { $0.window != nil && !$0.isHidden && $0.frame.maxY <= host.view.bounds.height + 1 && $0.frame.minY > host.view.bounds.midY })
+        snapshot("home-after-landscape-close")
 
         let retryController = PlayerController(session: session("/fail.mp4", autoplay: false), origin: URL(string: "http://127.0.0.1:18085")!, cookies: [])
         retryController.modalPresentationStyle = .fullScreen
@@ -250,6 +256,40 @@ import AVFoundation
         stall()
         buffering.closePlayer(); await wait(3.3)
         check("buffer-retry-after-close-does-not-recreate-player", be.player == nil && !be.isPlaying)
+
+        // Exercise both landscape directions, an already-landscape home, and a
+        // close while a rotation request or episode sheet is still in flight.
+        for scenario in ["left-landscape", "landscape-home", "rotate-immediately-close", "close-with-episode-picker"] {
+            let landscapeHome = scenario == "landscape-home"
+            let entry: UIInterfaceOrientation = landscapeHome ? .landscapeRight : .portrait
+            scene.requestGeometryUpdate(.iOS(interfaceOrientations: landscapeHome ? .landscapeRight : .portrait))
+            let entryReady = await until { scene.interfaceOrientation == entry }
+            check(scenario + "-entry-orientation", entryReady)
+            let returning = PlayerController(session: session(), origin: URL(string: "http://127.0.0.1:18085")!, cookies: [])
+            var closeCount = 0
+            returning.onClose = { closeCount += 1 }
+            returning.modalPresentationStyle = .fullScreen
+            host.present(returning, animated: false); await wait()
+            let returningControls = descendants(returning.view).compactMap { $0 as? HomeTVPlayerControls }.first!
+            if scenario == "rotate-immediately-close" {
+                returningControls.rotateButton.sendActions(for: .touchUpInside)
+            } else {
+                let target: UIInterfaceOrientation = landscapeHome ? .portrait : .landscapeLeft
+                scene.requestGeometryUpdate(.iOS(interfaceOrientations: landscapeHome ? .portrait : .landscapeLeft))
+                let rotated = await until { scene.interfaceOrientation == target }
+                check(scenario + "-player-rotated", rotated)
+            }
+            if scenario == "close-with-episode-picker" {
+                returningControls.episodesButton.sendActions(for: .touchUpInside)
+                await wait(0.5)
+            }
+            returning.closePlayer()
+            let returned = await until { closeCount == 1 && host.presentedViewController == nil && scene.interfaceOrientation == entry }
+            await wait(0.5) // A late geometry callback must not undo the restoration.
+            check(scenario + "-restores-home-orientation", returned && scene.interfaceOrientation == entry && (host.view.bounds.width > host.view.bounds.height) == landscapeHome)
+            check(scenario + "-closes-once", closeCount == 1)
+            if host.presentedViewController != nil { host.dismiss(animated: false); await wait() }
+        }
 
         results["failures"] = failures
         try? JSONSerialization.data(withJSONObject: results, options: [.prettyPrinted, .sortedKeys]).write(to: output.appendingPathComponent("player-integration.json"))

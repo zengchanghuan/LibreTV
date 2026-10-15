@@ -18,6 +18,7 @@ final class PlayerController: UIViewController, UITableViewDataSource, UITableVi
     private var userPaused = false, sleeping = false, closed = false, finished = false
     private var resolvedURL: URL?, proxied = false
     private var episodePicker: UIViewController?
+    private var returnOrientation: UIInterfaceOrientationMask?
     private let playbackPosition: PlaybackPosition
 
     init(session: PlaybackSession, origin: URL, cookies: [HTTPCookie], sleepTimer: SleepTimer = SleepTimer()) {
@@ -29,6 +30,19 @@ final class PlayerController: UIViewController, UITableViewDataSource, UITableVi
     override var prefersStatusBarHidden: Bool { true }
     override var prefersHomeIndicatorAutoHidden: Bool { true }
     override var supportedInterfaceOrientations: UIInterfaceOrientationMask { .allButUpsideDown }
+    override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+        // Geometry requests affect the whole scene, so remember the page's
+        // orientation once, before the player can rotate it (including sheets).
+        guard returnOrientation == nil else { return }
+        let scene = presentingViewController?.view.window?.windowScene ?? view.window?.windowScene
+        switch scene?.interfaceOrientation {
+        case .landscapeLeft: returnOrientation = .landscapeLeft
+        case .landscapeRight: returnOrientation = .landscapeRight
+        case .portraitUpsideDown: returnOrientation = .portraitUpsideDown
+        default: returnOrientation = .portrait
+        }
+    }
     override func viewDidLoad() {
         super.viewDidLoad(); view.backgroundColor = .black
         surface.translatesAutoresizingMaskIntoConstraints = false; view.addSubview(surface)
@@ -223,7 +237,19 @@ final class PlayerController: UIViewController, UITableViewDataSource, UITableVi
     @objc func closePlayer() {
         guard !closed else { return }; emit("close"); closed = true; resolveTask?.cancel(); tick?.invalidate(); player.stop()
         UIApplication.shared.isIdleTimerDisabled = false; try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
-        dismiss(animated: true) { [weak self] in self?.onClose?() }
+        let scene = view.window?.windowScene
+        let presenter = presentingViewController
+        let orientation = returnOrientation ?? .portrait
+        let onClose = onClose
+        // Dismiss from the presenter so an open episode sheet is removed along
+        // with the player. Restore only once the underlying page is visible.
+        let finish = {
+            presenter?.setNeedsUpdateOfSupportedInterfaceOrientations()
+            scene?.requestGeometryUpdate(.iOS(interfaceOrientations: orientation))
+            onClose?()
+        }
+        if let presenter { presenter.dismiss(animated: true, completion: finish) }
+        else { dismiss(animated: true, completion: finish) }
     }
     @objc private func episodes() {
         let controller = UITableViewController(style: .plain); controller.title = "选集"; controller.tableView.dataSource = self; controller.tableView.delegate = self

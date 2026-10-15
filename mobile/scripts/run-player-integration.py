@@ -17,13 +17,27 @@ shutil.copy2(repo / 'mobile/scripts/generate-ios-project.py', project / 'scripts
 code = project / 'ios/HomeTV'
 shutil.copy2(project / 'ios/Tests/PlayerIntegrationHarness.swift', code)
 p = code / 'AppDelegate.swift'
-s = p.read_text().replace('window.rootViewController = BrowserController()', 'window.rootViewController = UIViewController()')
+s = p.read_text()
 s = s.replace('window.makeKeyAndVisible(); self.window = window', 'window.makeKeyAndVisible(); self.window = window\n        runPlayerIntegration(window: window, scene: scene)')
 p.write_text(s)
+# Exercise the real browser/tab bar as the presenter, with an isolated local
+# page so orientation regression checks never contact the production service.
+browser = code / 'BrowserController.swift'
+browser_source = browser.read_text()
+connect = 'if let url = bundled ?? saved { connect(url) }'
+assert browser_source.count(connect) == 1, 'Cannot isolate browser from production service'
+browser.write_text(browser_source.replace(connect,
+    'if let url = URL(string: "http://127.0.0.1:18085") { connect(url) }'))
 subprocess.run([sys.executable, str(project / 'scripts/generate-ios-project.py')], check=True)
 video = (project / 'ios/Tests/Fixtures/player.mp4').read_bytes()
 class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
+        if self.path == '/':
+            page = b'<html><head><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="background:#101827;color:white"><h1>HomeTV</h1><p>Local player regression fixture</p></body></html>'
+            self.send_response(200)
+            self.send_header('Content-Type', 'text/html; charset=utf-8')
+            self.send_header('Content-Length', str(len(page))); self.end_headers()
+            self.wfile.write(page); return
         if self.path.startswith('/fail.mp4') or 'always-fail.mp4' in self.path:
             self.send_error(404); return
         start, end = 0, len(video) - 1
@@ -52,7 +66,7 @@ try:
     # Reinstalls preserve simulator data; never accept a previous run's report.
     (container / 'player-integration.json').unlink(missing_ok=True)
     sim('launch', '--terminate-running-process', device, bundle)
-    for _ in range(100):
+    for _ in range(180):
         result = container / 'player-integration.json'
         if result.exists():
             shutil.copytree(container, work / 'results', dirs_exist_ok=True)
