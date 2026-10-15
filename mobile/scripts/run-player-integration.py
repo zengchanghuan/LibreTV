@@ -9,6 +9,7 @@ import argparse, json, shutil, subprocess, sys, tempfile, threading, time
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument("device")
+parser.add_argument("--offline-only", action="store_true", help="Run download and offline playback checks only")
 parser.add_argument("--verify-failure-reporting", action="store_true", help="Exercise missing prerequisites and a failed check before the normal suite")
 parser.add_argument("--inject-failure", choices=["missing-root", "missing-controls", "missing-player", "wrong-manager", "missing-reflection", "wrong-type", "failed-check", "progress-write", "report-write"])
 args = parser.parse_args()
@@ -42,7 +43,21 @@ browser.write_text(browser_source.replace(connect,
 subprocess.run([sys.executable, str(project / 'scripts/generate-ios-project.py')], check=True)
 video = (project / 'ios/Tests/Fixtures/player.mp4').read_bytes()
 class Handler(BaseHTTPRequestHandler):
+    offline_blocked = False
     def do_GET(self):
+        path = self.path.split('?')[0]
+        if path in ['/offline-test-block', '/offline-test-unblock']:
+            Handler.offline_blocked = path == '/offline-test-block'
+            self.send_response(200); self.end_headers(); return
+        if path.startswith('/offline-') and Handler.offline_blocked:
+            self.send_error(503); return
+        if path.startswith('/offline-hls/'):
+            fixture = project / 'ios/Tests/Fixtures/hls' / Path(path).name
+            if not fixture.is_file(): self.send_error(404); return
+            data = fixture.read_bytes()
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/vnd.apple.mpegurl' if fixture.suffix == '.m3u8' else 'video/mp2t')
+            self.send_header('Content-Length', str(len(data))); self.end_headers(); self.wfile.write(data); return
         if self.path.split('?')[0] in ['/', '/hd', '/settings']:
             page = b'<html><head><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="background:#101827;color:white"><h1>HomeTV</h1><p>Local player regression fixture</p></body></html>'
             self.send_response(200)
@@ -71,7 +86,7 @@ def sim(*args):
     return subprocess.check_output(['xcrun', 'simctl', *args], text=True).strip()
 try:
     with (work / 'build.log').open('w') as log:
-        subprocess.run(['xcodebuild', '-project', str(project / 'ios/HomeTV.xcodeproj'), '-scheme', 'HomeTV', '-configuration', 'Debug', '-sdk', 'iphonesimulator', '-destination', 'generic/platform=iOS Simulator', '-derivedDataPath', str(work / 'build'), 'CODE_SIGNING_ALLOWED=NO', 'PRODUCT_BUNDLE_IDENTIFIER='+bundle, 'build'], stdout=log, stderr=subprocess.STDOUT, check=True)
+        subprocess.run(['xcodebuild', '-project', str(project / 'ios/HomeTV.xcodeproj'), '-scheme', 'HomeTV', '-configuration', 'Debug', '-sdk', 'iphonesimulator', '-destination', 'generic/platform=iOS Simulator', '-derivedDataPath', str(work / 'build'), 'CODE_SIGNING_ALLOWED=YES', 'CODE_SIGN_IDENTITY=-', 'PRODUCT_BUNDLE_IDENTIFIER='+bundle, 'build'], stdout=log, stderr=subprocess.STDOUT, check=True)
     sim('install', device, str(work / 'build/Build/Products/Debug-iphonesimulator/HomeTV.app'))
     container = Path(sim('get_app_container', device, bundle, 'data')) / 'Documents'
     simulator_home = Path(sim('getenv', device, 'HOME'))
@@ -79,7 +94,7 @@ try:
         # Reinstalls preserve simulator data; never accept a previous run's report.
         for name in ['player-integration.json', 'player-progress.json']:
             (container / name).unlink(missing_ok=True)
-        launch_args = ['--harness-failure=' + fault] if fault else []
+        launch_args = ['--harness-failure=' + fault] if fault else (['--offline-only'] if args.offline_only else [])
         # simctl resolves absolute output paths inside the simulator's data root.
         stderr_path = '/tmp/' + work.name + '/stderr-' + (fault or 'normal') + '.log'
         stdout_path = '/tmp/' + work.name + '/stdout-' + (fault or 'normal') + '.log'

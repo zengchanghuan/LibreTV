@@ -37,6 +37,7 @@ do {
     print("iOS sleep timer: 5 scenarios passed")
     try runPlaybackPositionTests()
     try runNativeNavigationTests()
+    try runOfflineLibraryTests()
 } catch {
     FileHandle.standardError.write(Data("REGRESSION_FAILED: \(error)\n".utf8))
     exit(1)

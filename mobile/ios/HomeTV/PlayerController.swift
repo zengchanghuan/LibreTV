@@ -71,6 +71,7 @@ final class PlayerController: UIViewController, UITableViewDataSource, UITableVi
             let id = self.playbackPosition.beginSeek(to: target)
             return { [weak self] in self?.playbackPosition.finishSeek(id) }
         }
+        controls.downloadButton.addTarget(self, action: #selector(downloadEpisode), for: .touchUpInside)
         controls.backButton.addTarget(self, action: #selector(closePlayer), for: .touchUpInside)
         controls.rotateButton.addTarget(self, action: #selector(rotate), for: .touchUpInside)
         controls.previousButton.addTarget(self, action: #selector(previous), for: .touchUpInside)
@@ -118,6 +119,9 @@ final class PlayerController: UIViewController, UITableViewDataSource, UITableVi
         controls.nextButton.isEnabled = index + 1 < session.episodes.count
         controls.previousButton.alpha = index > 0 ? 1 : 0.35
         controls.nextButton.alpha = index + 1 < session.episodes.count ? 1 : 0.35
+        resolvedURL = nil
+        controls.downloadButton.isHidden = URL(string: session.episodes[index].url)?.isFileURL == true
+        controls.downloadButton.isEnabled = false
         controls.message.text = "正在加载…"; emit("episode")
         let raw = URL(string: session.episodes[index].url)!
         resolveTask = Task { [weak self] in
@@ -140,6 +144,26 @@ final class PlayerController: UIViewController, UITableViewDataSource, UITableVi
                 self.resolvedURL = url; self.attach(url, token: token)
             } catch { if !Task.isCancelled && self.generation == token { self.fail() } }
         }
+    }
+    @objc private func downloadEpisode() {
+        guard let url = engine.assetURL ?? resolvedURL, !url.isFileURL else { return }
+        let title = session.title + (session.episodes.count > 1 ? " 第\(session.index + 1)集" : "")
+        let prompt = UIAlertController(title: "下载到这台手机", message: "\(title)\n下载会占用手机空间并可能使用蜂窝流量。完成后可离线观看，在「设置 → 下载管理」中删除。", preferredStyle: .alert)
+        prompt.addAction(UIAlertAction(title: "取消", style: .cancel))
+        prompt.addAction(UIAlertAction(title: "下载", style: .default) { [weak self, weak prompt] _ in
+            guard let self, let prompt else { return }
+            do {
+                try OfflineDownloads.shared.enqueue(url: url, title: title, origin: self.origin, cookies: self.cookies)
+                let notice = UIAlertController(title: "已加入手机下载", message: "可继续观看，下载进度请在「设置 → 下载管理」查看。", preferredStyle: .alert)
+                notice.addAction(UIAlertAction(title: "好", style: .default))
+                prompt.dismiss(animated: true) { self.present(notice, animated: true) }
+            } catch {
+                let alert = UIAlertController(title: "无法下载", message: error.localizedDescription, preferredStyle: .alert)
+                alert.addAction(UIAlertAction(title: "好", style: .default))
+                prompt.dismiss(animated: true) { self.present(alert, animated: true) }
+            }
+        })
+        present(prompt, animated: true)
     }
     private var restoreAttempt = UUID()
     private func attach(_ url: URL, token: UUID) {
@@ -165,7 +189,7 @@ final class PlayerController: UIViewController, UITableViewDataSource, UITableVi
             // Leave ZFPlayer's failure callback before replacing its current item.
             DispatchQueue.main.async {
                 guard let self, self.generation == token, self.engine.assetURL == url, !self.closed else { return }
-                if !self.proxied, let target = self.resolvedURL, !(sameOrigin(target, self.origin) && target.path == "/api/proxy") {
+                if !self.proxied, let target = self.resolvedURL, !target.isFileURL, !(sameOrigin(target, self.origin) && target.path == "/api/proxy") {
                     self.proxied = true
                     self.playbackPosition.prepareRetry(currentPosition: self.engine.player?.currentTime().seconds ?? self.playbackPosition.savedPosition)
                     var proxy = URLComponents(url: self.origin.appendingPathComponent("api/proxy"), resolvingAgainstBaseURL: false)!
@@ -185,6 +209,7 @@ final class PlayerController: UIViewController, UITableViewDataSource, UITableVi
         }
         engine.rate = session.rate
         player.assetURL = url
+        controls.downloadButton.isEnabled = !url.isFileURL
         controls.showTitle(controls.heading.text ?? session.title, cover: nil, fullScreenMode: .landscape)
     }
     private func fail() { engine.pause(); controls.message.text = "无法播放此源，请重试或返回换源"; controls.failBtn.isHidden = false; emit("error") }

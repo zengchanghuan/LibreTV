@@ -98,6 +98,73 @@ import WebKit
             _ = await until { !web.isLoading && tabs.selectedItem?.tag == 0 }
             scene.requestGeometryUpdate(.iOS(interfaceOrientations: .portrait))
             _ = await until { scene.interfaceOrientation == .portrait }; await wait(0.5)
+            if fault == nil {
+                let downloads = OfflineDownloads.shared
+                for item in downloads.videos { try downloads.delete(item.id) }
+                let mp4 = origin.appendingPathComponent("offline-fixture.mp4")
+                let downloadID = try downloads.enqueue(url: mp4, title: "离线测试 · 合成短片", origin: origin, cookies: [])
+                let duplicateID = try downloads.enqueue(url: mp4, title: "离线测试", origin: origin, cookies: [])
+                check("download-deduplicates-repeated-taps", downloadID == duplicateID)
+                for _ in 0..<600 {
+                    if [.completed, .failed].contains(downloads.library?.video(downloadID)?.state) { break }; await wait(0.1)
+                }
+                let downloaded = try testRequire(downloads.library?.video(downloadID), "Missing MP4 download")
+                results["mp4-download-error"] = downloaded.error ?? ""
+                check("mp4-download-saves-playable-local-file", downloaded.state == .completed && downloads.library?.playableURL(downloadID)?.isFileURL == true && downloaded.bytes > 0)
+                let hlsURL = origin.appendingPathComponent("offline-hls/index.m3u8")
+                let hlsID = try downloads.enqueue(url: hlsURL, title: "离线测试 · HLS 短片", origin: origin, cookies: [])
+                for _ in 0..<600 {
+                    if [.completed, .failed].contains(downloads.library?.video(hlsID)?.state) { break }; await wait(0.1)
+                }
+                results["hls-download-error"] = downloads.library?.video(hlsID)?.error ?? ""
+                check("hls-download-saves-offline-package", downloads.library?.video(hlsID)?.state == .completed && downloads.library?.playableURL(hlsID)?.pathExtension == "movpkg")
+                let restoredLibrary = try OfflineLibrary()
+                check("download-library-survives-reload", restoredLibrary.playableURL(downloadID) != nil && restoredLibrary.playableURL(hlsID) != nil)
+                _ = try await URLSession.shared.data(from: origin.appendingPathComponent("offline-test-block"))
+                // Exercise the real document-start bridge and the same Settings action.
+                _ = try await web.evaluateJavaScript("window.dispatchEvent(new Event('libretv:show-download-manager'))")
+                _ = await until { host.presentedViewController is UINavigationController }
+                let nav = try testRequire(host.presentedViewController as? UINavigationController, "Native download manager must open from Settings event")
+                let list = try testRequire(nav.topViewController as? OfflineDownloadsController, "Offline list")
+                _ = await until { list.viewIfLoaded?.window != nil }
+                check("settings-download-event-opens-native-library", list.title == "我的下载")
+                await wait(0.5); snapshot("offline-downloads-portrait")
+                for id in [downloadID, hlsID] where downloads.library?.playableURL(id) != nil {
+                    list.play(id)
+                    _ = await until { list.presentedViewController is PlayerController }
+                    let offline = try testRequire(list.presentedViewController as? PlayerController, "Offline player")
+                    let oc = try testRequire(Mirror(reflecting: offline).children.first { $0.label == "controls" }?.value as? HomeTVPlayerControls, "Offline controls")
+                    let oe = try testRequire(oc.player?.currentPlayerManager as? ZFAVPlayerManager, "Offline engine")
+                    let playing = await until { oe.isPlaying && oe.currentTime > 0.5 }
+                    check(id == downloadID ? "mp4-plays-with-source-offline" : "hls-plays-with-source-offline", playing && oe.assetURL?.isFileURL == true && oc.downloadButton.isHidden)
+                    offline.closePlayer(); _ = await until { list.presentedViewController == nil }
+                }
+                check("offline-playback-persists-resume", (downloads.library?.video(downloadID)?.position ?? 0) > 0)
+                nav.dismiss(animated: false); _ = await until { host.presentedViewController == nil }
+                let localFile = try testRequire(downloads.library?.playableURL(downloadID), "Downloaded MP4 path")
+                let localHLS = try testRequire(downloads.library?.playableURL(hlsID), "Downloaded HLS path")
+                try downloads.delete(downloadID); try downloads.delete(hlsID)
+                check("delete-download-removes-file-and-record", !FileManager.default.fileExists(atPath: localFile.path) && !FileManager.default.fileExists(atPath: localHLS.path) && downloads.videos.isEmpty)
+                _ = try await URLSession.shared.data(from: origin.appendingPathComponent("offline-test-unblock"))
+                let cancelID = try downloads.enqueue(url: mp4, title: "取消测试", origin: origin, cookies: [])
+                try downloads.delete(cancelID); await wait(0.5)
+                check("cancelled-download-does-not-reappear", downloads.library?.video(cancelID) == nil)
+                let badID = try downloads.enqueue(url: origin.appendingPathComponent("fail.mp4"), title: "失败测试", origin: origin, cookies: [])
+                _ = await until { downloads.library?.video(badID)?.state == .failed }
+                check("download-http-error-is-not-completed", downloads.library?.video(badID)?.state == .failed && downloads.library?.playableURL(badID) == nil)
+                try downloads.delete(badID)
+                browser.webView(web, didFailProvisionalNavigation: nil, withError: URLError(.notConnectedToInternet))
+                let offlineButton = try testRequire(descendants(host.view).compactMap { $0 as? UIButton }.first { $0.accessibilityIdentifier == "offline.open" }, "Offline entry button")
+                check("network-error-keeps-offline-entry", !offlineButton.isHidden)
+                offlineButton.sendActions(for: .touchUpInside)
+                _ = await until { host.presentedViewController is UINavigationController }
+                check("offline-entry-opens-without-web-page", (host.presentedViewController as? UINavigationController)?.topViewController is OfflineDownloadsController)
+                host.dismiss(animated: false); _ = await until { host.presentedViewController == nil }
+                web.reload(); _ = await until { !web.isLoading }
+            }
+            if CommandLine.arguments.contains("--offline-only") {
+                try writeReport("player-integration.json"); fflush(stdout); return
+            }
             var now = Date(timeIntervalSince1970: 1000)
             let timer = SleepTimer(now: { now })
             let controller = PlayerController(session: session(), origin: origin, cookies: [], sleepTimer: timer)
@@ -115,13 +182,18 @@ import WebKit
             check("restores-playback-rate", abs((engine.player?.rate ?? -1) - 1.5) < 0.01)
             controls.playButton.sendActions(for: .touchUpInside)
             check("pause-button", !engine.isPlaying && events.last?["reason"] as? String == "pause")
+            controls.downloadButton.sendActions(for: .touchUpInside)
+            _ = await until { controller.presentedViewController is UIAlertController }
+            let downloadPrompt = try testRequire(controller.presentedViewController as? UIAlertController, "Download confirmation")
+            check("player-download-button-selects-current-episode", controls.downloadButton.isEnabled && downloadPrompt.title == "下载到这台手机" && downloadPrompt.message?.contains("第1集") == true)
+            downloadPrompt.dismiss(animated: false); _ = await until { controller.presentedViewController == nil }
             // Put a long title on-screen and exercise the actual rotation button.
             scene.requestGeometryUpdate(.iOS(interfaceOrientations: .portrait)); await wait(1)
             if !controls.controlViewAppeared { controls.gestureSingleTapped(controlsPlayer.gestureControl) }
             await wait()
             func layoutIsSafe() -> Bool {
                 let safe = controller.view.safeAreaLayoutGuide.layoutFrame
-                let buttons = [controls.backButton, controls.rotateButton, controls.previousButton, controls.playButton, controls.nextButton, controls.episodesButton, controls.speedButton, controls.sleepButton]
+                let buttons = [controls.backButton, controls.downloadButton, controls.rotateButton, controls.previousButton, controls.playButton, controls.nextButton, controls.episodesButton, controls.speedButton, controls.sleepButton]
                 return buttons.allSatisfy { button in
                     let frame = button.convert(button.bounds, to: controller.view)
                     return frame.width >= 44 && frame.height >= 44 && safe.contains(frame)

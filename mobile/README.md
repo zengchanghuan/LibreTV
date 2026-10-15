@@ -13,11 +13,11 @@ iOS 与 Android 的 App 显示名称为 HomeTV。iOS 工程目录、构建 schem
 - 服务 Cookie 仅用于本站请求，第三方媒体直连失败后可经已有受鉴权代理重试。外部页面不能调用原生桥接。
 - 可返回业务页选择其他源或手动使用网页播放器。网页测速逻辑保留，原生首帧/缓冲统计尚未接入源评分。
 
-首版在后台、锁屏或失去前台时暂停播放；返回后核对定时期限。未启用后台音频、画中画、离线下载或 JavaScript HLS 广告过滤。定时停止不退出 App、不自动锁屏。直播页面仍使用网页播放器。
+首版在后台、锁屏或失去前台时暂停播放；返回后核对定时期限。未启用后台音频、画中画或 JavaScript HLS 广告过滤。iOS 手机离线下载见下节。定时停止不退出 App、不自动锁屏。直播页面仍使用网页播放器。
 
 App 依赖带本轮桥接的服务端页面。家庭构建固定连接 `https://tv.fixepub.com`，首次打开无需填写地址。登录后可直接观看，无需选择成员；当前默认使用本机记录，需要跨设备同步或区分家人时再通过头像选择成员。访问会话会记忆，过期或退出后才需重新登录。所有签名证书、密码、设备 ID 均不写入代码。
 
-底部导航依次为「首页」「直播」「设置」，不再常驻刷新入口；连接失败时提供「重试」。App 首页顶部仅保留「历史」，直播统一从底部第二个 Tab 进入。视频源管理、家庭同步、下载管理、外观和关于集中在底部设置页。家庭版固定使用默认服务，不再显示更换服务器入口。原生播放器的上一集、播放/暂停、下一集按钮紧凑靠左排列，iOS 的选集、倍速及定时保留在同一行右侧。
+底部导航依次为「首页」「直播」「高清」「设置」，不再常驻刷新入口；连接失败时提供「重试」。App 首页顶部仅保留「历史」，直播统一从底部第二个 Tab 进入。视频源管理、家庭同步、下载管理、外观和关于集中在底部设置页。家庭版固定使用默认服务，不再显示更换服务器入口。原生播放器的上一集、播放/暂停、下一集按钮紧凑靠左排列，iOS 的选集、倍速及定时保留在同一行右侧。
 
 iOS Tab 高亮由同源页面路由驱动，包含 Next.js 的内部跳转、替换地址及浏览器前进/后退；直播及子路径归入直播，设置和关于归入设置，其余页面归入首页。导航通知脚本随安装包注入，无需服务端配合更新。回归测试运行实际注入脚本，并验证原生路由归属及外部来源隔离。
 
@@ -38,6 +38,7 @@ xcodebuild -project mobile/ios/HomeTV.xcodeproj -scheme HomeTV \
 xcrun swiftc -module-cache-path /tmp/libretv-swift-cache \
   mobile/ios/HomeTV/SleepTimer.swift mobile/ios/HomeTV/PlaybackPosition.swift \
   mobile/ios/HomeTV/PlaybackSession.swift mobile/ios/HomeTV/NativeNavigation.swift \
+  mobile/ios/HomeTV/OfflineLibrary.swift mobile/ios/Tests/OfflineLibraryTests.swift \
   mobile/ios/Tests/PlaybackPositionTests.swift mobile/ios/Tests/NativeNavigationTests.swift \
   mobile/ios/Tests/RegressionSupport.swift \
   mobile/ios/Tests/main.swift -o /tmp/libretv-sleep-tests
@@ -161,3 +162,16 @@ python3 mobile/scripts/run-native-tests.py
 失败报告故障注入和完整播放器模拟器回归，并保存测试报告及构建日志。
 最终报告写入失败会通过独立 stderr 通道立即报错；进度报告写入失败也会计入失败，
 不会被最后的成功检查覆盖。
+
+
+### iOS 手机下载与离线观看
+
+- 原生播放器右上角「下载本集到手机」将当前集保存到这台 iPhone；网页播放页的下载按钮也转交原生下载。HLS 使用 AVAssetDownloadURLSession，MP4 使用后台 URLSession 文件下载，不在内存拼装整部影片。
+- 「设置 → 下载管理」打开原生「我的下载」，显示进度、占用和失败原因。成功保存并验证可播放后才显示已完成；点已完成影片直接用 ZFPlayer 播放本地文件并保留本机续播位置。
+- 无网络或服务器无法连接时，连接提示下仍有「我的下载 · 离线观看」入口；无需先加载网页、登录或访问服务器。
+- 左滑条目，确认「删除文件」后删除手机视频及记录并释放空间；下载中条目可取消并删除。看完仅标记「已看完」，不会自动删除。下载不上传到云服务器或家庭同步；卸载 App 会清除本机下载。
+- 下载可能使用蜂窝流量。后台下载由 iOS 调度；强制退出会中断任务，重新启动后恢复系统仍持有的任务，失去任务的下载显示失败。被片源限制、过期或不支持离线缓存的资源会报错，不能承诺所有来源都可下载。仅支持可直接访问的 HLS / MP4，不处理 BT、网盘或 DRM 授权。
+- HLS 文件保留在系统提供的媒体包位置；MP4 与下载索引保存在 App 私有 Application Support 中，排除 iCloud 备份。持久化相对路径适配更新安装后的容器移动；只删除本 App 内已登记的视频文件。
+- 回归使用仓库内合成 MP4/HLS 短片，验证真实下载、关闭来源后本地播放、续播、文件删除、重复点击、错误响应和取消后不复活。模拟器测试 App 必须使用本地 ad-hoc 签名，否则系统后台下载服务会拒绝无身份的客户端；不需要开发团队证书。
+
+本轮验证：53 个原生逻辑场景、103 个模拟器集成检查通过；HLS/MP4 均验证来源关闭后仍可本地播放，删除同时清除媒体包/文件和记录。真机 Release 构建与签名验证通过，已覆盖安装并启动 iPhone’VIP。手机实际片源下载仍需验收；没有替用户下载整部影片。

@@ -8,6 +8,7 @@ root = Path(__file__).resolve().parents[2]
 ios = root / "mobile/ios"
 sources = [
     "HomeTV/SleepTimer.swift", "HomeTV/PlaybackPosition.swift",
+    "HomeTV/OfflineLibrary.swift", "Tests/OfflineLibraryTests.swift",
     "HomeTV/PlaybackSession.swift", "HomeTV/NativeNavigation.swift",
     "Tests/PlaybackPositionTests.swift", "Tests/NativeNavigationTests.swift",
     "Tests/RegressionSupport.swift", "Tests/main.swift",

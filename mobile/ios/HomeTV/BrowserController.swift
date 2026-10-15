@@ -9,6 +9,7 @@ final class BrowserController: UIViewController, WKScriptMessageHandler, WKNavig
     private let tabBar = UITabBar()
     private var tabBarHeight: NSLayoutConstraint!
     private let connectionStatus = UIStackView()
+    private let offlineButton = UIButton(type: .system)
     private let retry = UIButton(type: .system)
     private var pending: [String: [String: Any]] = [:]
     private var storageKey: String { "native.pending." + (origin?.absoluteString ?? "") }
@@ -21,6 +22,8 @@ final class BrowserController: UIViewController, WKScriptMessageHandler, WKNavig
         config.userContentController.add(self, name: "libretvNative")
         let bridge = """
         window.__LIBRETV_NATIVE__={version:1,platform:'ios',postMessage:m=>window.webkit.messageHandlers.libretvNative.postMessage(m)};
+        window.addEventListener('libretv:show-download-manager',e=>{e.stopImmediatePropagation();window.__LIBRETV_NATIVE__.postMessage({type:'downloads'});});
+        window.addEventListener('libretv:add-download',e=>{e.stopImmediatePropagation();window.__LIBRETV_NATIVE__.postMessage({type:'download',url:e.detail?.url,title:e.detail?.title});});
         window.dispatchEvent(new Event('libretv:native-ready'));
         """
         config.userContentController.addUserScript(WKUserScript(source: bridge + "\n" + NativeNavigation.script, injectionTime: .atDocumentStart, forMainFrameOnly: true))
@@ -36,8 +39,13 @@ final class BrowserController: UIViewController, WKScriptMessageHandler, WKNavig
         retry.setTitle("重试", for: .normal); retry.isHidden = true
         retry.heightAnchor.constraint(greaterThanOrEqualToConstant: 44).isActive = true
         retry.addTarget(self, action: #selector(reload), for: .touchUpInside)
+        offlineButton.setTitle("我的下载 · 离线观看", for: .normal)
+        offlineButton.accessibilityIdentifier = "offline.open"
+        offlineButton.heightAnchor.constraint(greaterThanOrEqualToConstant: 44).isActive = true
+        offlineButton.addTarget(self, action: #selector(showDownloads), for: .touchUpInside)
+        OfflineDownloads.shared.restore()
         connectionStatus.axis = .vertical; connectionStatus.spacing = 12
-        connectionStatus.addArrangedSubview(status); connectionStatus.addArrangedSubview(retry)
+        connectionStatus.addArrangedSubview(status); connectionStatus.addArrangedSubview(retry); connectionStatus.addArrangedSubview(offlineButton)
         for sub in [web!, connectionStatus, bottomBackground, tabBar] { sub.translatesAutoresizingMaskIntoConstraints = false; view.addSubview(sub) }
         tabBarHeight = tabBar.heightAnchor.constraint(equalToConstant: 83)
         NSLayoutConstraint.activate([
@@ -63,7 +71,7 @@ final class BrowserController: UIViewController, WKScriptMessageHandler, WKNavig
     private func connect(_ url: URL) {
         origin = url; UserDefaults.standard.set(url.absoluteString, forKey: "serviceURL")
         pending = UserDefaults.standard.data(forKey: storageKey).flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: [String: Any]] } ?? [:]
-        showHome(); retry.isHidden = true
+        showHome(); retry.isHidden = true; offlineButton.isHidden = false
         status.text = "正在连接…"; web.load(URLRequest(url: url))
     }
     private func showHome() {
@@ -71,8 +79,23 @@ final class BrowserController: UIViewController, WKScriptMessageHandler, WKNavig
     }
     func tabBar(_ tabBar: UITabBar, didSelect item: UITabBarItem) {
         guard let origin, let url = NativeNavigation.url(forTab: item.tag, origin: origin, currentURL: web.url, retrying: !retry.isHidden) else { return }
-        retry.isHidden = true; status.text = "正在连接…"
+        retry.isHidden = true; offlineButton.isHidden = false; status.text = "正在连接…"
         web.load(URLRequest(url: url))
+    }
+    @objc private func showDownloads() {
+        guard presentedViewController == nil else { return }
+        present(UINavigationController(rootViewController: OfflineDownloadsController()), animated: true)
+    }
+    private func download(url: URL, title: String) {
+        guard let origin else { return }
+        web.configuration.websiteDataStore.httpCookieStore.getAllCookies { [weak self] cookies in
+            guard let self, self.origin == origin else { return }
+            do { try OfflineDownloads.shared.enqueue(url: url, title: title, origin: origin, cookies: cookies); self.showDownloads() }
+            catch {
+                let alert = UIAlertController(title: "无法下载", message: error.localizedDescription, preferredStyle: .alert)
+                alert.addAction(UIAlertAction(title: "好", style: .default)); self.present(alert, animated: true)
+            }
+        }
     }
     @objc private func reload() {
         if let origin { connect(origin) }
@@ -84,7 +107,7 @@ final class BrowserController: UIViewController, WKScriptMessageHandler, WKNavig
         decisionHandler(.cancel)
     }
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-        status.text = ""; retry.isHidden = true
+        status.text = ""; retry.isHidden = true; offlineButton.isHidden = true
         if let url = web.url { updateSelectedTab(url) }
         flush()
     }
@@ -99,13 +122,15 @@ final class BrowserController: UIViewController, WKScriptMessageHandler, WKNavig
         let detail = "\(failure.domain) (\(failure.code)): \(failure.localizedDescription)"
         UserDefaults.standard.set(detail, forKey: "lastConnectionError")
         status.text = "连接失败：\(failure.localizedDescription)\n错误码 \(failure.code)"
-        retry.isHidden = false
+        retry.isHidden = false; offlineButton.isHidden = false
     }
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) { connectionFailed(error) }
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) { connectionFailed(error) }
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
         guard message.frameInfo.isMainFrame, let origin, let frame = message.frameInfo.request.url, sameOrigin(frame, origin),
               let body = message.body as? [String: Any], let type = body["type"] as? String else { return }
+        if type == "downloads" { showDownloads(); return }
+        if type == "download", let text = body["url"] as? String, let url = URL(string: text, relativeTo: origin)?.absoluteURL, let title = body["title"] as? String { download(url: url, title: title); return }
         if type == "ready" { flush(); return }
         if type == "navigation", let raw = body["url"] as? String, let url = URL(string: raw) {
             updateSelectedTab(url); return
