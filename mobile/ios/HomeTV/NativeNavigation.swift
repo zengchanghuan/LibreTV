@@ -27,18 +27,21 @@ enum NativeNavigation {
         guard sameOrigin(url, origin) else { return nil }
         let path = url.path
         if path == "/live" || path.hasPrefix("/live/") { return 1 }
-        return path == "/settings" || path.hasPrefix("/settings/") || path == "/about" || path == "/about/" ? 2 : 0
+        if path == "/hd" || path.hasPrefix("/hd/") { return 2 }
+        if path == "/watch", URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.contains(where: { $0.name == "section" && $0.value == "hd" }) == true { return 2 }
+        return path == "/settings" || path.hasPrefix("/settings/") || path == "/about" || path == "/about/" ? 3 : 0
     }
 
     static func url(forTab index: Int, origin: URL, currentURL: URL? = nil, retrying: Bool = false) -> URL? {
         // A live page owns playback and search state. Reselecting its tab must
         // not replace the document; a failed navigation still needs a retry.
-        if index == 1, !retrying, let currentURL,
-           tabIndex(for: currentURL, origin: origin) == 1 { return nil }
+        if [1, 2].contains(index), !retrying, let currentURL, currentURL.path != "/watch",
+           tabIndex(for: currentURL, origin: origin) == index { return nil }
         switch index {
         case 0: return origin
         case 1: return origin.appendingPathComponent("live")
-        case 2: return origin.appendingPathComponent("settings")
+        case 2: return origin.appendingPathComponent("hd")
+        case 3: return origin.appendingPathComponent("settings")
         default: return nil
         }
     }

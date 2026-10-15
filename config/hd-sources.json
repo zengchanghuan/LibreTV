@@ -1,0 +1,17 @@
+[
+  {
+    "name": "新浪资源",
+    "url": "https://api.xinlangapi.com/xinlangapi.php/provide/vod",
+    "group": "hd"
+  },
+  {
+    "name": "虎牙资源",
+    "url": "https://www.huyaapi.com/api.php/provide/vod",
+    "group": "hd"
+  },
+  {
+    "name": "U酷资源",
+    "url": "https://api.ukuapi88.com/api.php/provide/vod",
+    "group": "hd"
+  }
+]

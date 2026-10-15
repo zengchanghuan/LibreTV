@@ -27,7 +27,7 @@ final class BrowserController: UIViewController, WKScriptMessageHandler, WKNavig
         web = WKWebView(frame: .zero, configuration: config); web.navigationDelegate = self
         web.isOpaque = false; web.backgroundColor = .black
         tabBar.delegate = self
-        tabBar.items = [UITabBarItem(title: "首页", image: UIImage(systemName: "house"), tag: 0), UITabBarItem(title: "直播", image: UIImage(systemName: "play.tv"), tag: 1), UITabBarItem(title: "设置", image: UIImage(systemName: "gearshape"), tag: 2)]
+        tabBar.items = [UITabBarItem(title: "首页", image: UIImage(systemName: "house"), tag: 0), UITabBarItem(title: "直播", image: UIImage(systemName: "play.tv"), tag: 1), UITabBarItem(title: "高清", image: UIImage(systemName: "4k.tv"), tag: 2), UITabBarItem(title: "设置", image: UIImage(systemName: "gearshape"), tag: 3)]
         tabBar.selectedItem = tabBar.items?.first
         let appearance = UITabBarAppearance(); appearance.configureWithOpaqueBackground()
         tabBar.standardAppearance = appearance; tabBar.scrollEdgeAppearance = appearance

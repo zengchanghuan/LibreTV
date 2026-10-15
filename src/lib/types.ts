@@ -8,6 +8,8 @@ export interface SourceConfig {
   /** 可选：详情页根地址（部分源需要爬详情页提取 m3u8） */
   detail?: string;
   isAdult?: boolean;
+  /** 经部署者抽样验证的高清专区来源，不代表所有影片均为 4K。 */
+  group?: 'hd';
 }
 
 export interface SearchResultItem {

@@ -94,6 +94,7 @@ export function hostnameOf(url: string): string {
 
 /** 为分享链接等场景构造观看页 URL */
 export function buildWatchUrl(params: {
+  section?: 'hd';
   sourceKey: string;
   vodId?: string;
   index?: number;
@@ -104,6 +105,7 @@ export function buildWatchUrl(params: {
 }): string {
   const sp = new URLSearchParams();
   sp.set('source', params.sourceKey);
+  if (params.section === 'hd') sp.set('section', 'hd');
   if (params.vodId) sp.set('id', params.vodId);
   if (typeof params.index === 'number') sp.set('index', String(params.index));
   if (params.title) sp.set('title', params.title);

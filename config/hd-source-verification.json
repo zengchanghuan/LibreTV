@@ -1,0 +1,205 @@
+{
+  "testedAt": "2026-10-15",
+  "method": "Server ffprobe stream inspection and 3 seconds of ffmpeg video/audio decode; sample-level verification only",
+  "samples": [
+    {
+      "source": "新浪",
+      "api": "https://api.xinlangapi.com/xinlangapi.php/provide/vod/",
+      "id": 43851,
+      "title": "流浪地球",
+      "streams": [
+        {
+          "codec_name": "h264",
+          "codec_type": "video",
+          "width": 1920,
+          "height": 752
+        },
+        {
+          "codec_name": "aac",
+          "codec_type": "audio"
+        }
+      ],
+      "decoded": true
+    },
+    {
+      "source": "新浪",
+      "api": "https://api.xinlangapi.com/xinlangapi.php/provide/vod/",
+      "id": 92354,
+      "title": "流浪地球2",
+      "streams": [
+        {
+          "codec_name": "h264",
+          "codec_type": "video",
+          "width": 1920,
+          "height": 804
+        },
+        {
+          "codec_name": "aac",
+          "codec_type": "audio"
+        }
+      ],
+      "decoded": true
+    },
+    {
+      "source": "U酷",
+      "api": "https://api.ukuapi88.com/api.php/provide/vod/",
+      "id": 46778,
+      "title": "流浪地球2",
+      "streams": [
+        {
+          "codec_name": "h264",
+          "codec_type": "video",
+          "width": 1280,
+          "height": 534
+        },
+        {
+          "codec_name": "aac",
+          "codec_type": "audio"
+        }
+      ],
+      "decoded": true
+    },
+    {
+      "source": "U酷",
+      "api": "https://api.ukuapi88.com/api.php/provide/vod/",
+      "id": 46777,
+      "title": "流浪地球",
+      "streams": [
+        {
+          "codec_name": "h264",
+          "codec_type": "video",
+          "width": 1280,
+          "height": 502
+        },
+        {
+          "codec_name": "aac",
+          "codec_type": "audio"
+        }
+      ],
+      "decoded": true
+    },
+    {
+      "source": "U酷",
+      "api": "https://api.ukuapi88.com/api.php/provide/vod/",
+      "id": 20425,
+      "title": "流浪地球",
+      "streams": [
+        {
+          "codec_name": "h264",
+          "codec_type": "video",
+          "width": 1920,
+          "height": 752
+        },
+        {
+          "codec_name": "aac",
+          "codec_type": "audio"
+        }
+      ],
+      "decoded": true
+    },
+    {
+      "source": "4K影视",
+      "api": "https://www.4kvm.tv",
+      "id": "ch2mo68f3",
+      "title": "流浪地球",
+      "streams": [
+        {
+          "codec_name": "png",
+          "codec_type": "video",
+          "width": 0,
+          "height": 0
+        }
+      ]
+    },
+    {
+      "source": "4K影视",
+      "api": "https://www.4kvm.tv",
+      "id": "ch0nvstnc",
+      "title": "流浪地球2",
+      "streams": [
+        {
+          "codec_name": "png",
+          "codec_type": "video",
+          "width": 0,
+          "height": 0
+        }
+      ]
+    },
+    {
+      "source": "白嫖者",
+      "api": "https://baipiaozhe.ai",
+      "id": "av_-N_pEyP2Me7xzWxAlDMX1nDbTUdzO1rT9pdE2PvnLqVpj51SllOVeb5XcI-R1JzGpaXLLKuSJ22hg7U",
+      "title": "流浪地球",
+      "streams": [
+        {
+          "codec_name": "h264",
+          "codec_type": "video",
+          "width": 1920,
+          "height": 756
+        },
+        {
+          "codec_name": "aac",
+          "codec_type": "audio"
+        }
+      ],
+      "decoded": true
+    },
+    {
+      "source": "白嫖者",
+      "api": "https://baipiaozhe.ai",
+      "id": "av_K6yedAAPc5YENpqxs8wmFtrAM1o5ykDC3xz1TM2GJWpra3bDZqDveL_IoKxCI70ic85WimiE-mXnZZE",
+      "title": "流浪地球2",
+      "streams": [
+        {
+          "codec_name": "h264",
+          "codec_type": "video",
+          "width": 1280,
+          "height": 538
+        },
+        {
+          "codec_name": "aac",
+          "codec_type": "audio"
+        }
+      ],
+      "decoded": true
+    },
+    {
+      "source": "虎牙",
+      "api": "https://www.huyaapi.com/api.php/provide/vod/",
+      "id": "10661",
+      "title": "流浪地球",
+      "streams": [
+        {
+          "codec_name": "h264",
+          "codec_type": "video",
+          "width": 1280,
+          "height": 506
+        },
+        {
+          "codec_name": "aac",
+          "codec_type": "audio"
+        }
+      ],
+      "decoded": true
+    },
+    {
+      "source": "虎牙",
+      "api": "https://www.huyaapi.com/api.php/provide/vod/",
+      "id": "6098",
+      "title": "流浪地球2",
+      "streams": [
+        {
+          "codec_name": "h264",
+          "codec_type": "video",
+          "width": 1920,
+          "height": 804
+        },
+        {
+          "codec_name": "aac",
+          "codec_type": "audio"
+        }
+      ],
+      "decoded": true
+    }
+  ]
+}

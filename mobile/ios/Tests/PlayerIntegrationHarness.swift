@@ -1,5 +1,6 @@
 import UIKit
 import AVFoundation
+import WebKit
 
 /// Copied into an isolated app by run-player-integration.py, never into HomeTV.
 @MainActor func runPlayerIntegration(window: UIWindow, scene: UIWindowScene) {
@@ -71,6 +72,32 @@ import AVFoundation
             }
             scene.requestGeometryUpdate(.iOS(interfaceOrientations: .portrait))
             _ = await until { scene.interfaceOrientation == .portrait && host.view.bounds.height > host.view.bounds.width }
+            let browser = try testRequire(host as? BrowserController, "Missing browser host")
+            let tabs = try testRequire(descendants(host.view).compactMap { $0 as? UITabBar }.first, "Missing native tabs")
+            let web = try testRequire(descendants(host.view).compactMap { $0 as? WKWebView }.first, "Missing browser web view")
+            let tabItems = try testRequire(tabs.items, "Missing tab items")
+            try testCheck(tabItems.count == 4, "Expected home, live, HD and settings tabs")
+            check("four-tabs-have-labels-and-icons", tabItems.map(\.title) == ["首页", "直播", "高清", "设置"] && tabItems.allSatisfy { $0.image != nil })
+            _ = await until { !web.isLoading }
+            browser.tabBar(tabs, didSelect: tabItems[2])
+            let hdLoaded = await until { !web.isLoading && web.url?.path == "/hd" && tabs.selectedItem?.tag == 2 }
+            check("hd-tab-navigates-and-highlights", hdLoaded)
+            let historyCount = web.backForwardList.backList.count
+            browser.tabBar(tabs, didSelect: tabItems[2]); await wait()
+            check("repeated-hd-tab-preserves-document", !web.isLoading && web.backForwardList.backList.count == historyCount && web.url?.path == "/hd")
+            snapshot("hd-tabs-portrait")
+            check("four-tabs-portrait-layout", tabs.bounds.height >= 49 + host.view.safeAreaInsets.bottom && web.frame.maxY <= tabs.frame.minY + 1)
+            scene.requestGeometryUpdate(.iOS(interfaceOrientations: .landscapeRight))
+            _ = await until { scene.interfaceOrientation == .landscapeRight }; await wait(0.5)
+            snapshot("hd-tabs-landscape")
+            check("four-tabs-landscape-layout", tabs.bounds.height >= 49 + host.view.safeAreaInsets.bottom && web.frame.maxY <= tabs.frame.minY + 1)
+            browser.tabBar(tabs, didSelect: tabItems[3])
+            let settingsLoaded = await until { !web.isLoading && web.url?.path == "/settings" && tabs.selectedItem?.tag == 3 }
+            check("settings-after-hd-highlights-fourth-tab", settingsLoaded)
+            browser.tabBar(tabs, didSelect: tabItems[0])
+            _ = await until { !web.isLoading && tabs.selectedItem?.tag == 0 }
+            scene.requestGeometryUpdate(.iOS(interfaceOrientations: .portrait))
+            _ = await until { scene.interfaceOrientation == .portrait }; await wait(0.5)
             var now = Date(timeIntervalSince1970: 1000)
             let timer = SleepTimer(now: { now })
             let controller = PlayerController(session: session(), origin: origin, cookies: [], sleepTimer: timer)

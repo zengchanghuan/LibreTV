@@ -102,6 +102,7 @@ export function Header({ showSearch = false }: { showSearch?: boolean }) {
 
           <nav className="flex items-center gap-1 ml-auto">
             {!native && <><span className="hidden sm:contents"><InstallButton /></span><FamilyButton /></>}
+            {!native && <HeaderLink href="/hd" active={pathname === '/hd'}>高清</HeaderLink>}
             {!native && <HeaderLink href="/live" active={pathname === '/live'}>
               直播
             </HeaderLink>}

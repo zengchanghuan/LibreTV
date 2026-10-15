@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { api } from '@/lib/client-api';
 import type { SearchResultItem, VideoDetail } from '@/lib/types';
 import { buildWatchUrl } from '@/lib/utils';
@@ -23,6 +23,7 @@ import { Icon } from './icon';
 export function DetailModal({ item, onClose }: { item: SearchResultItem | null; onClose: () => void }) {
   const store = useAppStore();
   const router = useRouter();
+  const pathname = usePathname();
   const { toast } = useToast();
   const [detail, setDetail] = useState<VideoDetail | null>(null);
   const [loading, setLoading] = useState(false);
@@ -97,6 +98,7 @@ export function DetailModal({ item, onClose }: { item: SearchResultItem | null; 
     addSearchHistory(item.name).catch(() => {});
     router.push(
       buildWatchUrl({
+        section: pathname === '/hd' ? 'hd' : undefined,
         sourceKey: item.sourceKey,
         vodId: item.vodId,
         index,

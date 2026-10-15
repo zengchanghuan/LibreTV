@@ -1,7 +1,7 @@
 'use client';
 
 import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { Header } from '@/components/header';
 import { RecommendSection } from '@/components/douban-section';
@@ -15,6 +15,7 @@ import { cn, formatDisableTtl, validateSourceUrl } from '@/lib/utils';
 import { useToast } from '@/components/toast';
 import { EmptyState } from '@/components/states';
 import { Icon } from '@/components/icon';
+import { sourcesForSection, searchPageUrl } from '@/lib/hd-sources';
 import { SiteFooter } from '@/components/site-footer';
 
 /**
@@ -34,6 +35,7 @@ export default function HomePage() {
 
 function HomeContent() {
   const searchParams = useSearchParams();
+  const section = usePathname() === '/hd' ? 'hd' : 'all';
   const router = useRouter();
   const { toast } = useToast();
   const urlQuery = searchParams.get('s') || '';
@@ -53,7 +55,7 @@ function HomeContent() {
 
   // URL 驱动搜索：?s= 变化时回填输入框
   useEffect(() => {
-    if (urlQuery) setInput(urlQuery);
+    setInput(urlQuery);
   }, [urlQuery]);
 
   // 源名回显：失败/停用提示里显示友好名称而非裸 key
@@ -65,7 +67,7 @@ function HomeContent() {
   const selectedSources = useMemo(() => {
     // selectedKeys 可能含历史残留的重复 key：按 key 去重，避免同源重复搜索
     const seen = new Set<string>();
-    return selectedKeys
+    return sourcesForSection(selectedKeys
       .map((key) => resolveSource({ customAPIs, envSources }, key))
       .filter((s): s is NonNullable<typeof s> => {
         if (!s || !validateSourceUrl(s.url) || seen.has(s.key)) return false;
@@ -75,8 +77,8 @@ function HomeContent() {
       // 自动停用期内的源不参与搜索（到期自动恢复）
       .filter((s) => !isSourceDisabled({ sourceHealth }, s.key))
       // 所属订阅被整体停用的源同样跳过（无损：各源勾选状态保留，重新启用即恢复）
-      .filter((s) => !isInDisabledSubscription({ subscriptions }, s.key));
-  }, [customAPIs, envSources, selectedKeys, sourceHealth, subscriptions]);
+      .filter((s) => !isInDisabledSubscription({ subscriptions }, s.key)), section);
+  }, [customAPIs, envSources, selectedKeys, sourceHealth, subscriptions, section]);
   const disabledSources = useMemo(
     () => selectedKeys.filter((key) => isSourceDisabled({ sourceHealth }, key)),
     [selectedKeys, sourceHealth]
@@ -91,7 +93,7 @@ function HomeContent() {
   );
 
   const searchQuery = useQuery({
-    queryKey: ['search', urlQuery, selectedKeys, yellowFilter],
+    queryKey: ['search', section, urlQuery, selectedSources.map(s => [s.key, s.url]), yellowFilter],
     // 与 runSearch 的截断规则保持一致：顶栏搜索 / 手动构造长链接不会绕过上限
     queryFn: ({ signal }) => {
       setStreamedOutcomes([]);
@@ -130,7 +132,7 @@ function HomeContent() {
       toast('请先在设置中添加并勾选点播源', 'warning');
       return;
     }
-    router.push(`/?s=${encodeURIComponent(query)}`, { scroll: false });
+    router.push(searchPageUrl(section, query), { scroll: false });
     searchHistory.record(query);
   };
 
@@ -184,10 +186,11 @@ function HomeContent() {
         <section className={cn('flex flex-col items-center', urlQuery ? 'mb-6' : 'mt-8 mb-8')}>
           {!urlQuery && (
             <header className="text-center mb-6">
-              <h1 className="text-4xl sm:text-5xl font-bold brand-gradient">HomeTV</h1>
+              <h1 className="text-4xl sm:text-5xl font-bold brand-gradient">{section === 'hd' ? '高清专区' : 'HomeTV'}</h1>
+              {section === 'hd' && <p className="text-sm text-muted mt-3">精选高清播放源 · 实际画质以片源为准</p>}
             </header>
           )}
-          {urlQuery && <h1 className="sr-only">HomeTV 视频搜索</h1>}
+          {urlQuery && <h1 className="sr-only">{section === 'hd' ? '高清专区搜索' : 'HomeTV 视频搜索'}</h1>}
           {/* 定位容器比胶囊宽一圈：浮层按它的宽度对齐，接缝处不会与胶囊边框错位 1px */}
           <div ref={searchHistory.containerRef} className="relative w-full max-w-2xl">
             <form
@@ -279,6 +282,17 @@ function HomeContent() {
             )}
           </div>
         </section>
+
+        {section === 'hd' && (
+          <section aria-label="高清播放源" className="mb-6 rounded-xl border border-line bg-chip px-4 py-3">
+            <div className="flex flex-wrap gap-2">
+              {selectedSources.map(source => <span key={source.key} className="text-sm rounded-md bg-surface px-3 py-1">{source.name}</span>)}
+            </div>
+            <p className="text-xs text-muted mt-2">{selectedSources.length > 0
+              ? '仅搜索以上已启用来源。部分影片提供不同清晰度，优先选择高画质版本。'
+              : '暂无已启用的高清来源，请在设置中检查点播源。'}</p>
+          </section>
+        )}
 
         {/* 搜索结果 */}
         {urlQuery && (

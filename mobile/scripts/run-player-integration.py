@@ -43,7 +43,7 @@ subprocess.run([sys.executable, str(project / 'scripts/generate-ios-project.py')
 video = (project / 'ios/Tests/Fixtures/player.mp4').read_bytes()
 class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
-        if self.path == '/':
+        if self.path.split('?')[0] in ['/', '/hd', '/settings']:
             page = b'<html><head><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="background:#101827;color:white"><h1>HomeTV</h1><p>Local player regression fixture</p></body></html>'
             self.send_response(200)
             self.send_header('Content-Type', 'text/html; charset=utf-8')
