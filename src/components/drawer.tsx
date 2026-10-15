@@ -147,6 +147,7 @@ export function Drawer({
         aria-modal="true"
         aria-label={title}
         tabIndex={-1}
+        style={{ paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)', paddingRight: 'env(safe-area-inset-right)' }}
         className={cn(
           'absolute right-0 top-0 h-full w-full bg-surface-raised border-l border-line flex flex-col outline-none',
           'transition-transform duration-200 ease-out',

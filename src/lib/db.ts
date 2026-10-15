@@ -3,6 +3,9 @@ import type { SourceConfig } from './types';
 // 仅类型引入：store.ts 运行时会引用本模块，反向只取类型不会形成运行时循环
 import type { LiveProbeEntry } from './store';
 import { PERSIST_KEY, flushPendingPersist } from './persist-storage';
+import { readProfileId, type SyncKind, type SyncMutation } from './family-types';
+import type { NativeProgress } from './native-player';
+const pageStartedAt = Date.now();
 
 /**
  * IndexedDB 持久化（替代旧版 localStorage 数据库）：
@@ -70,13 +73,18 @@ export interface DownloadTaskEntry {
   updatedAt: number;
 }
 
-export const db = new Dexie('libretv') as Dexie & {
+// A profile change reloads the page. Each open page keeps writing to its original profile.
+export const activeProfileId = readProfileId();
+export const db = new Dexie(activeProfileId ? `libretv-family-${activeProfileId}` : 'libretv') as Dexie & {
   history: EntityTable<HistoryEntry, 'id'>;
   progress: EntityTable<ProgressEntry, 'key'>;
   searchHistory: EntityTable<SearchHistoryEntry, 'text'>;
   liveProbe: EntityTable<LiveProbeEntry & { url: string }, 'url'>;
   segmentMeta: EntityTable<SegmentMetaEntry, 'key'>;
   downloads: EntityTable<DownloadTaskEntry, 'id'>;
+  syncOutbox: EntityTable<SyncMutation, 'id'>;
+  syncMeta: EntityTable<{ key: string; value: number }, 'key'>;
+  nativeReceipts: EntityTable<{ key: string; sequence: number; receivedAt: number; openedAt?: number; sessionId?: string }, 'key'>;
 };
 
 db.version(1).stores({
@@ -96,53 +104,128 @@ db.version(3).stores({
   downloads: 'id, createdAt',
 });
 
+db.version(4).stores({ syncOutbox: 'id', syncMeta: 'key' });
+db.version(5).stores({ nativeReceipts: 'key, receivedAt' });
+
+/** Returns whether this event may update the current playback preferences. ACK even stale events. */
+export async function recordNativeProgress(p: NativeProgress): Promise<boolean> {
+  if (p.profileId !== activeProfileId) return false;
+  const current = await db.transaction('rw', [db.history, db.progress, db.syncOutbox, db.syncMeta, db.nativeReceipts], async () => {
+    const receiptKey = `${p.sessionId}:${p.index}`;
+    if (((await db.nativeReceipts.get(receiptKey))?.sequence ?? -1) >= p.sequence) return false;
+    await db.nativeReceipts.put({ key: receiptKey, sequence: p.sequence, receivedAt: Date.now() });
+    const revision = (await db.syncMeta.get('revision'))?.value || 0;
+    // Replayed events from a previous process must not undo a newer server snapshot/deletion.
+    if (p.openedAt < pageStartedAt && p.baseRevision < revision) return false;
+    const id = `${p.sourceKey}_${p.vodId}`;
+    const sessionKey = `latest:${id}`;
+    const latest = await db.nativeReceipts.get(sessionKey);
+    if (latest?.openedAt && latest.openedAt > p.openedAt) return false;
+    const earlierEpisodeEvent = latest?.sessionId === p.sessionId && latest.sequence > p.sequence;
+    if (!earlierEpisodeEvent) {
+      await db.nativeReceipts.put({ key: sessionKey, sessionId: p.sessionId, openedAt: p.openedAt, sequence: p.sequence, receivedAt: Date.now() });
+      const previous = await db.history.get(id);
+      const history: HistoryEntry = { ...previous, id, sourceKey: p.sourceKey, sourceUrl: p.sourceUrl, vodId: p.vodId,
+        title: p.title, episodeIndex: p.index, totalEpisodes: p.total, playbackPosition: p.position,
+        duration: p.duration || (previous?.episodeIndex === p.index ? previous.duration : 0), timestamp: Date.now() };
+      await db.history.put(history); await dirty('history', id, history);
+    }
+    const key = `${id}_${p.index}`;
+    const progress = p.ended ? null : { key, position: p.position, duration: p.duration || (await db.progress.get(key))?.duration || 0, updatedAt: Date.now() };
+    if (progress) await db.progress.put(progress); else await db.progress.delete(key);
+    await dirty('progress', key, progress);
+    const receipts = await db.nativeReceipts.count();
+    if (receipts > 500) await db.nativeReceipts.orderBy('receivedAt').limit(receipts - 500).delete();
+    const count = await db.history.count();
+    if (count > MAX_HISTORY) {
+      const oldest = await db.history.orderBy('timestamp').limit(count - MAX_HISTORY).toArray();
+      for (const row of oldest) { await db.history.delete(row.id); await dirty('history', row.id, null); }
+    }
+    return !earlierEpisodeEvent;
+  });
+  notifyHistoryChange();
+  return current;
+}
+
+async function dirty(kind: SyncKind, key: string, value: HistoryEntry | ProgressEntry | null) {
+  if (!activeProfileId) return;
+  const revision = (await db.syncMeta.get('revision'))?.value || 0;
+  await db.syncOutbox.put({ id: `${kind}:${key}`, mutationId: crypto.randomUUID(), kind, key, value, baseRevision: revision });
+}
+function notifyHistoryChange() {
+  if (activeProfileId && typeof window !== 'undefined') window.dispatchEvent(new Event('libretv:history-changed'));
+}
+async function writeHistory(action: () => Promise<void>) {
+  await db.transaction('rw', [db.history, db.progress, db.syncOutbox, db.syncMeta], action);
+  notifyHistoryChange();
+}
+
 export const MAX_HISTORY = 100;
 export const MAX_SEARCH_HISTORY = 10;
 
 export async function upsertHistory(entry: Omit<HistoryEntry, 'id'>): Promise<void> {
+  await writeHistory(async () => {
   const id = `${entry.sourceKey}_${entry.vodId}`;
   const existing = await db.history.get(id);
   const merged: HistoryEntry = {
     ...existing,
     ...entry,
     id,
-    playbackPosition: entry.playbackPosition > 10 ? entry.playbackPosition : existing?.playbackPosition ?? 0,
-    duration: entry.duration || existing?.duration || 0,
+    playbackPosition: entry.playbackPosition > 0 ? entry.playbackPosition : existing?.episodeIndex === entry.episodeIndex ? existing.playbackPosition : 0,
+    duration: entry.duration || (existing?.episodeIndex === entry.episodeIndex ? existing.duration : 0),
     timestamp: Date.now(),
   };
   await db.history.put(merged);
+  await dirty('history', id, merged);
   // 淘汰最旧记录
   const count = await db.history.count();
   if (count > MAX_HISTORY) {
     const oldest = await db.history.orderBy('timestamp').limit(count - MAX_HISTORY).toArray();
     await db.history.bulkDelete(oldest.map((o) => o.id));
+    for (const row of oldest) await dirty('history', row.id, null);
   }
+  });
 }
 
 export async function updateHistoryProgress(
   sourceKey: string,
   vodId: string,
   position: number,
-  duration: number
+  duration: number,
+  episodeIndex?: number,
 ): Promise<void> {
+  if (!Number.isFinite(position) || !Number.isFinite(duration) || position < 0 || duration <= 0) return;
+  await writeHistory(async () => {
   const id = `${sourceKey}_${vodId}`;
   const existing = await db.history.get(id);
   if (!existing) return;
+  if (episodeIndex !== undefined && existing.episodeIndex !== episodeIndex) return;
   if (Math.abs(existing.playbackPosition - position) < 2 && Math.abs(existing.duration - duration) < 2) return;
-  await db.history.update(id, {
+  const updated = { ...existing,
     playbackPosition: position,
     duration,
     timestamp: Date.now(),
+  };
+  await db.history.put(updated);
+  await dirty('history', id, updated);
   });
 }
 
 export async function removeHistory(sourceKey: string, vodId: string): Promise<void> {
-  await db.history.delete(`${sourceKey}_${vodId}`);
+  await writeHistory(async () => {
+    const id = `${sourceKey}_${vodId}`;
+    await db.history.delete(id);
+    await dirty('history', id, null);
+  });
 }
 
 export async function clearAllHistory(): Promise<void> {
   // 一并清进度表：否则从历史重新打开时可能取到已清空的旧进度
-  await Promise.all([db.history.clear(), db.progress.clear()]);
+  await writeHistory(async () => {
+    for (const row of await db.history.toArray()) await dirty('history', row.id, null);
+    for (const row of await db.progress.toArray()) await dirty('progress', row.key, null);
+    await db.history.clear(); await db.progress.clear();
+  });
 }
 
 export function progressKeyOf(sourceKey: string, vodId: string, episodeIndex: number): string {
@@ -150,17 +233,25 @@ export function progressKeyOf(sourceKey: string, vodId: string, episodeIndex: nu
 }
 
 export async function saveProgress(sourceKey: string, vodId: string, episodeIndex: number, position: number, duration: number): Promise<void> {
-  if (!duration || position < 1) return;
-  await db.progress.put({
+  if (!Number.isFinite(duration) || !Number.isFinite(position) || !duration || position < 1) return;
+  await writeHistory(async () => {
+  const entry = {
     key: progressKeyOf(sourceKey, vodId, episodeIndex),
     position,
     duration,
     updatedAt: Date.now(),
+  };
+  await db.progress.put(entry);
+  await dirty('progress', entry.key, entry);
   });
 }
 
 export async function clearProgress(sourceKey: string, vodId: string, episodeIndex: number): Promise<void> {
-  await db.progress.delete(progressKeyOf(sourceKey, vodId, episodeIndex));
+  await writeHistory(async () => {
+    const key = progressKeyOf(sourceKey, vodId, episodeIndex);
+    await db.progress.delete(key);
+    await dirty('progress', key, null);
+  });
 }
 
 export async function addSearchHistory(text: string): Promise<void> {

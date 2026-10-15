@@ -12,3 +12,17 @@ vitest-results.json
 .zcode/
 .codebuddy/
 generated-images/
+.data/
+
+# Native build products and local signing material
+mobile/**/build/
+mobile/**/.gradle/
+mobile/**/local.properties
+mobile/**/xcuserdata/
+mobile/**/*.xcuserstate
+mobile/ios/ExportOptions.local.plist
+mobile/artifacts/
+*.keystore
+*.jks
+*.p12
+*.mobileprovision

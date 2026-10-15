@@ -10,6 +10,8 @@ import { requestShowDownloadManager } from './download-manager';
 import { Icon } from './icon';
 import { SearchHistoryDropdown, useSearchHistory } from './search-history';
 import { cn } from '@/lib/utils';
+import { InstallBanner, InstallButton } from './pwa';
+import { FamilyButton } from './family';
 
 /** 顶部导航：Logo、搜索框（首页外）、历史、设置 */
 export function Header({ showSearch = false }: { showSearch?: boolean }) {
@@ -97,13 +99,15 @@ export function Header({ showSearch = false }: { showSearch?: boolean }) {
           <div className="flex-1 sm:hidden" />
 
           <nav className="flex items-center gap-1 ml-auto">
+            <span className="hidden sm:contents"><InstallButton /></span>
+            <FamilyButton />
             <HeaderLink href="/live" active={pathname === '/live'}>
               直播
             </HeaderLink>
-            <HeaderLink href="/about" active={pathname === '/about'}>
+            <span className="hidden sm:contents"><HeaderLink href="/about" active={pathname === '/about'}>
               关于
-            </HeaderLink>
-            <ThemeToggle />
+            </HeaderLink></span>
+            <span className="hidden sm:contents"><ThemeToggle /></span>
             <IconButton label="观看历史" onClick={() => setHistoryOpen(true)}>
               <Icon name="clock" />
             </IconButton>
@@ -115,6 +119,7 @@ export function Header({ showSearch = false }: { showSearch?: boolean }) {
             </IconButton>
           </nav>
         </div>
+        <InstallBanner />
       </header>
 
       <SourceManagerDrawer open={settingsOpen} onClose={() => setSettingsOpen(false)} />

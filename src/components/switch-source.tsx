@@ -192,7 +192,8 @@ export function SwitchSourceModal({
         </div>
 
         {phase === 'done' && <div className="mb-3 flex items-center justify-between gap-3">
-          <p className="text-xs text-faint">按实际起播、卡顿记录和媒体测速排序；测速不保证全片流畅。</p>
+          <p className="text-xs text-faint">优先推荐当前网络下起播快、卡顿少的来源；Wi-Fi 与移动网络表现可能不同。</p>
+          <button className="btn-ghost btn-sm shrink-0" disabled={quality.testing} onClick={quality.retest}>重新测速</button>
           <button className="btn-primary btn-sm shrink-0" disabled={!recommended}
             onClick={() => recommended && switchTo(recommended)}>切换推荐源</button>
         </div>}

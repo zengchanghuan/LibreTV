@@ -20,6 +20,8 @@ import { SwitchSourceModal } from '@/components/switch-source';
 import { enqueueDownload } from '@/components/download-manager';
 import { Icon } from '@/components/icon';
 import { useAuth } from '@/components/auth';
+import { FamilyButton, useFamily } from '@/components/family';
+import { NativePlayerPanel, useNativeApp } from '@/components/native-player';
 import { resolveSource, useAppStore } from '@/lib/store';
 import {
   clearProgress,
@@ -49,6 +51,9 @@ function WatchContent() {
   const router = useRouter();
   const store = useAppStore();
   const { verified } = useAuth();
+  const { ready: historyReady } = useFamily();
+  const nativeApp = useNativeApp();
+  const [webPlayback, setWebPlayback] = useState(false);
 
   const sourceKey = searchParams.get('source') || '';
   const vodId = searchParams.get('id') || '';
@@ -112,7 +117,7 @@ function WatchContent() {
 
   // 写入观看历史（进入页面即记录，进度后续增量更新）
   useEffect(() => {
-    if (!verified || !sourceKey || !currentUrl) return;
+    if (!verified || !historyReady || !sourceKey || !currentUrl) return;
     const timer = setTimeout(() => {
       upsertHistory({
         sourceKey,
@@ -129,14 +134,14 @@ function WatchContent() {
     }, 2000);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [verified, sourceKey, vodId, currentIndex, videoTitle, currentUrl]);
+  }, [verified, historyReady, sourceKey, vodId, currentIndex, videoTitle, currentUrl]);
 
   // 播放中与暂停时的进度落盘逻辑一致，共用同一回调
   const handleProgress = useCallback(
     (position: number, duration: number) => {
       if (vodId) {
         saveProgress(sourceKey, vodId, currentIndex, position, duration).catch(() => {});
-        updateHistoryProgress(sourceKey, vodId || currentUrl, position, duration).catch(() => {});
+        updateHistoryProgress(sourceKey, vodId || currentUrl, position, duration, currentIndex).catch(() => {});
       }
     },
     [sourceKey, vodId, currentIndex, currentUrl]
@@ -173,10 +178,10 @@ function WatchContent() {
 
   const orderedEpisodes = reversed ? [...episodes].map((_, i) => episodes.length - 1 - i) : episodes.map((_, i) => i);
 
-  if (!verified) {
+  if (!verified || !historyReady) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <p className="text-faint text-sm">等待访问验证...</p>
+        <p className="text-faint text-sm">{verified ? '正在同步观看进度...' : '等待访问验证...'}</p>
       </div>
     );
   }
@@ -198,17 +203,18 @@ function WatchContent() {
   return (
     <div className="min-h-screen flex flex-col">
       <header className="sticky top-0 z-40 bg-surface/90 backdrop-blur border-b border-line">
-        <div className="max-w-7xl mx-auto px-4 h-14 flex items-center gap-3">
+        <div className="max-w-7xl mx-auto px-4 min-h-14 py-2 flex flex-wrap sm:flex-nowrap items-center gap-3">
           <BackButton />
           <HomeButton />
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <h1 className="text-sm font-medium text-content truncate">{videoTitle}</h1>
             <p className="text-xs text-faint">
               {source.name}
               {episodes.length > 0 && ` · 第 ${currentIndex + 1}/${episodes.length} 集`}
             </p>
           </div>
-          <div className="ml-auto flex items-center gap-2">
+          <div className="ml-auto w-full sm:w-auto flex justify-end items-center gap-2">
+            <FamilyButton />
             <button
               className="btn-ghost btn-sm"
               disabled={currentUrl.startsWith('/api/site-playback?')}
@@ -239,12 +245,24 @@ function WatchContent() {
           <div>
             <div className="aspect-video bg-black rounded-lg overflow-hidden">
               {currentUrl ? (
-                <PlayerShell
+                nativeApp && !webPlayback ? <NativePlayerPanel
+                  key={`${sourceKey}:${vodId}`} title={videoTitle} sourceKey={sourceKey} sourceUrl={source.url}
+                  vodId={vodId || currentUrl} episodes={episodes.length ? episodes : [currentUrl]} index={episodes.length ? currentIndex : 0}
+                  autoplayNext={store.autoplayNext} getPosition={getRestorePosition} onEpisode={goEpisode}
+                  onSleep={() => store.updateSettings({ autoplayNext: false })} onWeb={() => setWebPlayback(true)}
+                /> : <PlayerShell
                   url={currentUrl}
                   qualitySource={source.url}
                   title={videoTitle}
                   adFilter={store.adFilter}
                   autoplayNext={store.autoplayNext}
+                  episodeCount={episodes.length}
+                  episodeIndex={currentIndex}
+                  onEpisode={goEpisode}
+                  onSleep={() => {
+                    if (autoNextTimer.current) clearTimeout(autoNextTimer.current);
+                    store.updateSettings({ autoplayNext: false });
+                  }}
                   episodeKey={`${sourceKey}:${vodId}:${currentIndex}`}
                   nextUrl={currentIndex + 1 < episodes.length ? episodes[currentIndex + 1] : undefined}
                   nextEpisodeKey={currentIndex + 1 < episodes.length ? `${sourceKey}:${vodId}:${currentIndex + 1}` : undefined}
@@ -252,6 +270,7 @@ function WatchContent() {
                   onTimeUpdate={(position, duration) => { latestPosition.current = position; handleProgress(position, duration); }}
                   onPause={(position, duration) => { latestPosition.current = position; handleProgress(position, duration); }}
                   onEnded={handleEnded}
+                  onRequestSwitchSource={() => setSwitchOpen(true)}
                 />
               ) : (
                 <div className="w-full h-full flex items-center justify-center">

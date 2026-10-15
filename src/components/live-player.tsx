@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import Artplayer from 'artplayer';
 import Hls, { type HlsConfig } from 'hls.js';
 import { Spinner } from './states';
+import { hlsEngine, isAppleMobile } from '@/lib/media-support';
 
 /**
  * 直播播放器：与点播 player-shell 完全独立。
@@ -143,6 +144,9 @@ export function LivePlayer({ url, title, onPrevChannel, onNextChannel }: LivePla
     /** HLS 直播参数：小缓冲、快速追帧；与点播（大缓冲、进度恢复）刻意区分 */
     const setupHls = (video: HTMLVideoElement, mediaUrl: string, stage: 'direct' | 'proxy') => {
       cleanupEngines();
+      const engine = hlsEngine(Hls.isSupported(), video.canPlayType('application/vnd.apple.mpegurl'));
+      if (engine === 'native') { setupNative(video, mediaUrl, stage === 'direct'); return; }
+      if (engine === 'unsupported') { setError('当前浏览器不支持此直播格式，请更新系统或切换频道'); return; }
       let liveNetRetryCount = 0;
       let mediaRecoverCount = 0;
       const hlsConfig: Partial<HlsConfig> = {
@@ -303,7 +307,7 @@ export function LivePlayer({ url, title, onPrevChannel, onNextChannel }: LivePla
       setting: false,
       playbackRate: false,
       aspectRatio: false,
-      fullscreen: true,
+      fullscreen: !isAppleMobile(),
       fullscreenWeb: true,
       miniProgressBar: false,
       hotkey: false,

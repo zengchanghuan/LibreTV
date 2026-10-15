@@ -154,7 +154,7 @@ function HistoryItem({ item }: { item: HistoryEntry }) {
     vodId: item.vodId,
     index: item.episodeIndex,
     title: item.title,
-    sourceUrl: source?.url,
+    sourceUrl: source?.url || item.sourceUrl,
     detail: source?.detail,
   });
 

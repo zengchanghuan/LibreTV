@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import Artplayer from 'artplayer';
 import Hls, { type HlsConfig } from 'hls.js';
 
@@ -8,6 +9,8 @@ import { PlaybackTracker } from '@/lib/playback-quality';
 import { usePlaybackQuality } from '@/lib/playback-quality-store';
 import { PlaybackRecovery, describeHlsError } from '@/lib/playback-recovery';
 import { createHlsLoader } from '@/lib/hls-loader';
+import { hlsEngine, isAppleMobile } from '@/lib/media-support';
+import { PlaybackTools } from './playback-tools';
 import {
   getVideoPrefetcher,
   getNextEpisodePrefetcher,
@@ -43,6 +46,10 @@ interface PlayerShellProps {
   onPause?: (position: number, duration: number) => void;
   /** 恢复策略判源不可用（重试耗尽/格式硬失败）时回调：父级弹出换源面板 */
   onRequestSwitchSource?: (reason: string) => void;
+  episodeCount?: number;
+  episodeIndex?: number;
+  onEpisode?: (index: number) => void;
+  onSleep?: () => void;
 }
 
 export function PlayerShell({
@@ -59,11 +66,19 @@ export function PlayerShell({
   onEnded,
   onPause,
   onRequestSwitchSource,
+  episodeCount = 0,
+  episodeIndex = 0,
+  onEpisode,
+  onSleep,
 }: PlayerShellProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const artRef = useRef<any>(null);
   const hlsRef = useRef<Hls | null>(null);
+  const nativeMode = useRef(false);
+  const nativeRetryPosition = useRef(0);
+  const sleeping = useRef(false);
+  const [player, setPlayer] = useState<Artplayer | null>(null);
   const mediaTypeRef = useRef<'m3u8' | 'mp4'>('m3u8');
   const resolveControllerRef = useRef<AbortController | null>(null);
   const [error, setError] = useState('');
@@ -81,6 +96,8 @@ export function PlayerShell({
     url, qualitySource, title, adFilter, autoplayNext, episodeKey, nextUrl, nextEpisodeKey,
     getRestorePosition, onTimeUpdate, onEnded, onPause, onRequestSwitchSource,
   };
+  const activePropsRef = useRef(propsRef.current);
+  const changingMedia = useRef(false);
 
   // 跨集共享、每次换集重置的播放链路状态
   // 媒体健康度：音频轨可播不代表视频轨正常（「黑屏但有声」的假死态）。
@@ -148,7 +165,7 @@ export function PlayerShell({
   // 当前集预取（episodeKey 缺省 = 关闭，见 ensure 内部 settings.enabled 判断）
   const ensurePrefetch = (mediaUrl: string, currentTime: number, horizonSeconds?: number) => {
     const p = propsRef.current;
-    if (mediaTypeRef.current === 'mp4' || !p.episodeKey) return;
+    if (sleeping.current || nativeMode.current || mediaTypeRef.current === 'mp4' || !p.episodeKey) return;
     getVideoPrefetcher().ensure({
       m3u8Url: mediaUrl,
       currentTime,
@@ -168,6 +185,17 @@ export function PlayerShell({
     });
   };
 
+  const setupNativeHls = (video: HTMLVideoElement, mediaUrl: string) => {
+    hlsRef.current?.destroy(); hlsRef.current = null;
+    nativeMode.current = true;
+    // Native media can use cross-origin URLs without JS CORS access.
+    video.removeAttribute('crossorigin');
+    currentMediaUrlRef.current = mediaUrl;
+    video.src = mediaUrl; video.load();
+    video.play().catch(() => showHint('点击播放按钮开始观看'));
+    getVideoPrefetcher().stop(); getNextEpisodePrefetcher().stop();
+  };
+
   /**
    * 初始化/切换 HLS。allowProxyFallback：直连致命网络错误（CORS/防盗链/分片被拒）时，
    * 自动改走同源 cookie 鉴权的 /api/proxy 重试一次。
@@ -175,6 +203,11 @@ export function PlayerShell({
    */
   const setupHls = (video: HTMLVideoElement, mediaUrl: string, allowProxyFallback: boolean) => {
     hlsRef.current?.destroy();
+    const engine = hlsEngine(Hls.isSupported(), video.canPlayType('application/vnd.apple.mpegurl'));
+    if (engine === 'native') { setupNativeHls(video, mediaUrl); return; }
+    if (engine === 'unsupported') { setError('当前浏览器不支持此视频格式，请更新系统或切换视频源'); return; }
+    nativeMode.current = false;
+    video.crossOrigin = 'anonymous';
     currentMediaUrlRef.current = mediaUrl;
     const hls = new Hls(buildHlsConfig());
     hlsRef.current = hls;
@@ -226,6 +259,12 @@ export function PlayerShell({
           break;
         }
         case 'switch-source': {
+          if (video.canPlayType('application/vnd.apple.mpegurl')) {
+            nativeRetryPosition.current = video.currentTime;
+            showHint('正在切换系统兼容播放模式');
+            setupNativeHls(video, mediaUrl);
+            return;
+          }
           // 覆盖播放开始后的场景：起播失败走 setError 遮罩；
           // 播放中失败走回调弹换源面板（父级未提供回调时同样 setError）
           flushQuality(true);
@@ -244,6 +283,12 @@ export function PlayerShell({
 
   // Resolve site episode tokens only when selected. Abort stale resolutions on rapid episode changes.
   const setupMedia = async (video: HTMLVideoElement, targetUrl: string) => {
+    changingMedia.current = true;
+    // Save through the previous episode's callback before replacing it.
+    if (video.duration > 0 && !endedRef.current) activePropsRef.current.onPause?.(video.currentTime, video.duration);
+    activePropsRef.current = propsRef.current;
+    endedRef.current = false;
+    nativeRetryPosition.current = 0;
     resolveControllerRef.current?.abort();
     const controller = new AbortController();
     resolveControllerRef.current = controller;
@@ -262,15 +307,18 @@ export function PlayerShell({
         mediaUrl = data.url; type = data.type;
       }
       if (controller.signal.aborted) return;
+      changingMedia.current = false;
       mediaTypeRef.current = type;
+      nativeMode.current = type === 'mp4';
       currentMediaUrlRef.current = mediaUrl;
       if (type === 'mp4') {
+        video.removeAttribute('crossorigin');
         video.src = mediaUrl;
         video.load();
         video.play().catch((err) => { if (err.name === 'NotAllowedError') qualityRef.current?.tracker.pause(performance.now()); });
       } else setupHls(video, mediaUrl, true);
     } catch (err) {
-      if (!controller.signal.aborted) { flushQuality(true); setError(err instanceof Error ? err.message : '播放解析失败'); }
+      if (!controller.signal.aborted) { changingMedia.current = false; flushQuality(true); setError(err instanceof Error ? err.message : '播放解析失败'); }
     }
   };
 
@@ -282,6 +330,7 @@ export function PlayerShell({
     videoErrorRetryUsedRef.current = false;
     restoredRef.current = false;
     lastPrefetchEnsureRef.current = 0;
+    recoveryRef.current?.dispose();
     recoveryRef.current = new PlaybackRecovery();
     // 换集时清掉上一集的预取窗口，避免带宽被旧集占用
     getVideoPrefetcher().stop();
@@ -319,9 +368,9 @@ export function PlayerShell({
       autoMini: true,
       screenshot: true,
       setting: true,
-      playbackRate: true,
+      playbackRate: false, // The persistent speed selector lives in PlaybackTools.
       aspectRatio: true,
-      fullscreen: true,
+      fullscreen: !isAppleMobile(),
       fullscreenWeb: true,
       miniProgressBar: true,
       mutex: true,
@@ -339,12 +388,17 @@ export function PlayerShell({
       },
     });
     artRef.current = art;
+    setPlayer(art);
     art.on('video:loadedmetadata', async () => {
+      if (nativeRetryPosition.current > 0) {
+        art.currentTime = nativeRetryPosition.current;
+        nativeRetryPosition.current = 0;
+      }
       if (!restoredRef.current) {
         restoredRef.current = true;
         const media = currentMediaUrlRef.current;
         try {
-          const saved = await propsRef.current.getRestorePosition?.() || 0;
+          const saved = await activePropsRef.current.getRestorePosition?.() || 0;
           if (media === currentMediaUrlRef.current && saved > 10 && saved < art.duration - 2) {
             art.currentTime = saved;
             ensurePrefetch(media, saved);
@@ -359,13 +413,13 @@ export function PlayerShell({
       } catch { /* 忽略 */ }
     });
 
-    art.on('video:play', () => qualityRef.current?.tracker.play(performance.now()));
+    art.on('video:play', () => { sleeping.current = false; qualityRef.current?.tracker.play(performance.now()); });
     art.on('video:seeking', () => qualityRef.current?.tracker.seek(performance.now(), true));
     art.on('video:seeked', () => qualityRef.current?.tracker.seek(performance.now(), false));
     art.on('video:playing', () => {
       if (art.video.videoWidth > 0) { qualityRef.current?.tracker.playing(performance.now()); flushQuality(); }
       playbackStartedRef.current = true;
-      if (mediaTypeRef.current === 'mp4') mediaHealthyRef.current = true;
+      if (nativeMode.current) mediaHealthyRef.current = true;
       setShowPoster(false);
       // 仅在媒体真正恢复（有分片进入 buffer）后清错误遮罩：
       // 否则「视频轨挂了、音频轨先播出来」时会清掉遮罩，留下黑屏假死态
@@ -373,13 +427,15 @@ export function PlayerShell({
     });
     art.on('video:error', () => {
       mediaHealthyRef.current = false;
-      if (mediaTypeRef.current === 'mp4') {
+      if (nativeMode.current) {
         const target = currentMediaUrlRef.current;
         if (!target.startsWith('/api/proxy?')) {
           const position = art.currentTime || 0;
+          nativeRetryPosition.current = position;
           currentMediaUrlRef.current = `/api/proxy?url=${encodeURIComponent(target)}`;
           art.video.src = currentMediaUrlRef.current;
-          art.video.addEventListener('loadedmetadata', () => { art.currentTime = position; art.play().catch(() => {}); }, { once: true });
+          art.video.load();
+          art.play().catch(() => showHint('点击播放按钮继续观看'));
         } else { flushQuality(true); setError('视频播放失败，请尝试其他视频源'); }
         return;
       }
@@ -391,6 +447,11 @@ export function PlayerShell({
         setupHls(art.video, currentMediaUrlRef.current, true);
         return;
       }
+      if (art.video.canPlayType('application/vnd.apple.mpegurl')) {
+        nativeRetryPosition.current = art.currentTime || 0;
+        setupNativeHls(art.video, currentMediaUrlRef.current);
+        return;
+      }
       flushQuality(true);
       setError('视频播放失败，请尝试其他视频源');
     });
@@ -398,7 +459,7 @@ export function PlayerShell({
       const now = Date.now();
       if (now - lastSave > 5000) {
         lastSave = now;
-        propsRef.current.onTimeUpdate?.(art.currentTime, art.duration);
+        if (!changingMedia.current && restoredRef.current) activePropsRef.current.onTimeUpdate?.(art.currentTime, art.duration);
       }
       // 每 30s 续跑一次前向预取窗口（ensure 幂等，窗口未覆盖足够余量才会重建）
       if (now - lastPrefetchEnsureRef.current > 30_000) {
@@ -413,11 +474,11 @@ export function PlayerShell({
     });
     art.on('video:pause', () => {
       qualityRef.current?.tracker.pause(performance.now()); flushQuality();
-      propsRef.current.onPause?.(art.currentTime, art.duration);
+      if (!changingMedia.current && restoredRef.current && !endedRef.current) activePropsRef.current.onPause?.(art.currentTime, art.duration);
       // 暂停 = 预取黄金窗口：解除限速并无限铺满整集（用户主动行为，带宽占用可接受）
       // waiting 触发的限速在此解除，否则黄金窗口会被 500ms 轮询冻结
       getVideoPrefetcher().setThrottled(false);
-      ensurePrefetch(currentMediaUrlRef.current, art.currentTime, 0);
+      if (!changingMedia.current) ensurePrefetch(currentMediaUrlRef.current, art.currentTime, 0);
     });
     art.on('video:waiting', () => {
       qualityRef.current?.tracker.waiting(performance.now());
@@ -430,14 +491,14 @@ export function PlayerShell({
     art.on('video:ended', () => {
       qualityRef.current?.tracker.pause(performance.now()); flushQuality();
       endedRef.current = true;
-      propsRef.current.onEnded?.();
+      if (!sleeping.current) activePropsRef.current.onEnded?.();
     });
 
     // —— 键盘快捷键（旧版 hotkey:false + 自定义逻辑的移植） ——
     const shortcuts = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement;
       // 输入框或按钮获得焦点时不劫持按键：否则空格会吞掉按钮的默认激活
-      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.closest('button')) return;
+      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName) || target.closest('button, .playback-tools-panel')) return;
       const current = artRef.current;
       if (!current) return;
       if (e.altKey && e.key === 'ArrowLeft') { e.preventDefault(); return; } // 由父层处理集数切换
@@ -459,7 +520,9 @@ export function PlayerShell({
           current.toggle(); showHint('播放/暂停'); e.preventDefault();
           break;
         case 'f': case 'F':
-          current.fullscreen = !current.fullscreen; e.preventDefault();
+          if (isAppleMobile()) current.fullscreenWeb = !current.fullscreenWeb;
+          else current.fullscreen = !current.fullscreen;
+          e.preventDefault();
           break;
       }
     };
@@ -477,7 +540,7 @@ export function PlayerShell({
       // 松手后倍速永久卡在 3x；旧定时器句柄也会被覆盖成无法清除的幽灵触发
       if (isLongPress || longPressTimer) return;
       // 控制栏 / 设置面板上的长按不触发倍速（按住进度条拖动、长按倍速菜单项会误触）
-      if ((e.target as HTMLElement).closest?.('.art-controls, .art-settings')) return;
+      if ((e.target as HTMLElement).closest?.('.art-controls, .art-settings, .playback-tools-panel')) return;
       originalRate = art.video.playbackRate;
       longPressTimer = setTimeout(() => {
         if (art.video?.paused) return;
@@ -512,7 +575,7 @@ export function PlayerShell({
       qualityRef.current?.tracker.visibility(performance.now(), document.visibilityState === 'hidden');
       flushQuality();
       if (document.visibilityState === 'hidden') {
-        propsRef.current.onPause?.(art.currentTime, art.duration);
+        if (!changingMedia.current && !endedRef.current) activePropsRef.current.onPause?.(art.currentTime, art.duration);
       }
     };
     document.addEventListener('visibilitychange', saveOnHide);
@@ -523,7 +586,7 @@ export function PlayerShell({
       // 已自然播完的集数不回写，避免覆盖 onEnded 里清除的「已看完」记录
       if (!endedRef.current) {
         try {
-          propsRef.current.onPause?.(art.currentTime, art.duration);
+          if (!changingMedia.current) activePropsRef.current.onPause?.(art.currentTime, art.duration);
         } catch { /* 忽略 */ }
       }
       document.removeEventListener('keydown', shortcuts);
@@ -539,6 +602,7 @@ export function PlayerShell({
       hlsRef.current = null;
       recoveryRef.current?.dispose();
       getVideoPrefetcher().stop();
+      getNextEpisodePrefetcher().stop();
       art.destroy();
       artRef.current = null;
     };
@@ -568,6 +632,11 @@ export function PlayerShell({
   return (
     <div className="relative w-full h-full">
       <div ref={containerRef} className="w-full h-full" style={{ WebkitTouchCallout: 'none' }} />
+      {player && createPortal(<PlaybackTools player={player} count={episodeCount} index={episodeIndex} onEpisode={onEpisode} onSleep={() => {
+        sleeping.current = true;
+        getVideoPrefetcher().stop(); getNextEpisodePrefetcher().stop();
+        onSleep?.();
+      }} />, player.template.$player)}
       {showPoster && !error && (
         <div
           className="absolute inset-0 bg-black pointer-events-none"

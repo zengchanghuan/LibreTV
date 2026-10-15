@@ -30,6 +30,7 @@ async function readPlaylist(res: Response): Promise<string> {
   } finally { await reader.cancel().catch(() => {}); }
 }
 const cache = new Map<string, { at: number; value: MediaProbe }>();
+export function clearMediaProbeCache() { cache.clear(); }
 export async function probeVideo(source: SourceConfig, id: string, index: number, parent: AbortSignal): Promise<MediaProbe> {
   const key = `${source.url}|${id}|${index}`, cached = cache.get(key);
   if (cached && Date.now() - cached.at < 300000) return cached.value;
