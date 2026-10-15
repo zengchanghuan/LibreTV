@@ -4,6 +4,7 @@ android {
     compileSdk = 36
     defaultConfig { applicationId = "app.libretv.family"; minSdk = 26; targetSdk = 36; versionCode = 1; versionName = "1.0.0" }
     buildFeatures { buildConfig = true }
+    defaultConfig { buildConfigField("String", "DEFAULT_SERVICE_URL", "\"https://tv.fixepub.com\"") }
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
     kotlinOptions { jvmTarget = "17" }
     val signingPath = System.getenv("LIBRETV_KEYSTORE")

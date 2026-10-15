@@ -67,7 +67,8 @@ class MainActivity : Activity() {
             override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) { if (request.isForMainFrame) status.text = "连接失败，请检查服务地址与网络后刷新" }
             override fun onReceivedSslError(view: WebView, handler: SslErrorHandler, error: android.net.http.SslError) { handler.cancel(); status.text = "服务证书校验失败" }
         }
-        prefs.getString("serviceURL", null)?.let { serviceOrigin(it) }?.let { connect(it) }
+        val saved = prefs.getString("serviceURL", null)?.let { serviceOrigin(it) }
+        (saved ?: serviceOrigin(BuildConfig.DEFAULT_SERVICE_URL))?.let { connect(it) }
     }
     private fun configure() {
         val field = EditText(this).apply { setSingleLine(); hint = "https://tv.example.com"; setText(origin?.toString() ?: ""); inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_URI }

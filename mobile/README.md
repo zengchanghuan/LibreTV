@@ -1,6 +1,6 @@
 # LibreTV 家庭混合 App
 
-业务页面连接现有 LibreTV Node 服务；点播跳转到原生全屏播放器。iOS 使用 WKWebView + AVPlayerLayer，Android 使用 WebView + Media3 ExoPlayer。首版仅做本地开发，未部署服务、未上传分发。
+业务页面连接现有 LibreTV Node 服务；点播跳转到原生全屏播放器。iOS 使用 WKWebView + AVPlayerLayer，Android 使用 WebView + Media3 ExoPlayer。2026-10-15 服务端提交 `40c602e` 已部署至 `https://tv.fixepub.com`，iPhone’VIP 已安装开发签名 Release 测试版；尚未进行家庭正式分发。下方初次构建记录中的「未部署」描述当时状态，当前部署记录见 `PERSONALIZATION.md`。
 
 ## 已实现
 
@@ -12,7 +12,7 @@
 
 首版在后台、锁屏或失去前台时暂停播放；返回后核对定时期限。未启用后台音频、画中画、离线下载或 JavaScript HLS 广告过滤。定时停止不退出 App、不自动锁屏。直播页面仍使用网页播放器。
 
-App 依赖带本轮桥接的服务端页面，旧线上版本尚不能从点播页打开原生播放器。首次打开用顶部「服务地址」填写服务的 HTTPS 根地址，再登录、选择家庭头像。所有签名证书、密码、设备 ID 均不写入代码。
+App 依赖带本轮桥接的服务端页面。家庭构建默认连接 `https://tv.fixepub.com`，首次打开无需填写地址；手动设置过的地址优先。登录后可直接观看，无需选择成员；当前默认使用本机记录，需要跨设备同步或区分家人时再通过头像选择成员。访问会话会记忆，过期或退出后才需重新登录。所有签名证书、密码、设备 ID 均不写入代码。
 
 ## iOS 本地构建
 

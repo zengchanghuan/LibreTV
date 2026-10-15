@@ -34,7 +34,9 @@ final class BrowserController: UIViewController, WKScriptMessageHandler, WKNavig
             web.topAnchor.constraint(equalTo: toolbar.bottomAnchor), web.bottomAnchor.constraint(equalTo: view.bottomAnchor), web.leadingAnchor.constraint(equalTo: view.leadingAnchor), web.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             status.centerXAnchor.constraint(equalTo: view.centerXAnchor), status.centerYAnchor.constraint(equalTo: view.centerYAnchor), status.widthAnchor.constraint(lessThanOrEqualTo: view.widthAnchor, constant: -40)
         ])
-        if let url = UserDefaults.standard.string(forKey: "serviceURL").flatMap(serviceOrigin) { connect(url) }
+        let saved = UserDefaults.standard.string(forKey: "serviceURL").flatMap(serviceOrigin)
+        let bundled = (Bundle.main.object(forInfoDictionaryKey: "LibreTVServiceURL") as? String).flatMap(serviceOrigin)
+        if let url = saved ?? bundled { connect(url) }
         else { status.text = "请先设置家庭服务的 HTTPS 地址" }
         NotificationCenter.default.addObserver(self, selector: #selector(flush), name: UIApplication.didBecomeActiveNotification, object: nil)
     }
@@ -62,7 +64,15 @@ final class BrowserController: UIViewController, WKScriptMessageHandler, WKNavig
         decisionHandler(.cancel)
     }
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) { status.text = ""; flush() }
-    func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) { status.text = "连接失败，请检查地址和网络后刷新" }
+    private func connectionFailed(_ error: Error) {
+        let failure = error as NSError
+        if failure.domain == NSURLErrorDomain && failure.code == NSURLErrorCancelled { return }
+        let detail = "\(failure.domain) (\(failure.code)): \(failure.localizedDescription)"
+        UserDefaults.standard.set(detail, forKey: "lastConnectionError")
+        status.text = "连接失败：\(failure.localizedDescription)\n错误码 \(failure.code)，可点击顶部刷新重试"
+    }
+    func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) { connectionFailed(error) }
+    func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) { connectionFailed(error) }
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
         guard message.frameInfo.isMainFrame, let origin, let frame = message.frameInfo.request.url, sameOrigin(frame, origin),
               let body = message.body as? [String: Any], let type = body["type"] as? String else { return }
