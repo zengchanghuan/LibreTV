@@ -1,0 +1,54 @@
+name: iOS regression
+
+on:
+  push:
+    branches: [personal]
+    paths: ['mobile/**', '.github/workflows/ios-regression.yml']
+  pull_request:
+    paths: ['mobile/**', '.github/workflows/ios-regression.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ios-tests:
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Native logic and failure reporting
+        run: python3 mobile/scripts/run-native-tests.py
+      - name: Boot an available iPhone simulator
+        id: simulator
+        run: |
+          python3 - <<'PYTHON'
+          import json, os, subprocess
+          data = json.loads(subprocess.check_output(['xcrun', 'simctl', 'list', 'devices', 'available', '-j']))
+          devices = [d for runtime, ds in data['devices'].items() if '.iOS-' in runtime for d in ds if d['name'].startswith('iPhone')]
+          if not devices:
+              raise RuntimeError('No available iPhone simulator runtime')
+          device = devices[0]
+          if device['state'] != 'Booted':
+              subprocess.run(['xcrun', 'simctl', 'boot', device['udid']], check=True)
+          subprocess.run(['xcrun', 'simctl', 'bootstatus', device['udid'], '-b'], check=True)
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write('udid=' + device['udid'] + '\n')
+          PYTHON
+      - name: Player integration and failure reporting
+        env:
+          SIMULATOR_UDID: ${{ steps.simulator.outputs.udid }}
+        run: python3 mobile/scripts/run-player-integration.py "$SIMULATOR_UDID" --verify-failure-reporting
+      - name: Upload test evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-regression-results
+          path: |
+            /tmp/hometv-player-integration-*/build.log
+            /tmp/hometv-player-integration-*/results/
+            /tmp/hometv-player-integration-*/failure-*/
+            /tmp/hometv-player-integration-*/stdout-*.log
+            /tmp/hometv-player-integration-*/stderr-*.log
+          if-no-files-found: warn
+          retention-days: 7

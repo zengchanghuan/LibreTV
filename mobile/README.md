@@ -39,6 +39,7 @@ xcrun swiftc -module-cache-path /tmp/libretv-swift-cache \
   mobile/ios/HomeTV/SleepTimer.swift mobile/ios/HomeTV/PlaybackPosition.swift \
   mobile/ios/HomeTV/PlaybackSession.swift mobile/ios/HomeTV/NativeNavigation.swift \
   mobile/ios/Tests/PlaybackPositionTests.swift mobile/ios/Tests/NativeNavigationTests.swift \
+  mobile/ios/Tests/RegressionSupport.swift \
   mobile/ios/Tests/main.swift -o /tmp/libretv-sleep-tests
 /tmp/libretv-sleep-tests
 ```
@@ -134,3 +135,29 @@ Release 只接受 HTTPS 服务及媒体，HTTP 媒体需通过 HTTPS 服务代�
 后续真机验收顺序：登录选头像 → HLS/MP4 → 全屏内换集及各集续播 → 1.5 倍速跨集 → 定时暂停且不连播 → 横竖屏/后台返回 → 断网与代理回退 → 独立浏览器同成员同步 → Ad Hoc/APK 安装与覆盖更新。
 
 原生待发送队列按服务隔离，网页事务提交成功才删除。进程重启后的旧队列遇到更高服务端版本会保守舍弃，避免恢复已删除历史；可能丢弃那次旧进程尚未上传的离线进度。家庭同步仍是最终一致，后台不承诺即时上传。HTTP 无扩展名直连、站点私有格式及编码需要逐源实测；原生不能增加设备本身没有的解码器。
+
+### 测试失败报告（避免系统崩溃弹窗）
+
+Swift 测试使用 `testRequire` / `testCheck`，失败包含文件、行号及原因。
+基础测试失败以状态码 1 退出；模拟器测试写入 `player-integration.json`
+的 `failures`、`failureDetails`、`aborted`，由 Python runner 返回非零状态。
+缺失前置条件会停止后续场景，普通检查失败仍会记录；报告采用原子写入，
+每次启动清除旧报告。测试支持代码只复制进隔离测试应用，不进入正式应用。
+
+```bash
+# 先验证缺失根视图、控件、播放器、错误类型/反射、普通检查失败及报告写入失败，再跑完整套件
+python3 mobile/scripts/run-player-integration.py SIMULATOR_UDID --verify-failure-reporting
+# 独立负例：应明确报告失败、返回 1，且不生成崩溃报告
+python3 mobile/scripts/run-player-integration.py SIMULATOR_UDID --inject-failure missing-controls
+# 基础测试和三个失败路径的自动验证
+python3 mobile/scripts/run-native-tests.py
+# 也可单独运行基础测试负例（先用上面的 swiftc 命令编译）
+/tmp/libretv-sleep-tests --inject-missing-value
+/tmp/libretv-sleep-tests --inject-wrong-type
+/tmp/libretv-sleep-tests --inject-check-failure
+```
+
+推送 `personal` 分支或提交涉及 mobile 的 PR 时，`iOS regression` 会运行基础测试、
+失败报告故障注入和完整播放器模拟器回归，并保存测试报告及构建日志。
+最终报告写入失败会通过独立 stderr 通道立即报错；进度报告写入失败也会计入失败，
+不会被最后的成功检查覆盖。
