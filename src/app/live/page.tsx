@@ -21,6 +21,7 @@ import { LiveEpgPanel } from '@/components/live-epg-panel';
 import { Spinner } from '@/components/states';
 import { useAuth } from '@/components/auth';
 import { allLiveSources, useAppStore } from '@/lib/store';
+import { liveFavoriteUrls } from '@/lib/live-favorites';
 import { cn } from '@/lib/utils';
 import { LiveChannelName } from '@/components/live-channel-name';
 import { SmartImage } from '@/components/smart-image';
@@ -76,8 +77,9 @@ function LiveContent() {
     staleTime: 10 * 60_000,
   });
 
-  const { channels, groups, failedCount } = useMemo(() => {
+  const { channels, allChannels, groups, failedCount } = useMemo(() => {
     const list: LiveChannelItem[] = [];
+    const allChannels: LiveChannelItem[] = [];
     const seen = new Set<string>();
     let failed = 0;
     for (const { source, result } of playlistsQuery.data ?? []) {
@@ -86,6 +88,7 @@ function LiveContent() {
         continue;
       }
       for (const c of result.value.channels) {
+        allChannels.push({ ...c, epg: source.epg, sourceUrl: source.url });
         if (seen.has(c.url)) continue;
         seen.add(c.url);
         list.push({ ...c, epg: source.epg, sourceUrl: source.url });
@@ -94,8 +97,13 @@ function LiveContent() {
     const groups = [...new Set(list.map((c) => c.group).filter((g): g is string => Boolean(g)))].sort(
       (a, b) => a.localeCompare(b, 'zh')
     );
-    return { channels: list, groups, failedCount: failed };
+    return { channels: list, allChannels, groups, failedCount: failed };
   }, [playlistsQuery.data]);
+
+  useEffect(() => {
+    useAppStore.getState().reconcileLiveFavorites(allChannels);
+  }, [allChannels]);
+  const favoriteUrls = useMemo(() => liveFavoriteUrls(liveFavorites, allChannels), [liveFavorites, allChannels]);
 
   // 当前频道：优先取列表内完整对象（含台标），否则由 URL 参数重建
   const currentUrl = searchParams.get('url') || '';
@@ -212,7 +220,7 @@ function LiveContent() {
   }
 
   const logo = currentChannel?.logo;
-  const isFavorite = currentChannel ? liveFavorites.includes(currentChannel.url) : false;
+  const isFavorite = currentChannel ? favoriteUrls.has(currentChannel.url) : false;
 
   return (
     <div className={cn("live-root min-h-screen flex flex-col", native && "live-native")}>
@@ -240,7 +248,7 @@ function LiveContent() {
                       <div className="flex-1 min-w-0">
                         <h2 className="text-sm font-semibold text-content"><LiveChannelName name={currentChannel.name} /></h2>
                       </div>
-                      <button className={cn('min-h-11 px-3 rounded-lg text-sm shrink-0 transition-colors', isFavorite ? 'text-warning bg-warning/10' : 'text-muted bg-chip hover:bg-hover')} aria-pressed={isFavorite} onClick={() => useAppStore.getState().toggleLiveFavorite(currentChannel.url)}>
+                      <button className={cn('min-h-11 px-3 rounded-lg text-sm shrink-0 transition-colors', isFavorite ? 'text-warning bg-warning/10' : 'text-muted bg-chip hover:bg-hover')} aria-pressed={isFavorite} onClick={() => useAppStore.getState().toggleLiveFavorite(currentChannel)}>
                         {isFavorite ? '已收藏' : '收藏'}
                       </button>
                     </div>
@@ -275,7 +283,7 @@ function LiveContent() {
             {playlistsQuery.isLoading && channels.length === 0 ? (
               <div className="flex-1 flex items-center justify-center gap-2 text-sm text-muted"><Spinner size="sm" />正在加载频道…</div>
             ) : (
-              <LiveChannelList channels={channels} groups={groups} currentUrl={currentUrl} onSelect={handleSelect} onFilteredChange={handleFilteredChange} />
+              <LiveChannelList favoriteUrls={favoriteUrls} channels={channels} groups={groups} currentUrl={currentUrl} onSelect={handleSelect} onFilteredChange={handleFilteredChange} />
             )}
             {failedCount > 0 && (
               <div className="px-3 py-2 border-t border-line flex items-center justify-between gap-2 text-xs text-muted shrink-0" role="status">

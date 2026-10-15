@@ -86,6 +86,74 @@ class SyncTests(unittest.TestCase):
             self.run_sync(playlist(121))
         self.assertEqual(self.output.read_bytes(), old)
 
+    def test_corrupt_status_is_rebuilt_without_replacing_valid_playlist(self):
+        for invalid in ['{', 'null', '[]', '42', '"text"']:
+            with self.subTest(invalid=invalid):
+                self.run_sync(playlist())
+                inode = self.output.stat().st_ino
+                (self.state / 'last-success.json').write_text(invalid)
+                self.assertFalse(self.run_sync(playlist())['changed'])
+                self.assertEqual(self.output.stat().st_ino, inode)
+                self.assertTrue(json.loads((self.state / 'last-success.json').read_text())['ok'])
+
+    def test_failure_with_corrupt_status_is_recorded_and_next_run_recovers(self):
+        self.run_sync(playlist())
+        (self.state / 'last-success.json').write_text('{')
+        def fail():
+            raise TimeoutError('offline')
+        with self.assertRaises(TimeoutError):
+            sync.synchronize(self.output, self.state, fetch=fail)
+        self.assertFalse(json.loads((self.state / 'last-result.json').read_text())['ok'])
+        self.assertTrue(self.run_sync(playlist())['ok'])
+
+    def test_corrupt_output_restores_backup_even_when_upstream_is_offline(self):
+        self.run_sync(playlist())
+        old = self.output.read_bytes()
+        self.run_sync(playlist(121))
+        self.output.write_bytes(b'truncated')
+        def fail():
+            raise TimeoutError('offline')
+        with self.assertRaises(TimeoutError):
+            sync.synchronize(self.output, self.state, fetch=fail)
+        self.assertEqual(self.output.read_bytes(), old)
+        self.assertEqual((self.state / 'previous.m3u').read_bytes(), old)
+        result = json.loads((self.state / 'last-result.json').read_text())
+        self.assertFalse(result['ok'])
+        self.assertTrue(result['recoveredBackup'])
+        self.assertTrue(self.run_sync(playlist(122))['ok'])
+
+    def test_missing_output_restores_backup_and_keeps_drop_guard(self):
+        self.run_sync(playlist(300))
+        old = self.output.read_bytes()
+        self.run_sync(playlist(301))
+        self.output.unlink()
+        with self.assertRaisesRegex(ValueError, 'dropped'):
+            self.run_sync(playlist(120))
+        self.assertEqual(self.output.read_bytes(), old)
+
+    def test_bad_output_without_valid_backup_recovers_from_valid_upstream(self):
+        self.run_sync(playlist())
+        self.output.write_bytes(b'broken')
+        (self.state / 'previous.m3u').write_bytes(b'also broken')
+        self.assertTrue(self.run_sync(playlist(121))['changed'])
+        self.assertEqual(sync.normalize(self.output.read_bytes())[1], 121)
+        self.assertEqual(self.curated.read_bytes(), b'curated 27 channels')
+
+    def test_invalid_backup_is_not_published(self):
+        self.run_sync(playlist())
+        self.output.write_bytes(b'broken')
+        (self.state / 'previous.m3u').write_bytes(b'also broken')
+        with self.assertRaises(ValueError):
+            self.run_sync(b'<html>offline</html>')
+        self.assertEqual(self.output.read_bytes(), b'broken')
+
+    def test_status_write_failure_does_not_mask_original_error(self):
+        self.run_sync(playlist())
+        def fail():
+            raise TimeoutError('original network error')
+        with patch.object(sync, 'atomic_write', side_effect=OSError('disk full')), patch('sys.stderr'), self.assertRaisesRegex(TimeoutError, 'original network error'):
+            sync.synchronize(self.output, self.state, fetch=fail)
+
     def test_chinese_suffix_keeps_original_metadata_and_url(self):
         raw = playlist().replace(b'English 0', b'BBC News (1080p)')
         self.run_sync(raw)

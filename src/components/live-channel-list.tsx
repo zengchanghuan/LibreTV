@@ -52,6 +52,7 @@ export interface LiveChannelItem extends LiveChannel {
 }
 
 interface ChannelListProps {
+  favoriteUrls: ReadonlySet<string>;
   channels: LiveChannelItem[];
   groups: string[];
   currentUrl: string;
@@ -71,7 +72,7 @@ function useDebouncedValue<T>(value: T, delay: number): T {
   return debounced;
 }
 
-export function LiveChannelList({ channels, groups, currentUrl, onSelect, onFilteredChange }: ChannelListProps) {
+export function LiveChannelList({ favoriteUrls, channels, groups, currentUrl, onSelect, onFilteredChange }: ChannelListProps) {
   // 精确订阅：避免任何 store 字段变化（尤其测活节流写回）引发本组件重渲染
   const liveFavorites = useAppStore((s) => s.liveFavorites);
   const liveRecent = useAppStore((s) => s.liveRecent);
@@ -105,7 +106,7 @@ export function LiveChannelList({ channels, groups, currentUrl, onSelect, onFilt
     return () => clearInterval(timer);
   }, [isProbing]);
 
-  const favSet = useMemo(() => new Set(liveFavorites), [liveFavorites]);
+  const favSet = favoriteUrls;
   const recentOrder = useMemo(() => new Map(liveRecent.map((r, i) => [r.url, i] as const)), [liveRecent]);
   const normalizedKeyword = useMemo(() => normalizeForSearch(debouncedKeyword.trim()), [debouncedKeyword]);
 
@@ -569,7 +570,7 @@ const ChannelRow = memo(function ChannelRow({
           onClick={(e) => {
             e.stopPropagation();
             // 点击时读取最新状态：行组件不订阅 store，保证探测期间的重渲染隔离
-            useAppStore.getState().toggleLiveFavorite(channel.url);
+            useAppStore.getState().toggleLiveFavorite(channel);
           }}
         >
           <svg className="w-3.5 h-3.5" fill={isFav ? 'currentColor' : 'none'} stroke="currentColor" viewBox="0 0 24 24">

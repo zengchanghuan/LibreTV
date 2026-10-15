@@ -8,6 +8,7 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 from urllib.parse import urlsplit
 from channel_names_zh import localize_metadata
@@ -81,34 +82,58 @@ def atomic_write(path, data):
 
 
 def read_json(path):
-    return json.loads(path.read_text()) if path.exists() else {}
+    """Status is advisory: malformed JSON must not block a fresh sync."""
+    try:
+        value = json.loads(path.read_text())
+        return value if isinstance(value, dict) else {}
+    except (FileNotFoundError, ValueError, UnicodeError):
+        return {}
+
+
+def inspect_playlist(data):
+    if data is None:
+        return None
+    try:
+        return normalize(data)[1]
+    except (ValueError, UnicodeError):
+        return None
 
 
 def synchronize(output, state_dir, fetch=download):
     output, state_dir = Path(output), Path(state_dir)
-    state_dir.mkdir(parents=True, exist_ok=True)
-    previous_status = read_json(state_dir / 'last-success.json')
     attempt = datetime.now(timezone.utc).isoformat()
+    previous_status = {}
+    recovered = False
+    published = False
     try:
+        state_dir.mkdir(parents=True, exist_ok=True)
+        previous_status = read_json(state_dir / 'last-success.json')
+        old = output.read_bytes() if output.exists() else None
+        previous_count = inspect_playlist(old)
+        if previous_count is None:
+            backup_path = state_dir / 'previous.m3u'
+            backup = backup_path.read_bytes() if backup_path.exists() else None
+            backup_count = inspect_playlist(backup)
+            if backup_count is not None:
+                # Restore a validated backup even if the upstream is offline.
+                # Never rotate corrupt output over the last usable backup.
+                atomic_write(output, backup)
+                old, previous_count = backup, backup_count
+                recovered = True
         raw = fetch()
         data, count = normalize(raw, localize=True)
-        # Inspect the actual published file, rather than trusting a stale status file.
-        if output.exists():
-            old = output.read_bytes()
-            _, previous_count = normalize(old)
-            if count < previous_count * 0.5:
-                raise ValueError('Channel count dropped by more than 50%; keeping last good playlist')
-        else:
-            old = None
+        if previous_count is not None and count < previous_count * 0.5:
+            raise ValueError('Channel count dropped by more than 50%; keeping last good playlist')
         changed = old != data
         if changed:
-            if old is not None:
+            if previous_count is not None:
                 atomic_write(state_dir / 'previous.m3u', old)
             atomic_write(output, data)
+            published = True
         status = {
             'ok': True, 'checkedAt': attempt, 'lastSuccessAt': attempt,
             'upstream': UPSTREAM, 'language': 'eng', 'channels': count,
-            'chineseSuffix': True,
+            'chineseSuffix': True, 'recoveredBackup': recovered,
             'changed': changed, 'sha256': hashlib.sha256(data).hexdigest(),
             'upstreamSha256': hashlib.sha256(raw).hexdigest(),
         }
@@ -117,14 +142,19 @@ def synchronize(output, state_dir, fetch=download):
         atomic_write(state_dir / 'last-result.json', encoded)
         return status
     except Exception as error:
-        # Never overwrite a working playlist on a network/validation failure.
         status = {
             'ok': False, 'checkedAt': attempt,
             'lastSuccessAt': previous_status.get('lastSuccessAt'),
             'upstream': UPSTREAM, 'language': 'eng',
+            'recoveredBackup': recovered, 'playlistUpdated': published,
             'error': str(error)[:400],
         }
-        atomic_write(state_dir / 'last-result.json', (json.dumps(status, indent=2) + '\n').encode())
+        try:
+            atomic_write(state_dir / 'last-result.json', (json.dumps(status, indent=2) + '\n').encode())
+        except OSError as status_error:
+            # Disk/permission failures may prevent recording status too. Keep the
+            # original failure visible in systemd's journal rather than masking it.
+            print('Could not record sync failure: ' + str(status_error), file=sys.stderr)
         raise
 
 

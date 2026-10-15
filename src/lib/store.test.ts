@@ -390,3 +390,34 @@ describe('订阅整体开关', () => {
     expect(isInDisabledSubscription(store(), 'manual_0')).toBe(false);
   });
 });
+
+
+describe('favorite persistence and playlist reconciliation', () => {
+  const old = { url: 'https://stream.test/old', sourceUrl: 'https://source.test/list.m3u', tvgId: 'news' };
+  const updated = { ...old, url: 'https://stream.test/new' };
+  it('saves identity when favoriting and updates persisted URLs after refresh', () => {
+    store().toggleLiveFavorite(old);
+    store().reconcileLiveFavorites([updated]);
+    expect(store().liveFavorites).toEqual([updated]);
+    const persisted = useAppStore.persist.getOptions().partialize!(store()) as Partial<ReturnType<typeof store>>;
+    expect(persisted.liveFavorites).toEqual([updated]);
+    store().toggleLiveFavorite(updated);
+    expect(store().liveFavorites).toEqual([]);
+  });
+  it('migrates v2 URL favorites without discarding unresolved entries', async () => {
+    const migrated = await useAppStore.persist.getOptions().migrate!({ liveFavorites: [old.url] }, 2) as Partial<ReturnType<typeof store>>;
+    expect(migrated.liveFavorites).toEqual([{ url: old.url }]);
+    useAppStore.setState(migrated);
+    store().reconcileLiveFavorites([old]);
+    store().reconcileLiveFavorites([updated]);
+    expect(store().liveFavorites).toEqual([updated]);
+  });
+  it('repeated identical playlist reconciliation does not emit store updates', () => {
+    store().toggleLiveFavorite(old);
+    const listener = vi.fn();
+    const unsubscribe = useAppStore.subscribe(listener);
+    store().reconcileLiveFavorites([old]);
+    unsubscribe();
+    expect(listener).not.toHaveBeenCalled();
+  });
+});

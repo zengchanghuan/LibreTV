@@ -4,6 +4,7 @@ import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import type { SourceConfig, LiveSourceConfig, SourceSearchOutcome } from './types';
 import { clearLiveProbeResultsDb, loadLiveProbeResults, saveLiveProbeResults } from './db';
+import { favoriteRecord, reconcileLiveFavorites, toggleLiveFavorite, type LiveFavorite, type LiveFavoriteChannel } from './live-favorites';
 import { PERSIST_KEY, createThrottledStorage } from './persist-storage';
 
 /**
@@ -189,8 +190,8 @@ interface AppState extends AppSettings {
   liveSubscriptions: LiveSubscription[];
   /** 已启用的直播源（按订阅 URL 唯一标识，首次出现自动勾选） */
   liveSelectedUrls: string[];
-  /** 收藏频道（按流 URL 唯一标识） */
-  liveFavorites: string[];
+  /** 收藏频道：保留旧 URL，并记录订阅与频道标识以跟随地址更新。 */
+  liveFavorites: LiveFavorite[];
   /** 最近观看频道（上限 20） */
   liveRecent: LiveRecentEntry[];
   /** 测活结果缓存（6 小时有效，跨会话持久化） */
@@ -231,7 +232,8 @@ interface AppState extends AppSettings {
   toggleLiveSelected: (url: string) => void;
   /** 批量启停直播源：一次 set 完成，避免逐条 toggle 的 O(n) 次持久化 */
   toggleLiveSelectedMany: (urls: string[]) => void;
-  toggleLiveFavorite: (channelUrl: string) => void;
+  toggleLiveFavorite: (channel: LiveFavorite) => void;
+  reconcileLiveFavorites: (channels: LiveFavoriteChannel[]) => void;
   addLiveRecent: (entry: Omit<LiveRecentEntry, 'timestamp'>) => void;
   /** 删除单条最近观看（按流 URL） */
   removeLiveRecent: (channelUrl: string) => void;
@@ -602,13 +604,14 @@ export const useAppStore = create<AppState>()(
         });
       },
 
-      toggleLiveFavorite: (channelUrl) => {
-        const cur = get().liveFavorites;
-        set({
-          liveFavorites: cur.includes(channelUrl)
-            ? cur.filter((u) => u !== channelUrl)
-            : [...cur, channelUrl],
-        });
+      toggleLiveFavorite: (channel) => {
+        set({ liveFavorites: toggleLiveFavorite(get().liveFavorites, channel) });
+      },
+
+      reconcileLiveFavorites: (channels) => {
+        const state = get();
+        const next = reconcileLiveFavorites(state.liveFavorites, channels, state.liveRecent);
+        if (JSON.stringify(next) !== JSON.stringify(state.liveFavorites)) set({ liveFavorites: next });
       },
 
       addLiveRecent: (entry) => {
@@ -742,9 +745,15 @@ export const useAppStore = create<AppState>()(
       // v1：直播源新增归属字段、最近观看新增 sourceUrl。
       // v2：直播源归属改为多引用（fromSubscription 单值 → fromSubscriptions 数组）。
       // 此前未声明 version 的存量数据会被视为 v0 并走 migrate 补齐。
-      version: 2,
+      // v3：收藏保留 URL，并补充订阅与频道 ID；旧条目在加载订阅后关联。
+      version: 3,
       migrate: (persisted, version) => {
         const state = { ...((persisted ?? {}) as Partial<AppState>) };
+        if (version < 3) {
+          state.liveFavorites = (Array.isArray(state.liveFavorites) ? state.liveFavorites : [])
+            .filter((favorite) => typeof favorite === 'string' || (favorite && typeof favorite.url === 'string'))
+            .map(favoriteRecord);
+        }
         if (!Array.isArray(state.liveRecent)) state.liveRecent = [];
         if (!Array.isArray(state.liveSubscriptions)) state.liveSubscriptions = [];
         if (version < 2) {
