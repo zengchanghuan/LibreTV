@@ -47,29 +47,30 @@
   "verificationScope": "375项网页测试、19个iOS场景、Mac/Linux各13项同步回归；真实自动同步、2992路中文后缀、原27台SHA和优先顺序、线上接口均通过。来源可用性未逐台验证。",
   "updateMode": "服务器每日04:00 Asia/Shanghai自动同步；最新结果见/var/lib/libretv-sync/last-result.json",
   "chineseNames": {
-    "date": "2026-10-15T11:22:27+0800",
+    "date": "2026-10-15T11:32:30+0800",
     "channels": 2992,
     "chineseSuffix": true,
     "examples": [
-      "BBC News Africa (1080p) ｜ BBC新闻频道非洲",
-      "BBC News Asia Pacific (576p) ｜ BBC新闻频道亚太",
-      "BBC News Europe (576p) ｜ BBC新闻频道欧洲",
-      "BBC News North America (1080p) ｜ BBC新闻频道北美",
-      "BBC News South Asia (720p) ｜ BBC新闻频道南亚"
+      "BBC News Africa ｜ BBC新闻频道非洲",
+      "BBC News Asia Pacific ｜ BBC新闻频道亚太",
+      "BBC News Europe ｜ BBC新闻频道欧洲",
+      "BBC News North America ｜ BBC新闻频道北美",
+      "BBC News South Asia ｜ BBC新闻频道南亚"
     ],
     "curatedSha256": "c97ec1ac70ea574faaa6af5a31a7b5cb4b5ac0b300aefc74a274a48fbe710e94",
-    "backup": "/var/backups/libretv/chinese-labels-20261015-112209",
+    "backup": "/var/backups/libretv/chinese-labels-20261015-113214",
     "syncResult": {
       "ok": true,
-      "checkedAt": "2026-10-15T03:22:10.054352+00:00",
-      "lastSuccessAt": "2026-10-15T03:22:10.054352+00:00",
+      "checkedAt": "2026-10-15T03:32:15.664171+00:00",
+      "lastSuccessAt": "2026-10-15T03:32:15.664171+00:00",
       "upstream": "https://iptv-org.github.io/iptv/languages/eng.m3u",
       "language": "eng",
       "channels": 2992,
       "chineseSuffix": true,
       "changed": true,
-      "sha256": "94e2ffccac6fd25759ab341fa58c50dd74425f83a31cab4987f88f056887680e",
+      "sha256": "46812cb05cbcb00d3639b5e940b68dfc853c14d464b7cec81e09b6eef21703ca",
       "upstreamSha256": "b18f7c1ce77fde2605c98e21432bc532d1c08f04cd5dc3a9e634f95750fdeaa8"
-    }
+    },
+    "display": "只显示中英文频道名；移除清晰度、编码和可用性标记，中英分行且长名称自动换行"
   }
 }

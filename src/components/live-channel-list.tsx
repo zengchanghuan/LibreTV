@@ -3,6 +3,7 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { cn } from '@/lib/utils';
+import { LiveChannelName } from './live-channel-name';
 import { SmartImage } from './smart-image';
 import { Dropdown } from './dropdown';
 import { useAppStore } from '@/lib/store';
@@ -164,8 +165,8 @@ export function LiveChannelList({ channels, groups, currentUrl, onSelect, onFilt
   const virtualizer = useVirtualizer({
     count: filtered.length,
     getScrollElement: () => listRef.current,
-    // 行高两档：带分组名的双行 / 无分组名单行（含 4px 行距），measureElement 会修正估值
-    estimateSize: (i) => (filtered[i].group ? 51 : 47),
+    // 按中英双行 / 单行估算；长名称换行后的实际高度由 measureElement 修正
+    estimateSize: (i) => (filtered[i].name.includes('｜') ? 64 : 56),
     overscan: 10,
     getItemKey: (i) => filtered[i].url,
   });
@@ -546,21 +547,10 @@ const ChannelRow = memo(function ChannelRow({
                 title={probeTitle}
               />
             )}
-            <span className={cn('text-sm truncate', active ? 'text-accent font-medium' : 'text-content')}>
-              {channel.name}
-            </span>
-            {isHevc && (
-              <span
-                className="shrink-0 rounded-full bg-warning/15 px-1.5 text-[10px] font-medium text-warning"
-                title="H.265 编码：测活通过但 Chromium 内核通常无法解码，建议用 Edge/Safari"
-              >
-                H.265
-              </span>
-            )}
+            <div className={cn('text-sm min-w-0 flex-1', active ? 'text-accent font-medium' : 'text-content')}>
+              <LiveChannelName name={channel.name} />
+            </div>
           </div>
-          {channel.group && (
-            <div className="text-[10px] text-faint truncate">{channel.group}</div>
-          )}
         </div>
         {/* 最近观看单条删除（仅最近视图；移动端常显） */}
         {onRemoveRecent && (

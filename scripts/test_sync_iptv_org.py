@@ -5,7 +5,7 @@ import unittest
 from unittest.mock import patch
 
 import sync_iptv_org as sync
-from channel_names_zh import chinese_label, localize_metadata, split_metadata
+from channel_names_zh import clean_channel_name, chinese_label, localize_metadata, split_metadata
 
 
 def playlist(count=120):
@@ -90,7 +90,7 @@ class SyncTests(unittest.TestCase):
         raw = playlist().replace(b'English 0', b'BBC News (1080p)')
         self.run_sync(raw)
         text = self.output.read_text()
-        self.assertIn('BBC News (1080p) ｜ BBC新闻频道', text)
+        self.assertIn('BBC News ｜ BBC新闻频道', text)
         self.assertIn('tvg-id="en0" group-title="News"', text)
         self.assertIn('https://example.com/0.m3u8', text)
 
@@ -98,13 +98,19 @@ class SyncTests(unittest.TestCase):
         info = '#EXTINF:-1 http-user-agent="Mozilla/5.0 (KHTML, like Gecko)" tvg-id="DW.de@English",DW English (1080p)'
         prefix, name = split_metadata(info)
         self.assertEqual(name, 'DW English (1080p)')
-        self.assertEqual(localize_metadata(info), prefix + name + ' ｜ 德国之声英语频道')
+        self.assertEqual(localize_metadata(info), prefix + 'DW English ｜ 德国之声英语频道')
 
     def test_suffix_is_idempotent_and_does_not_include_quality_flags(self):
-        info = '#EXTINF:-1,BBC News (1080p) [Geo-blocked]'
+        info = '#EXTINF:-1,BBC News (1080p) [Not 24/7;Geo-blocked]'
         localized = localize_metadata(info)
         self.assertEqual(localize_metadata(localized), localized)
         self.assertTrue(localized.endswith('｜ BBC新闻频道'))
+
+    def test_only_stream_annotations_are_removed(self):
+        self.assertEqual(clean_channel_name('BBC News Africa (1080p) [Not 24/7]'), 'BBC News Africa')
+        self.assertEqual(clean_channel_name('湖南卫视 4K（HEVC）'), '湖南卫视')
+        for name in ['France 24', 'BBC One', '3ABN Canada', 'Channel 4', 'ABC (Australia)']:
+            self.assertEqual(clean_channel_name(name), name)
 
     def test_unknown_call_sign_retained_with_chinese_description(self):
         self.assertEqual(chinese_label('KXYZ', 'News'), 'KXYZ 新闻频道')

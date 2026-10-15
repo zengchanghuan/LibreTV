@@ -1,4 +1,6 @@
-# LibreTV 家庭混合 App
+# HomeTV 家庭混合 App
+
+iOS 与 Android 的 App 显示名称为 HomeTV。工程目录、构建 scheme 和应用标识沿用 LibreTV，便于覆盖安装并保留已有登录与观看记录。
 
 业务页面连接现有 LibreTV Node 服务；点播跳转到原生全屏播放器。iOS 使用 WKWebView + AVPlayerLayer，Android 使用 WebView + Media3 ExoPlayer。2026-10-15 服务端提交 `40c602e` 已部署至 `https://tv.fixepub.com`，iPhone’VIP 已安装开发签名 Release 测试版；尚未进行家庭正式分发。下方初次构建记录中的「未部署」描述当时状态，当前部署记录见 `PERSONALIZATION.md`。
 

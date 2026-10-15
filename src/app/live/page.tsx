@@ -22,6 +22,7 @@ import { Spinner } from '@/components/states';
 import { useAuth } from '@/components/auth';
 import { allLiveSources, useAppStore } from '@/lib/store';
 import { cn } from '@/lib/utils';
+import { LiveChannelName } from '@/components/live-channel-name';
 import { SmartImage } from '@/components/smart-image';
 
 /**
@@ -237,8 +238,7 @@ function LiveContent() {
                         ) : <span className="text-sm text-faint">{currentChannel.name.slice(0, 1)}</span>}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <h2 className="text-sm font-semibold text-content truncate">{currentChannel.name}</h2>
-                        <p className="text-xs text-faint mt-1 flex items-center gap-2"><span className="live-dot shrink-0" />直播{currentChannel.group ? ` · ${currentChannel.group}` : ''}</p>
+                        <h2 className="text-sm font-semibold text-content"><LiveChannelName name={currentChannel.name} /></h2>
                       </div>
                       <button className={cn('min-h-11 px-3 rounded-lg text-sm shrink-0 transition-colors', isFavorite ? 'text-warning bg-warning/10' : 'text-muted bg-chip hover:bg-hover')} aria-pressed={isFavorite} onClick={() => useAppStore.getState().toggleLiveFavorite(currentChannel.url)}>
                         {isFavorite ? '已收藏' : '收藏'}

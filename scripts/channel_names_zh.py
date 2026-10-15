@@ -310,8 +310,15 @@ def split_metadata(info):
     raise ValueError('Channel metadata has no title separator')
 
 
+def clean_channel_name(name):
+    """Remove stream annotations, preserving numbers and regional station names."""
+    name = re.sub(r'\s*[（(\[]\s*(?:\d{2,4}[pi]|[248]K|U?HD|SD|HEVC|H[. ]?26[45]|(?:Geo-blocked|Not 24/7)(?:;\s*(?:Geo-blocked|Not 24/7))*)\s*[）)\]]', '', name, flags=re.I)
+    name = re.sub(r'\s+(?:[248]K|U?HD|SD|HEVC|H[. ]?26[45])(?=\s*$)', '', name, flags=re.I)
+    return re.sub(r'\s+', ' ', name).strip()
+
+
 def chinese_label(name, group='', channel_id=''):
-    base = re.sub(r'\s*\[[^\]]+\]|\s*\(\d{2,4}[pi]\)', '', name).strip()
+    base = clean_channel_name(name)
     if SEPARATOR in base:
         base = base.split(SEPARATOR, 1)[0].strip()
     # A network brand before a known programme does not change the programme's
@@ -352,6 +359,6 @@ def chinese_label(name, group='', channel_id=''):
 def localize_metadata(info):
     prefix, title = split_metadata(info)
     attrs = dict(re.findall(r'([a-zA-Z0-9_-]+)="([^"]*)"', prefix))
-    original = title.split(SEPARATOR, 1)[0].strip()
+    original = clean_channel_name(title.split(SEPARATOR, 1)[0])
     return prefix + original + ' ' + SEPARATOR + ' ' + chinese_label(
         original, attrs.get('group-title', ''), attrs.get('tvg-id', ''))
