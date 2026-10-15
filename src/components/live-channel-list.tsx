@@ -227,9 +227,10 @@ export function LiveChannelList({ channels, groups, currentUrl, onSelect, onFilt
           <button
             key={v}
             className={cn(
-              'px-2.5 py-1 rounded-md text-xs transition-colors',
+              'min-h-10 px-3 rounded-lg text-sm transition-colors',
               view === v ? 'bg-accent/10 text-accent font-medium' : 'text-muted hover:text-content hover:bg-hover'
             )}
+            aria-pressed={view === v}
             onClick={() => setView(v)}
           >
             {label}
@@ -238,10 +239,11 @@ export function LiveChannelList({ channels, groups, currentUrl, onSelect, onFilt
       </div>
 
       {/* 搜索 + 排序 */}
-      <div className="px-3 py-2 shrink-0 flex items-center gap-1.5">
+      <div className="relative px-3 py-2 shrink-0 flex items-center gap-2">
         <input
-          className="input w-full !py-1.5 text-xs"
-          placeholder="搜索频道 / tvg-id / 分组..."
+          className="input w-full min-h-11 !py-2 text-sm"
+          aria-label="搜索频道"
+          placeholder="搜索频道，如 CCTV-1"
           value={keyword}
           maxLength={60}
           onChange={(e) => setKeyword(e.target.value)}
@@ -255,6 +257,15 @@ export function LiveChannelList({ channels, groups, currentUrl, onSelect, onFilt
             }
           }}
         />
+      <details className="shrink-0" onBlur={(e) => {
+          if (!e.currentTarget.contains(e.relatedTarget as Node | null)) e.currentTarget.open = false;
+        }} onKeyDown={(e) => {
+          if (e.key === 'Escape') { e.currentTarget.open = false; e.currentTarget.querySelector('summary')?.focus(); }
+        }}>
+        <summary className="min-h-11 px-2 flex items-center cursor-pointer text-xs text-muted hover:text-content rounded-lg bg-chip" aria-label="频道工具">工具⌄</summary>
+        <div className="absolute right-3 top-full z-20 mt-1 w-64 max-h-[45dvh] overflow-y-auto rounded-xl shadow-xl border border-line bg-surface-raised py-3">
+          <div className="px-3 pb-2 flex items-center justify-between gap-2 text-xs text-muted">
+            <span>频道排序</span>
         <Dropdown
           className="shrink-0 [&>button]:!py-1.5 [&>button]:!px-2 [&>button]:text-xs"
           value={sortMode}
@@ -268,7 +279,7 @@ export function LiveChannelList({ channels, groups, currentUrl, onSelect, onFilt
             { value: 'recent', label: '最近看' },
           ]}
         />
-      </div>
+          </div>
 
       {/* 测活 + 可用性筛选工具条 */}
       <div className="flex items-center gap-1.5 px-3 pb-2 shrink-0 flex-wrap">
@@ -278,7 +289,7 @@ export function LiveChannelList({ channels, groups, currentUrl, onSelect, onFilt
           onClick={() => void probe(filtered)}
           title="探测当前列表频道是否可播（分片级校验；量大时自动分批排队跑完，结果 6 小时内有效）"
         >
-          测活
+          检测频道
         </button>
         {/* 同一操作位按时机切换：测活中=取消（保留已完成结果）；空闲且有结果=清除全部 */}
         {isProbing ? (
@@ -323,7 +334,7 @@ export function LiveChannelList({ channels, groups, currentUrl, onSelect, onFilt
               onClick={() => setAliveFilter((v) => (v === 'green' ? 'off' : 'green'))}
               title="只看分片级验证通过的频道"
             >
-              绿点 {aliveCounts.green}
+              已验证 {aliveCounts.green}
             </button>
             <button
               className={cn(
@@ -335,10 +346,15 @@ export function LiveChannelList({ channels, groups, currentUrl, onSelect, onFilt
               onClick={() => setAliveFilter((v) => (v === 'ok' ? 'off' : 'ok'))}
               title="看所有验证通过（含直链/清单级弱验证）的频道"
             >
-              可播 {aliveCounts.ok}
+              可用 {aliveCounts.ok}
             </button>
           </>
         )}
+      </div>
+
+        </div>
+      </details>
+
       </div>
 
       {/* 分组标签条（横向可滑动） */}
@@ -346,12 +362,13 @@ export function LiveChannelList({ channels, groups, currentUrl, onSelect, onFilt
         <div className="px-3 pb-2 shrink-0">
           <div className="flex gap-1.5 overflow-x-auto scrollbar-thin pb-1">
             <GroupChip active={!group} label="全部分组" onClick={() => setGroup('')} />
-            {groups.map((g) => (
+            {[...groups].sort((a, b) => { const order = ['央视', '卫视', '广东']; return (order.includes(a) ? order.indexOf(a) : order.length) - (order.includes(b) ? order.indexOf(b) : order.length); }).map((g) => (
               <GroupChip key={g} active={group === g} label={g} onClick={() => setGroup(g === group ? '' : g)} />
             ))}
           </div>
         </div>
       )}
+
 
       {/* 频道列表（容器可聚焦，↑↓/Enter 光标导航） */}
       <div
@@ -419,11 +436,12 @@ function GroupChip({ label, active, onClick }: { label: string; active: boolean;
   return (
     <button
       className={cn(
-        'shrink-0 px-2.5 py-1 rounded-full text-xs whitespace-nowrap transition-colors border',
+        'shrink-0 min-h-9 px-3 py-1 rounded-full text-xs whitespace-nowrap transition-colors border',
         active
           ? 'bg-accent text-on-accent border-accent'
           : 'bg-chip text-muted border-line hover:text-content hover:bg-hover'
       )}
+      aria-pressed={active}
       onClick={onClick}
     >
       {label}
@@ -492,7 +510,7 @@ const ChannelRow = memo(function ChannelRow({
           键盘操作由外层列表容器的 ↑↓ 导航提供 */}
       <div
         className={cn(
-          'group flex items-center gap-2.5 px-2 py-2 rounded-md cursor-pointer transition-colors relative',
+          'group flex items-center gap-3 min-h-14 px-3 py-1 rounded-lg cursor-pointer transition-colors relative',
           active ? 'bg-accent/10' : 'hover:bg-hover',
           cursor && 'ring-1 ring-accent/70'
         )}
@@ -528,7 +546,7 @@ const ChannelRow = memo(function ChannelRow({
                 title={probeTitle}
               />
             )}
-            <span className={cn('text-xs truncate', active ? 'text-accent font-medium' : 'text-content')}>
+            <span className={cn('text-sm truncate', active ? 'text-accent font-medium' : 'text-content')}>
               {channel.name}
             </span>
             {isHevc && (
@@ -566,7 +584,7 @@ const ChannelRow = memo(function ChannelRow({
         {/* 收藏星标（移动端常显，桌面 hover 出现） */}
         <button
           className={cn(
-            'shrink-0 p-1 rounded transition-transform active:scale-125',
+            'shrink-0 min-w-11 min-h-11 flex items-center justify-center rounded-lg transition-transform active:scale-125',
             isFav
               ? 'text-warning'
               : 'text-faint/60 opacity-60 lg:opacity-0 lg:group-hover:opacity-100 hover:text-warning'

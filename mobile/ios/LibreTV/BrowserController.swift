@@ -23,11 +23,11 @@ final class BrowserController: UIViewController, WKScriptMessageHandler, WKNavig
         window.__LIBRETV_NATIVE__={version:1,platform:'ios',postMessage:m=>window.webkit.messageHandlers.libretvNative.postMessage(m)};
         window.dispatchEvent(new Event('libretv:native-ready'));
         """
-        config.userContentController.addUserScript(WKUserScript(source: bridge, injectionTime: .atDocumentStart, forMainFrameOnly: true))
+        config.userContentController.addUserScript(WKUserScript(source: bridge + "\n" + NativeNavigation.script, injectionTime: .atDocumentStart, forMainFrameOnly: true))
         web = WKWebView(frame: .zero, configuration: config); web.navigationDelegate = self
         web.isOpaque = false; web.backgroundColor = .black
         tabBar.delegate = self
-        tabBar.items = [UITabBarItem(title: "首页", image: UIImage(systemName: "house"), tag: 0), UITabBarItem(title: "设置", image: UIImage(systemName: "gearshape"), tag: 1)]
+        tabBar.items = [UITabBarItem(title: "首页", image: UIImage(systemName: "house"), tag: 0), UITabBarItem(title: "直播", image: UIImage(systemName: "play.tv"), tag: 1), UITabBarItem(title: "设置", image: UIImage(systemName: "gearshape"), tag: 2)]
         tabBar.selectedItem = tabBar.items?.first
         let appearance = UITabBarAppearance(); appearance.configureWithOpaqueBackground()
         tabBar.standardAppearance = appearance; tabBar.scrollEdgeAppearance = appearance
@@ -70,9 +70,8 @@ final class BrowserController: UIViewController, WKScriptMessageHandler, WKNavig
         tabBar.selectedItem = tabBar.items?.first
     }
     func tabBar(_ tabBar: UITabBar, didSelect item: UITabBarItem) {
-        guard let origin else { return }
+        guard let origin, let url = NativeNavigation.url(forTab: item.tag, origin: origin) else { return }
         retry.isHidden = true; status.text = "正在连接…"
-        let url = item.tag == 0 ? origin : origin.appendingPathComponent("settings")
         web.load(URLRequest(url: url))
     }
     @objc private func reload() {
@@ -86,9 +85,13 @@ final class BrowserController: UIViewController, WKScriptMessageHandler, WKNavig
     }
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         status.text = ""; retry.isHidden = true
-        if web.url?.path == "/settings" { tabBar.selectedItem = tabBar.items?.last }
-        else if web.url?.path == "/" || web.url?.path == "" { tabBar.selectedItem = tabBar.items?.first }
+        if let url = web.url { updateSelectedTab(url) }
         flush()
+    }
+    private func updateSelectedTab(_ url: URL) {
+        guard let origin, let index = NativeNavigation.tabIndex(for: url, origin: origin),
+              let items = tabBar.items, items.indices.contains(index) else { return }
+        tabBar.selectedItem = items[index]
     }
     private func connectionFailed(_ error: Error) {
         let failure = error as NSError
@@ -104,6 +107,9 @@ final class BrowserController: UIViewController, WKScriptMessageHandler, WKNavig
         guard message.frameInfo.isMainFrame, let origin, let frame = message.frameInfo.request.url, sameOrigin(frame, origin),
               let body = message.body as? [String: Any], let type = body["type"] as? String else { return }
         if type == "ready" { flush(); return }
+        if type == "navigation", let raw = body["url"] as? String, let url = URL(string: raw) {
+            updateSelectedTab(url); return
+        }
         if type == "ack", let id = body["eventId"] as? String {
             pending = pending.filter { $0.value["eventId"] as? String != id }; persist(); return
         }

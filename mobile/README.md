@@ -15,7 +15,9 @@
 
 App 依赖带本轮桥接的服务端页面。家庭构建固定连接 `https://tv.fixepub.com`，首次打开无需填写地址。登录后可直接观看，无需选择成员；当前默认使用本机记录，需要跨设备同步或区分家人时再通过头像选择成员。访问会话会记忆，过期或退出后才需重新登录。所有签名证书、密码、设备 ID 均不写入代码。
 
-底部导航只保留「首页」「设置」，不再常驻刷新入口；连接失败时提供「重试」。App 首页顶部仅保留「直播」「历史」，视频源管理、家庭同步、下载管理、外观和关于集中在底部设置页。家庭版固定使用默认服务，不再显示更换服务器入口。原生播放器的上一集、播放/暂停、下一集按钮紧凑靠左排列，iOS 的选集、倍速及定时保留在同一行右侧。
+底部导航依次为「首页」「直播」「设置」，不再常驻刷新入口；连接失败时提供「重试」。App 首页顶部仅保留「历史」，直播统一从底部第二个 Tab 进入。视频源管理、家庭同步、下载管理、外观和关于集中在底部设置页。家庭版固定使用默认服务，不再显示更换服务器入口。原生播放器的上一集、播放/暂停、下一集按钮紧凑靠左排列，iOS 的选集、倍速及定时保留在同一行右侧。
+
+iOS Tab 高亮由同源页面路由驱动，包含 Next.js 的内部跳转、替换地址及浏览器前进/后退；直播及子路径归入直播，设置和关于归入设置，其余页面归入首页。导航通知脚本随安装包注入，无需服务端配合更新。回归测试运行实际注入脚本，并验证原生路由归属及外部来源隔离。
 
 ## iOS 本地构建
 
@@ -33,7 +35,9 @@ xcodebuild -project mobile/ios/LibreTV.xcodeproj -scheme LibreTV \
   -derivedDataPath /tmp/libretv-ios-device CODE_SIGNING_ALLOWED=NO build
 xcrun swiftc -module-cache-path /tmp/libretv-swift-cache \
   mobile/ios/LibreTV/SleepTimer.swift mobile/ios/LibreTV/PlaybackPosition.swift \
-  mobile/ios/Tests/PlaybackPositionTests.swift mobile/ios/Tests/main.swift -o /tmp/libretv-sleep-tests
+  mobile/ios/LibreTV/PlaybackSession.swift mobile/ios/LibreTV/NativeNavigation.swift \
+  mobile/ios/Tests/PlaybackPositionTests.swift mobile/ios/Tests/NativeNavigationTests.swift \
+  mobile/ios/Tests/main.swift -o /tmp/libretv-sleep-tests
 /tmp/libretv-sleep-tests
 ```
 
@@ -81,6 +85,8 @@ cd mobile/android
 Release 只接受 HTTPS 服务及媒体，HTTP 媒体需通过 HTTPS 服务代理。Debug 为本地测试允许回环服务地址：iOS `http://127.0.0.1:端口`，Android 模拟器 `http://10.0.2.2:端口` 或 adb reverse 的 `http://127.0.0.1:端口`。没有放开证书校验。
 
 ## 验证记录与待办
+
+2026-10-15 底部导航增加第二个「直播」Tab，顺序为首页、直播、设置。`/live` 及子路径高亮第二项，设置和关于高亮第三项；SPA 跳转、返回和前进继续通过导航桥同步高亮。导航测试覆盖三个入口与高亮映射、路径边界及跨源隔离。iOS 原生 19 个场景、导航桥 6 项测试和真机 Release 签名构建通过。
 
 2026-10-15：
 

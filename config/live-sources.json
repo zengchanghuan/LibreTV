@@ -1,0 +1,223 @@
+{
+  "sources": [
+    {
+      "name": "公开直播·已验证（27台）",
+      "url": "https://tv.fixepub.com/live-sources/verified.m3u"
+    },
+    {
+      "name": "IPTV-org · 英语频道（每日更新）",
+      "url": "https://tv.fixepub.com/live-sources/iptv-org.m3u"
+    }
+  ],
+  "verifiedAt": "2026-10-15T10:25:32+0800",
+  "upstream": "https://github.com/iptv-org/iptv",
+  "verification": {
+    "candidateCount": 34,
+    "channels": [
+      {
+        "name": "CCTV-1 (720p)",
+        "ok": true,
+        "frames": 299,
+        "error": "",
+        "id": "CCTV1.cn"
+      },
+      {
+        "name": "CCTV-2 (720p)",
+        "ok": true,
+        "frames": 299,
+        "error": "",
+        "id": "CCTV2.cn"
+      },
+      {
+        "name": "CCTV-3 (720p)",
+        "ok": true,
+        "frames": 148,
+        "error": "",
+        "id": "CCTV3.cn"
+      },
+      {
+        "name": "Anhui TV",
+        "ok": true,
+        "frames": 124,
+        "error": "",
+        "id": "AnhuiTV.cn"
+      },
+      {
+        "name": "CCTV-4 Asia (720p)",
+        "ok": true,
+        "frames": 124,
+        "error": "",
+        "id": "CCTV4Asia.cn"
+      },
+      {
+        "name": "CCTV-7 (720p)",
+        "ok": true,
+        "frames": 149,
+        "error": "",
+        "id": "CCTV7.cn"
+      },
+      {
+        "name": "CCTV-8 (720p)",
+        "ok": true,
+        "frames": 149,
+        "error": "",
+        "id": "CCTV8.cn"
+      },
+      {
+        "name": "CCTV-10 (720p)",
+        "ok": true,
+        "frames": 149,
+        "error": "",
+        "id": "CCTV10.cn"
+      },
+      {
+        "name": "CCTV-9 (576i)",
+        "ok": true,
+        "frames": 123,
+        "error": "",
+        "id": "CCTV9.cn"
+      },
+      {
+        "name": "CCTV-12 (720p)",
+        "ok": true,
+        "frames": 123,
+        "error": "",
+        "id": "CCTV12.cn"
+      },
+      {
+        "name": "CCTV-11 (720p)",
+        "ok": true,
+        "frames": 123,
+        "error": "",
+        "id": "CCTV11.cn"
+      },
+      {
+        "name": "CCTV-14 (1080p)",
+        "ok": true,
+        "frames": 148,
+        "error": "",
+        "id": "CCTV14.cn"
+      },
+      {
+        "name": "CCTV-13 (720p)",
+        "ok": true,
+        "frames": 123,
+        "error": "",
+        "id": "CCTV13.cn"
+      },
+      {
+        "name": "CCTV-16 (1080p)",
+        "ok": true,
+        "frames": 148,
+        "error": "",
+        "id": "CCTV16.cn"
+      },
+      {
+        "name": "CCTV-17 (1080p)",
+        "ok": true,
+        "frames": 148,
+        "error": "",
+        "id": "CCTV17.cn"
+      },
+      {
+        "name": "CCTV-15 (720p)",
+        "ok": true,
+        "frames": 125,
+        "error": "",
+        "id": "CCTV15.cn"
+      },
+      {
+        "name": "Dragon TV International",
+        "ok": true,
+        "frames": 123,
+        "error": "",
+        "id": "DragonTVInternational.cn"
+      },
+      {
+        "name": "Hunan TV (2160p)",
+        "ok": true,
+        "frames": 125,
+        "error": "",
+        "id": "HunanTV.cn"
+      },
+      {
+        "name": "东莞新闻综合",
+        "ok": true,
+        "frames": 125,
+        "error": ""
+      },
+      {
+        "name": "广州综合",
+        "ok": true,
+        "frames": 125,
+        "error": ""
+      },
+      {
+        "name": "河北卫视 4K",
+        "ok": true,
+        "frames": 121,
+        "error": ""
+      },
+      {
+        "name": "哈尔滨影视",
+        "ok": true,
+        "frames": 124,
+        "error": ""
+      },
+      {
+        "name": "兰州新闻综合",
+        "ok": true,
+        "frames": 123,
+        "error": ""
+      },
+      {
+        "name": "兰州文化旅游",
+        "ok": true,
+        "frames": 123,
+        "error": ""
+      },
+      {
+        "name": "浙江国际",
+        "ok": true,
+        "frames": 120,
+        "error": ""
+      },
+      {
+        "name": "通化新闻综合",
+        "ok": true,
+        "frames": 125,
+        "error": ""
+      },
+      {
+        "name": "白城综合",
+        "ok": true,
+        "frames": 123,
+        "error": ""
+      }
+    ],
+    "method": "每台通过服务端直连短片解码、LibreTV分片级探测和线上HTTPS代理解码5秒；湖南卫视为4K HEVC，其余H.264；未代替真机验收。"
+  },
+  "expansion": {
+    "candidateCount": 184,
+    "added": 18,
+    "sources": [
+      "https://github.com/iptv-org/iptv",
+      "https://github.com/xkloveme/iptv-m3u",
+      "https://github.com/kaige-cai/live"
+    ],
+    "backup": "/var/backups/libretv/live-expand-20261015-102531"
+  },
+  "englishIntegration": {
+    "upstream": "https://iptv-org.github.io/iptv/languages/eng.m3u",
+    "language": "eng",
+    "servedUrl": "https://tv.fixepub.com/live-sources/iptv-org.m3u",
+    "deployedAt": "2026-10-15T10:57:58+0800",
+    "channelsAtDeployment": 2992,
+    "combinedChannelsAtDeployment": 3018,
+    "schedule": "daily 04:00 Asia/Shanghai",
+    "updateMode": "服务器systemd定时同步，内容异常保留上一份；原27台独立保留优先",
+    "verificationRecord": "config/iptv-org.snapshot.json",
+    "allChannelsPlaybackVerified": false,
+    "displayNameFormat": "英文原名 ｜ 中文名/说明"
+  }
+}

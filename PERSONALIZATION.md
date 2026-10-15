@@ -6,6 +6,8 @@
 
 ### 2026-10-15 服务端与测试机更新
 
+当前服务为 `live-ui-20261015`；iOS 底部依次是首页、直播、设置，首页不再重复显示直播入口。直播页直接选台、横屏双栏，英语频道每天北京时间 04:00 自动同步，保留原 27 台优先。英语频道名追加 `｜ 中文名/说明`：通行名称采用中文译名，没有通行中文名的品牌或地方台保留原名/呼号并补中文类型描述。已验证 2,992 路中文后缀、原 27 台 SHA 不变、375 项网页测试、19 个 iOS 场景及 Mac/Linux 各 13 项同步回归；中文名更新备份 `/var/backups/libretv/chinese-labels-20261015-112209`。下列为此前部署的历史记录。
+
 - `https://tv.fixepub.com` 已部署后端提交 `40c602e`，在 Linux x64 构建并先用备用端口验证；当前发布目录为 `/opt/libretv/releases/2.16.12-personal-40c602e`。原有 13 个源、访问密码及签名密钥保留。
 - 家庭数据目录设置为 `/var/lib/libretv`，位于发布目录外。匿名访问拒绝、登录、家庭 API、同步参数校验及页面原生桥接均通过 HTTPS 验证，Worker 构建标识为 `40c602e`。旧发布 `cf6504c` 保留，环境备份在 `/var/backups/libretv/deploy-40c602e-20261015-091409/environment`。
 - iPhone’VIP 已覆盖安装并启动开发签名的 Release 测试版，默认连接上述服务，已保存的手动地址优先；单人使用无需选择成员，登录后直接观看。需要跨设备记录时再选择成员。密码未写入安装包。
@@ -39,6 +41,24 @@ DEFAULT_SOURCES='[{"name":"示例","url":"https://example.com/api.php/provide/vo
 ```
 
 修改前备份环境文件，保留其他配置，随后重启 `libretv` 并通过 `/api/status` 检查 `defaultSources`。
+
+## 预置公开直播
+
+2026-10-15 当前配置：原已验证 27 台仍为首个订阅；第二个订阅改为 IPTV-org 官方英语分类 `languages/eng.m3u`，服务器每天北京时间 04:00 自动同步，停机错过的任务恢复后补跑。当前英语 2,992 路，合并去重共 3,018 路。连续两次真实同步、Mac/Linux 各 8 项回归测试、定时器启用及下次执行时间、线上接口和原 27 台 SHA 保持均已验证。失败、异常内容或数量骤降时保留上一份。实现与运行说明见 `scripts/README-iptv-sync.md`；最新运行结果在服务器 `/var/lib/libretv-sync/last-result.json`，部署备份 `/var/backups/libretv/english-sync-20261015-105730`。英语来源未逐台播放验证；下方全球静态快照记录是已被替换的历史。
+
+2026-10-15 IPTV-org 完整接入：新增第二个预置订阅「IPTV-org · 全球频道（未逐台验证）」。官方 `https://iptv-org.github.io/iptv/index.m3u` 本次快照包含 11,262 条记录，解析去重为 11,253 路，与原 27 台聚合按 URL 去重后共 11,254 路，原已验证频道优先。服务器订阅接口直连官方地址触发 15 秒超时，因此将完整原始 M3U 同步到 `/var/lib/libretv-public/iptv-org.m3u`，通过 Nginx 精确映射 `/live-sources/iptv-org.m3u` 提供。此为本次快照，不会自动跟随上游更新；后续需重新拉取、校验并原子替换文件，再刷新订阅缓存。来源、SHA-256、数量和验证范围保存于 `config/iptv-org.snapshot.json`，预置列表仍由 `config/live-sources.json` 管理。CGTN、DW English、France 24 English 分片抽测通过；没有逐台验证全球频道播放。配置备份 `/var/backups/libretv/iptv-org-20261015-104739`。
+
+2026-10-15 直播 UI 整理：手机竖屏直接展示频道列表，取消悬浮抽屉与未选台时的大块黑屏；频道搜索、全部/收藏/最近与分组保留，排序和检测收进「工具」弹出面板；信息区保留频道名、收藏和靠左换台，不常驻源地址，没有 EPG 配置时隐藏空节目单。手机横屏采用播放/频道双栏，App 内隐藏顶部栏以留出空间。375 项测试、lint、类型检查及生产构建通过；隔离 iPhone 模拟器验证竖屏/横屏无横向溢出、换台区不被底栏遮挡、工具不挤压列表、收藏筛选、视频解码和第二个 Tab 高亮。测试使用本地短片，仅验证 UI 与播放交互。已发布 `live-ui-20261015`，线上验证保留 13 个影视源和 27 台直播；备份 `/var/backups/libretv/deploy-live-ui-20261015-20261015-104311`。
+
+2026-10-15：iOS 底部增加第二个「直播」Tab 后，服务端 Header 在原生 App 内隐藏顶部重复「直播」入口，浏览器版保留。已发布版本 `live-tab-header-20261015`，通过 375 项测试、lint、类型检查和 Linux 生产构建；部署验证保留 13 个影视源、27 台直播订阅、登录与家庭同步接口。回滚版本及环境备份见 `/var/backups/libretv/deploy-live-tab-header-20261015-20261015-103309`。
+
+2026-10-15 从 [iptv-org/iptv](https://github.com/iptv-org/iptv) 中国频道列表筛选 34 个广播电视台域名下的地址，保留 9 个通过服务端两轮短片解码、LibreTV 分片级探测及线上 HTTPS 直播代理逐台 5 秒解码的频道。均为 H.264/AAC；这是本次服务器验证结果，真机体验与后续可用性仍需实际确认。
+
+同日继续测试该仓库原始 `streams/cn.m3u` 中的 160 个央视及卫视候选，以及两个补充公开列表的 24 个候选，新增 18 台，总计 27 台。新增 CCTV-1、2、3、4（亚洲）、7 至 17，以及安徽卫视、东方卫视国际、湖南卫视 4K（HEVC）。新增频道均通过分片探测、直连解码和本站 HTTPS 代理 5 秒音视频解码；湖南卫视为 HEVC，其余为 H.264。CCTV-5、6、江苏、浙江、广东等频道本轮未找到通过全部检查的线路，没有加入。扩充前备份为 `/var/backups/libretv/live-expand-20261015-102531`。测试机 iPhone’VIP 已重新启动客户端加载配置，仍待用户真机验收。
+
+`config/live-sources.m3u` 保存频道，`config/live-sources.json` 保存预置订阅与验证记录。线上 M3U 位于 `/var/lib/libretv-public/verified.m3u`，由 LibreTV 的 Nginx 站点精确映射到 `/live-sources/verified.m3u`，独立于应用版本目录；`/etc/libretv.env` 的 `DEFAULT_LIVE_SOURCES` 使用 JSON 文件中的 `sources` 数组。更新前备份配置，重启 `libretv` 后检查 `/api/status` 与鉴权后的 `/api/live/playlist`。本次备份在 `/var/backups/libretv/live-20261015-101700`。
+
+客户端重启后自动获取订阅，进入首页顶部「直播」即可选择频道，无需手填服务地址。直播目前沿用网页直播播放器。
 
 ## 本地开发
 

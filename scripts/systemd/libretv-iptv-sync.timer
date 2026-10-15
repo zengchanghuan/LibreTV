@@ -1,0 +1,10 @@
+[Unit]
+Description=Update LibreTV English channels daily at 04:00 Beijing time
+
+[Timer]
+OnCalendar=*-*-* 04:00:00 Asia/Shanghai
+Persistent=true
+Unit=libretv-iptv-sync.service
+
+[Install]
+WantedBy=timers.target

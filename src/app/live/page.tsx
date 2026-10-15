@@ -4,8 +4,8 @@ import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'rea
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/client-api';
-import { copyToClipboard } from '@/lib/clipboard';
 import { Header } from '@/components/header';
+import { useNativeApp } from '@/components/native-player';
 // 播放器（artplayer + hls.js）按需加载：拆出独立 chunk，不占首屏 First Load JS
 import dynamic from 'next/dynamic';
 const LivePlayer = dynamic(() => import('@/components/live-player').then((m) => m.LivePlayer), {
@@ -28,7 +28,7 @@ import { SmartImage } from '@/components/smart-image';
  * 直播页：左侧播放器 + 频道信息 + 节目单；右侧频道侧栏。
  * 状态由 URL 驱动（?url=&name=&group=&tvgId=&epg=），支持频道深链与刷新保持。
  * 换台路径：侧栏点击、全局 ↑↓ 键盘、播放器控制条上一台/下一台（全屏可用）。
- * 移动端侧栏为底部抽屉（右下角 FAB 呼出，选中频道后自动收起）。
+ * 竖屏频道列表直接显示；横屏与桌面采用播放区、频道列表双栏。
  */
 export default function LivePage() {
   return (
@@ -41,6 +41,7 @@ export default function LivePage() {
 function LiveContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
+  const native = useNativeApp();
   // 精确订阅所需字段：任何其他 store 变化（如测活写回）不应触发本组件重渲染
   const liveSelectedUrls = useAppStore((s) => s.liveSelectedUrls);
   const liveEnvSources = useAppStore((s) => s.liveEnvSources);
@@ -49,9 +50,6 @@ function LiveContent() {
   const imageProxyMode = useAppStore((s) => s.imageProxyMode);
   const customImageProxy = useAppStore((s) => s.customImageProxy);
   const { verified } = useAuth();
-  const [copied, setCopied] = useState(false);
-  // 移动端频道抽屉开合
-  const [listOpen, setListOpen] = useState(false);
   const [logoFailed, setLogoFailed] = useState(false);
   /** 侧栏上报的筛选排序结果（键盘换台沿此列表顺序）；ref 存储，不触发重渲染 */
   const filteredRef = useRef<LiveChannelItem[]>([]);
@@ -197,8 +195,6 @@ function LiveContent() {
   const handleSelect = useCallback(
     (c: LiveChannelItem) => {
       selectChannel(c);
-      // 移动端抽屉：选中即收起
-      setListOpen(false);
     },
     [selectChannel]
   );
@@ -218,250 +214,77 @@ function LiveContent() {
   const isFavorite = currentChannel ? liveFavorites.includes(currentChannel.url) : false;
 
   return (
-    <div className="min-h-screen flex flex-col">
-      <Header showSearch />
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 py-4">
-        <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-4">
-          {/* 主栏：播放器 + 信息条 + 节目单 */}
-          <div className="min-w-0">
-            <div className="aspect-video bg-black rounded-lg overflow-hidden">
-              {currentUrl ? (
-                <LivePlayer
-                  url={currentUrl}
-                  title={currentChannel?.name || '直播'}
-                  onPrevChannel={goPrevChannel}
-                  onNextChannel={goNextChannel}
-                />
-              ) : (
-                <div className="w-full h-full flex flex-col items-center justify-center gap-2 bg-black">
-                  <span className="live-dot" />
-                  <p className="text-white/60 text-sm">
-                    {sources.length === 0
-                      ? liveEnvSources.length + liveSubscriptions.length > 0
-                        ? '所有直播源均已停用，请在设置中勾选启用'
-                        : '请先在设置中添加直播源（M3U 订阅）'
-                      : playlistsQuery.isLoading
-                        ? '频道列表加载中...'
-                        : '从右侧选择一个频道开始观看'}
-                  </p>
+    <div className={cn("live-root min-h-screen flex flex-col", native && "live-native")}>
+      <Header />
+      <main className="live-page flex-1 max-w-7xl w-full mx-auto px-3 py-3 sm:px-4 sm:py-4">
+        <div className="live-heading flex items-center justify-between gap-3 mb-3">
+          <h1 className="text-lg font-semibold text-content">直播</h1>
+          <span className="text-xs text-faint">{channels.length > 0 ? `${channels.length} 个频道` : '选择频道，开始观看'}</span>
+        </div>
+        <div className="live-layout">
+          <section className="live-viewing min-w-0" aria-label="直播播放区">
+            {currentUrl ? (
+              <>
+                <div className="live-video aspect-video bg-black rounded-xl overflow-hidden">
+                  <LivePlayer url={currentUrl} title={currentChannel?.name || '直播'} onPrevChannel={goPrevChannel} onNextChannel={goNextChannel} />
                 </div>
-              )}
-            </div>
-
-            {/* 频道信息条 */}
-            {currentChannel && (
-              <div className="bg-surface-raised border border-line rounded-lg p-3 mt-3 flex items-center gap-3">
-                <div className="w-10 h-10 shrink-0 rounded bg-chip flex items-center justify-center overflow-hidden">
-                  {logo && !logoFailed ? (
-                    <SmartImage
-                      url={logo}
-                      mode={imageProxyMode}
-                      customProxy={customImageProxy}
-                      alt=""
-                      className="w-full h-full object-contain"
-                      onExhausted={() => setLogoFailed(true)}
-                    />
-                  ) : (
-                    <span className="text-xs text-faint">{currentChannel.name.slice(0, 1)}</span>
-                  )}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="live-dot shrink-0" />
-                    <h1 className="text-sm font-semibold text-content truncate">{currentChannel.name}</h1>
-                    {currentChannel.group && (
-                      <span className="tag bg-chip text-faint shrink-0">{currentChannel.group}</span>
-                    )}
+                {currentChannel && (
+                  <div className="bg-surface-raised border border-line rounded-xl p-2 mt-3">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-10 h-10 shrink-0 rounded-lg bg-chip flex items-center justify-center overflow-hidden">
+                        {logo && !logoFailed ? (
+                          <SmartImage url={logo} mode={imageProxyMode} customProxy={customImageProxy} alt="" className="w-full h-full object-contain" onExhausted={() => setLogoFailed(true)} />
+                        ) : <span className="text-sm text-faint">{currentChannel.name.slice(0, 1)}</span>}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <h2 className="text-sm font-semibold text-content truncate">{currentChannel.name}</h2>
+                        <p className="text-xs text-faint mt-1 flex items-center gap-2"><span className="live-dot shrink-0" />直播{currentChannel.group ? ` · ${currentChannel.group}` : ''}</p>
+                      </div>
+                      <button className={cn('min-h-11 px-3 rounded-lg text-sm shrink-0 transition-colors', isFavorite ? 'text-warning bg-warning/10' : 'text-muted bg-chip hover:bg-hover')} aria-pressed={isFavorite} onClick={() => useAppStore.getState().toggleLiveFavorite(currentChannel.url)}>
+                        {isFavorite ? '已收藏' : '收藏'}
+                      </button>
+                    </div>
+                    <div className="flex items-center gap-2 mt-2">
+                      <button className="min-h-11 px-3 rounded-lg bg-chip text-sm text-content hover:bg-hover disabled:opacity-40" onClick={goPrevChannel} disabled={channels.length === 0}>‹ 上一台</button>
+                      <button className="min-h-11 px-3 rounded-lg bg-chip text-sm text-content hover:bg-hover disabled:opacity-40" onClick={goNextChannel} disabled={channels.length === 0}>下一台 ›</button>
+                      <button className="min-h-11 px-2 text-xs text-muted hover:text-content disabled:opacity-40" onClick={backToPrevChannel} disabled={!lastChannelRef.current} title={lastChannelRef.current?.name}>返回上一频道</button>
+                    </div>
                   </div>
-                  <p className="text-xs text-faint truncate mt-0.5">{currentChannel.url}</p>
-                </div>
-                <div className="flex items-center gap-1 shrink-0">
-                  <button
-                    className={cn(
-                      'rounded-md p-2 transition-colors',
-                      lastChannelRef.current
-                        ? 'text-muted hover:text-accent hover:bg-hover'
-                        : 'text-faint/40 cursor-default'
-                    )}
-                    aria-label="上一个频道"
-                    title={lastChannelRef.current ? `上一个频道：${lastChannelRef.current.name}（Backspace）` : '暂无上一个频道'}
-                    onClick={backToPrevChannel}
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M9 15L4 10l5-5m-5 5h10.5a5.5 5.5 0 015.5 5.5V17"
-                      />
-                    </svg>
-                  </button>
-                  <button
-                    className="rounded-md p-2 text-muted hover:text-accent hover:bg-hover transition-colors"
-                    aria-label="上一台"
-                    title="上一台（↑）"
-                    onClick={goPrevChannel}
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M11 19l-7-7 7-7m8 14l-7-7 7-7"
-                      />
-                    </svg>
-                  </button>
-                  <button
-                    className="rounded-md p-2 text-muted hover:text-accent hover:bg-hover transition-colors"
-                    aria-label="下一台"
-                    title="下一台（↓）"
-                    onClick={goNextChannel}
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M13 5l7 7-7 7M5 5l7 7-7 7"
-                      />
-                    </svg>
-                  </button>
-                  <button
-                    className={cn(
-                      'rounded-md p-2 transition-colors',
-                      isFavorite ? 'text-warning' : 'text-muted hover:text-warning hover:bg-hover'
-                    )}
-                    aria-label={isFavorite ? '取消收藏' : '收藏'}
-                    title={isFavorite ? '取消收藏' : '收藏'}
-                    onClick={() => useAppStore.getState().toggleLiveFavorite(currentChannel.url)}
-                  >
-                    <svg
-                      className="w-4 h-4"
-                      fill={isFavorite ? 'currentColor' : 'none'}
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.196-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.783-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"
-                      />
-                    </svg>
-                  </button>
-                  <button
-                    className="rounded-md p-2 text-muted hover:text-accent hover:bg-hover transition-colors"
-                    aria-label="复制播放地址"
-                    title="复制播放地址"
-                    onClick={async () => {
-                      const ok = await copyToClipboard(currentChannel.url);
-                      if (ok) {
-                        setCopied(true);
-                        setTimeout(() => setCopied(false), 1500);
-                      }
-                    }}
-                  >
-                    {copied ? (
-                      <span className="text-[10px] text-success">已复制</span>
-                    ) : (
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h8a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3"
-                        />
-                      </svg>
-                    )}
-                  </button>
-                </div>
+                )}
+                {currentChannel?.epg && currentChannel.tvgId && (
+                  <section className="bg-surface-raised border border-line rounded-xl p-2 mt-3" aria-label="节目单">
+                    <h2 className="text-sm font-semibold text-content mb-2.5">节目单</h2>
+                    <LiveEpgPanel epgUrl={currentChannel.epg} tvgId={currentChannel.tvgId} />
+                  </section>
+                )}
+              </>
+            ) : (
+              <div className="live-welcome rounded-xl border border-line bg-surface-raised px-5 py-6">
+                <span className="text-xs text-accent font-medium">随时打开，轻松看台</span>
+                <h2 className="text-xl font-semibold text-content mt-2">想看哪个频道？</h2>
+                <p className="text-sm text-muted mt-2 leading-relaxed">
+                  {sources.length === 0
+                    ? '在设置中启用直播源，即可开始观看。'
+                    : playlistsQuery.isLoading ? '正在加载频道列表…' : '从频道列表点选播放，也可以收藏常看的频道。'}
+                </p>
+                {sources.length === 0 && <button className="btn-primary mt-4" onClick={() => router.push('/settings')}>前往设置</button>}
               </div>
             )}
-
-            {/* 节目单 */}
-            {currentChannel && (
-              <section className="bg-surface-raised border border-line rounded-lg p-3 mt-3">
-                <h2 className="text-sm font-semibold text-content mb-2.5">节目单</h2>
-                <LiveEpgPanel epgUrl={currentChannel.epg} tvgId={currentChannel.tvgId} />
-              </section>
+          </section>
+          <aside className="live-channels bg-surface-raised border border-line rounded-xl flex flex-col overflow-hidden min-w-0" aria-label="频道列表">
+            {playlistsQuery.isLoading && channels.length === 0 ? (
+              <div className="flex-1 flex items-center justify-center gap-2 text-sm text-muted"><Spinner size="sm" />正在加载频道…</div>
+            ) : (
+              <LiveChannelList channels={channels} groups={groups} currentUrl={currentUrl} onSelect={handleSelect} onFilteredChange={handleFilteredChange} />
             )}
-          </div>
-
-          {/* 移动端抽屉遮罩 */}
-          {listOpen && (
-            <div
-              className="fixed inset-0 z-30 bg-black/50 lg:hidden"
-              aria-hidden="true"
-              onClick={() => setListOpen(false)}
-            />
-          )}
-
-          {/* 侧栏：桌面常驻 sticky；移动端底部抽屉 */}
-          <aside
-            className={cn(
-              'bg-surface-raised border border-line flex-col overflow-hidden',
-              'fixed inset-x-0 bottom-0 z-40 h-[75vh] rounded-t-2xl shadow-2xl',
-              listOpen ? 'flex' : 'hidden',
-              'lg:sticky lg:top-20 lg:flex lg:h-[calc(100vh-6.5rem)] lg:rounded-xl lg:shadow-none'
+            {failedCount > 0 && (
+              <div className="px-3 py-2 border-t border-line flex items-center justify-between gap-2 text-xs text-muted shrink-0" role="status">
+                <span>{failedCount} 个直播源暂时无法加载</span>
+                <button className="min-h-9 px-2 text-accent" disabled={playlistsQuery.isFetching} onClick={() => void playlistsQuery.refetch()}>{playlistsQuery.isFetching ? '重试中…' : '重试'}</button>
+              </div>
             )}
-          >
-            {/* 抽屉把手栏（仅移动端） */}
-            <div className="flex items-center justify-between px-3 pt-3 pb-1 shrink-0 lg:hidden">
-              <span className="text-sm font-semibold text-content">频道列表</span>
-              <button
-                className="rounded-md p-1.5 text-muted hover:text-content hover:bg-hover transition-colors"
-                aria-label="关闭频道列表"
-                onClick={() => setListOpen(false)}
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-            <div className="flex-1 min-h-0 flex flex-col">
-              {playlistsQuery.isLoading && channels.length === 0 ? (
-                <div className="flex-1 flex items-center justify-center">
-                  <Spinner size="lg" />
-                </div>
-              ) : (
-                <LiveChannelList
-                  channels={channels}
-                  groups={groups}
-                  currentUrl={currentUrl}
-                  onSelect={handleSelect}
-                  onFilteredChange={handleFilteredChange}
-                />
-              )}
-              {(failedCount > 0 || sources.length === 0) && (
-                <p className="text-[10px] text-faint px-3 py-1.5 border-t border-line shrink-0">
-                  {sources.length === 0
-                    ? liveEnvSources.length + liveSubscriptions.length > 0
-                      ? '所有直播源均已停用，请在设置中勾选启用'
-                      : '暂无直播源，请在设置 → 直播源中添加'
-                    : `${failedCount > 0 ? `${failedCount} 个订阅拉取失败 · ` : ''}共 ${sources.length} 个已启用源`}
-                </p>
-              )}
-            </div>
           </aside>
         </div>
-
-        {/* 移动端呼出频道列表的悬浮按钮 */}
-        {!listOpen && channels.length > 0 && (
-          <button
-            className="fixed bottom-4 right-4 z-30 flex items-center gap-1.5 rounded-full bg-accent px-4 py-2.5 text-sm text-on-accent shadow-lg lg:hidden"
-            onClick={() => setListOpen(true)}
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M4 6h16M4 12h16M4 18h16"
-              />
-            </svg>
-            频道
-          </button>
-        )}
       </main>
     </div>
   );

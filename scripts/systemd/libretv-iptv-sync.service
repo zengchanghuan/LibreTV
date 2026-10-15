@@ -1,0 +1,19 @@
+[Unit]
+Description=Synchronize IPTV-org English playlist for LibreTV
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=libretv
+Group=libretv
+ExecStart=/usr/bin/python3 /usr/local/lib/libretv/sync_iptv_org.py --output /var/lib/libretv-public/iptv-sync/english.m3u --state-dir /var/lib/libretv-sync
+TimeoutStartSec=300
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/libretv-public/iptv-sync /var/lib/libretv-sync
+MemoryMax=128M
+CPUQuota=25%
+UMask=0022
