@@ -1,5 +1,6 @@
 'use client';
 
+import type { HDResourceCatalog, HDResourceDetail } from './hd-resource-sites';
 import type { SearchResponse, SearchStreamEvent, SourceSearchOutcome, VideoDetail, DoubanResponse, BangumiCalendarResponse, AuthStatusResponse, SourceConfig, SearchResultItem, LivePlaylistResponse, LiveEpgResponse, SourceListPayload } from './types';
 
 /**
@@ -106,6 +107,11 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
+  hdCatalog: (site: string, url: string, signal?: AbortSignal) =>
+    request<HDResourceCatalog>(`/api/hd-resources?${new URLSearchParams({ site, url })}`, { signal }),
+  hdResourceDetail: (site: string, url: string, signal?: AbortSignal) =>
+    request<HDResourceDetail>(`/api/hd-resources?${new URLSearchParams({ site, url, mode: 'detail' })}`, { signal }),
+
   status: () => request<AuthStatusResponse>('/api/status'),
 
   login: (password: string) =>
