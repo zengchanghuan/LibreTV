@@ -24,7 +24,7 @@ final class BrowserController: UIViewController, WKScriptMessageHandler, WKNavig
         web = WKWebView(frame: .zero, configuration: config); web.navigationDelegate = self
         web.isOpaque = false; web.backgroundColor = .black
         toolbar.axis = .horizontal; toolbar.distribution = .fillEqually
-        for (title, selector) in [("首页", #selector(home)), ("刷新", #selector(reload)), ("服务地址", #selector(configure))] {
+        for (title, selector) in [("首页", #selector(home)), ("刷新", #selector(reload)), ("设置", #selector(settings))] {
             let button = UIButton(type: .system); button.setTitle(title, for: .normal); button.addTarget(self, action: selector, for: .touchUpInside); toolbar.addArrangedSubview(button)
         }
         status.textColor = .white; status.numberOfLines = 0; status.textAlignment = .center
@@ -47,8 +47,16 @@ final class BrowserController: UIViewController, WKScriptMessageHandler, WKNavig
     }
     @objc private func home() { if let origin { web.load(URLRequest(url: origin)) } }
     @objc private func reload() { if origin != nil { web.reload() } }
+    @objc private func settings() {
+        let sheet = UIAlertController(title: "设置", message: nil, preferredStyle: .actionSheet)
+        sheet.addAction(UIAlertAction(title: "更换服务器", style: .default) { [weak self] _ in self?.configure() })
+        sheet.addAction(UIAlertAction(title: "取消", style: .cancel))
+        sheet.popoverPresentationController?.sourceView = toolbar
+        sheet.popoverPresentationController?.sourceRect = toolbar.bounds
+        present(sheet, animated: true)
+    }
     @objc private func configure() {
-        let alert = UIAlertController(title: "家庭服务地址", message: "填写现有 LibreTV 服务的 HTTPS 地址。账号和播放记录按服务隔离。", preferredStyle: .alert)
+        let alert = UIAlertController(title: "更换服务器", message: "填写 LibreTV 服务器的 HTTPS 地址。观看记录按服务器分别保存。", preferredStyle: .alert)
         alert.addTextField { $0.placeholder = "https://tv.example.com"; $0.text = self.origin?.absoluteString; $0.keyboardType = .URL; $0.autocapitalizationType = .none }
         alert.addAction(UIAlertAction(title: "取消", style: .cancel))
         alert.addAction(UIAlertAction(title: "连接", style: .default) { [weak self] _ in

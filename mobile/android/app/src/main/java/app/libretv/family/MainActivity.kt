@@ -45,7 +45,7 @@ class MainActivity : Activity() {
         }
         val column = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         val toolbar = LinearLayout(this)
-        listOf("首页" to { origin?.let { web.loadUrl(it.toString()) } }, "刷新" to { web.reload() }, "服务地址" to { configure() }).forEach { (title, action) ->
+        listOf("首页" to { origin?.let { web.loadUrl(it.toString()) } }, "刷新" to { web.reload() }, "设置" to { settings() }).forEach { (title, action) ->
             toolbar.addView(Button(this).apply { text = title; setOnClickListener { action() } }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         }
         column.addView(toolbar)
@@ -70,9 +70,12 @@ class MainActivity : Activity() {
         val saved = prefs.getString("serviceURL", null)?.let { serviceOrigin(it) }
         (saved ?: serviceOrigin(BuildConfig.DEFAULT_SERVICE_URL))?.let { connect(it) }
     }
+    private fun settings() {
+        AlertDialog.Builder(this).setTitle("设置").setItems(arrayOf("更换服务器")) { _, _ -> configure() }.setNegativeButton("取消", null).show()
+    }
     private fun configure() {
         val field = EditText(this).apply { setSingleLine(); hint = "https://tv.example.com"; setText(origin?.toString() ?: ""); inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_URI }
-        AlertDialog.Builder(this).setTitle("家庭服务地址").setView(field).setNegativeButton("取消", null).setPositiveButton("连接") { _, _ ->
+        AlertDialog.Builder(this).setTitle("更换服务器").setView(field).setNegativeButton("取消", null).setPositiveButton("连接") { _, _ ->
             val url = serviceOrigin(field.text.toString()); if (url == null) status.text = "请输入有效的 HTTPS 服务地址" else connect(url)
         }.show()
     }

@@ -43,7 +43,7 @@ final class PlayerController: UIViewController, UITableViewDataSource, UITableVi
         let close = button("返回", #selector(closePlayer)); titleLabel.textColor = .white; titleLabel.numberOfLines = 2; titleLabel.font = .systemFont(ofSize: 15)
         top.addArrangedSubview(close); top.addArrangedSubview(titleLabel); top.addArrangedSubview(button("横竖屏", #selector(rotate)))
         let controls = UIStackView(); controls.axis = .vertical; controls.spacing = 10
-        let row = UIStackView(); row.axis = .horizontal; row.spacing = 4; row.distribution = .fillEqually
+        let row = UIStackView(); row.axis = .horizontal; row.spacing = 4; row.distribution = .fill
         playButton.setTitle("暂停", for: .normal); playButton.addTarget(self, action: #selector(toggle), for: .touchUpInside)
         speedButton.setTitle("\(session.rate) 倍", for: .normal); speedButton.showsMenuAsPrimaryAction = true
         speedButton.menu = UIMenu(title: "播放速度", children: [Float(0.5), 0.75, 1, 1.25, 1.5, 1.75, 2, 3].map { rate in
@@ -55,7 +55,18 @@ final class PlayerController: UIViewController, UITableViewDataSource, UITableVi
                 self?.sleepTimer.set(minutes: minutes); self?.sleeping = false; self?.updateTime()
             }
         })
-        for control in [button("上一集", #selector(previous)), playButton, button("下一集", #selector(nextEpisode)), button("选集", #selector(episodes)), speedButton, sleepButton] { row.addArrangedSubview(control) }
+        let playbackControls = [button("上一集", #selector(previous)), playButton, button("下一集", #selector(nextEpisode))]
+        let tools = [button("选集", #selector(episodes)), speedButton, sleepButton]
+        for control in playbackControls + tools {
+            control.titleLabel?.font = .systemFont(ofSize: 13)
+            control.setContentHuggingPriority(.defaultHigh, for: .horizontal)
+            control.widthAnchor.constraint(greaterThanOrEqualToConstant: 44).isActive = true
+        }
+        playbackControls.forEach { row.addArrangedSubview($0) }
+        let spacer = UIView()
+        spacer.setContentHuggingPriority(UILayoutPriority(1), for: .horizontal)
+        row.addArrangedSubview(spacer)
+        tools.forEach { row.addArrangedSubview($0) }
         timeLabel.textColor = .white; timeLabel.font = .monospacedDigitSystemFont(ofSize: 12, weight: .regular)
         slider.addTarget(self, action: #selector(seek), for: [.touchUpInside, .touchUpOutside, .touchCancel])
         info.textColor = .white; info.numberOfLines = 3; info.font = .systemFont(ofSize: 13); info.textAlignment = .center

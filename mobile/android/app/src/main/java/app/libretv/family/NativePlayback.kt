@@ -84,7 +84,7 @@ class NativePlayback(
                 session.rate = rates[which]; player.setPlaybackSpeed(session.rate); speed.text = "${session.rate} 倍"; dialog.dismiss()
             }.setNegativeButton("取消", null).show()
         }
-        controls.addView(row(button("上一集") { select(session.index - 1) }, play, button("下一集") { select(session.index + 1) }))
+        controls.addView(row(button("上一集") { select(session.index - 1) }, play, button("下一集") { select(session.index + 1) }, compact = true))
         controls.addView(row(button("选集") {
             AlertDialog.Builder(activity).setTitle("选集").setSingleChoiceItems(session.episodes.map { it.title }.toTypedArray(), session.index) { dialog, which -> dialog.dismiss(); select(which) }.setNegativeButton("关闭", null).show()
         }, speed, button("定时") {
@@ -125,7 +125,10 @@ class NativePlayback(
             }
         })
     }
-    private fun row(vararg buttons: Button): LinearLayout = LinearLayout(activity).apply { buttons.forEach { addView(it, LinearLayout.LayoutParams(0, -2, 1f)) } }
+    private fun row(vararg buttons: Button, compact: Boolean = false): LinearLayout = LinearLayout(activity).apply {
+        gravity = Gravity.START
+        buttons.forEach { addView(it, if (compact) LinearLayout.LayoutParams(-2, -2) else LinearLayout.LayoutParams(0, -2, 1f)) }
+    }
     private fun button(text: String, action: () -> Unit): Button = Button(activity).apply { this.text = text; textSize = 13f; minWidth = 0; setOnClickListener { action() } }
     fun start() { activity.window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON); handler.post(ticker); load(session.index) }
     private fun load(index: Int) {
