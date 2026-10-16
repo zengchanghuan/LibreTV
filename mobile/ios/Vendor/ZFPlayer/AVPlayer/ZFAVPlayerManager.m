@@ -89,6 +89,7 @@ static NSString *const kPresentationSize         = @"presentationSize";
 @property (nonatomic, strong) AVPlayerLayer *playerLayer;
 @property (nonatomic, assign) BOOL isBuffering;
 @property (nonatomic, assign) NSUInteger bufferGeneration;
+@property (nonatomic, assign) NSUInteger seekGeneration;
 @property (nonatomic, assign) BOOL isReadyToPlay;
 @property (nonatomic, strong) AVAssetImageGenerator *imageGenerator;
 
@@ -174,6 +175,7 @@ static NSString *const kPresentationSize         = @"presentationSize";
 }
 
 - (void)stop {
+    self.seekGeneration++;
     // Explicit transport actions invalidate any queued buffering retry.
     self.bufferGeneration++;
     self.isBuffering = NO;
@@ -212,10 +214,30 @@ static NSString *const kPresentationSize         = @"presentationSize";
 
 - (void)seekToTime:(NSTimeInterval)time completionHandler:(void (^ __nullable)(BOOL finished))completionHandler {
     if (self.totalTime > 0) {
-        [_player.currentItem cancelPendingSeeks];
-        int32_t timeScale = _player.currentItem.asset.duration.timescale;
-        CMTime seekTime = CMTimeMakeWithSeconds(time, timeScale);
-        [_player seekToTime:seekTime toleranceBefore:kCMTimeZero toleranceAfter:kCMTimeZero completionHandler:completionHandler];
+        // A new position supersedes a buffer wait at the old position. Preserve
+        // transport intent, but invalidate its delayed retry before cancelling seeks.
+        self.bufferGeneration++;
+        NSUInteger generation = ++self.seekGeneration;
+        self.isBuffering = NO;
+        AVPlayerItem *item = self.playerItem;
+        [item cancelPendingSeeks];
+        CMTime seekTime = CMTimeMakeWithSeconds(time, 600);
+        // Remote scrubbing does not need frame accuracy. Keep the error bounded;
+        // replay at zero and local playback retain exact positioning.
+        CMTime tolerance = (!self.assetURL.isFileURL && time > 0 && time < self.totalTime)
+            ? CMTimeMakeWithSeconds(0.25, 600) : kCMTimeZero;
+        @zf_weakify(self)
+        [_player seekToTime:seekTime toleranceBefore:tolerance toleranceAfter:tolerance completionHandler:^(BOOL finished) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                @zf_strongify(self)
+                if (finished && self && self.seekGeneration == generation && self.playerItem == item && self.isPlaying) {
+                    // Go through the manager's play gate: pause, sleep, background,
+                    // replacement and close must all win over a late completion.
+                    [self play];
+                }
+                if (completionHandler) completionHandler(finished);
+            });
+        }];
     } else {
         self.seekTime = time;
     }
@@ -325,7 +347,9 @@ static NSString *const kPresentationSize         = @"presentationSize";
         if (!self || self.bufferGeneration != generation || self.playerItem != item || !self.isPlaying) return;
         self.isBuffering = NO;
         [self play];
-        if (!item.isPlaybackLikelyToKeepUp) [self bufferingSomeSecond];
+        // A pessimistic throughput prediction is not evidence that the current
+        // buffer is empty. Re-pausing here can loop forever even with playable
+        // data. Let AVPlayer advance; a new real buffer-empty event can retry.
     });
 }
 
@@ -359,7 +383,12 @@ static NSString *const kPresentationSize         = @"presentationSize";
         @zf_strongify(self)
         if (!self) return;
         NSArray *loadedRanges = self.playerItem.seekableTimeRanges;
-        if (self.isPlaying && !self.isBuffering && self.loadState == ZFPlayerLoadStateStalled) self.player.rate = self.rate;
+        if (self.isPlaying && !self.isBuffering && self.loadState == ZFPlayerLoadStateStalled) {
+            self.player.rate = self.rate;
+            // Actual playback also clears the spinner when the throughput
+            // prediction stays pessimistic despite sufficient buffered media.
+            if (self.player.timeControlStatus == AVPlayerTimeControlStatusPlaying) self.loadState = ZFPlayerLoadStatePlayable;
+        }
         if (loadedRanges.count > 0) {
             if (self.playerPlayTimeChanged) self.playerPlayTimeChanged(self, self.currentTime, self.totalTime);
         }
@@ -417,7 +446,7 @@ static NSString *const kPresentationSize         = @"presentationSize";
             // When the buffer is good
             if (self.playerItem.playbackLikelyToKeepUp) {
                 self.loadState = ZFPlayerLoadStatePlayable;
-                if (self.isPlaying) [self.player play];
+                if (self.isPlaying) [self play];
             }
         } else if ([keyPath isEqualToString:kLoadedTimeRanges]) {
             NSTimeInterval bufferTime = [self availableDuration];

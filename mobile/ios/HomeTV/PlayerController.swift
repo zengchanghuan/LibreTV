@@ -102,6 +102,7 @@ final class PlayerController: UIViewController {
             guard let self, !self.closed else { return }
             self.controls.updatePlaying(self.engine.isPlaying)
         }
+        player.playerLoadStateChanged = { [weak self] _, _ in self?.engine.trace("buffer-state") }
         NotificationCenter.default.addObserver(self, selector: #selector(background), name: UIApplication.willResignActiveNotification, object: nil)
         NotificationCenter.default.addObserver(self, selector: #selector(foreground), name: UIApplication.didBecomeActiveNotification, object: nil)
         load(session.index)
@@ -124,7 +125,7 @@ final class PlayerController: UIViewController {
         let timer = Timer(timeInterval: 1, repeats: true) { [weak self] _ in
             guard let self, !self.closed, !self.sleeping, !self.checkDeadline() else { return }
             self.ticks += 1; self.updateTime()
-            if self.ticks % 5 == 0 { self.emit("progress") }
+            if self.ticks % 5 == 0 { self.emit("progress"); self.engine.trace("tick") }
         }
         tick = timer
         // Default-mode timers do not fire during UIKit tracking interactions.

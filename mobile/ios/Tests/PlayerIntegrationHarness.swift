@@ -2,6 +2,12 @@ import UIKit
 import AVFoundation
 import WebKit
 
+// AVFoundation allows a full/playable buffer while its throughput prediction
+// remains pessimistic. Keep real media/clock behaviour and control only that hint.
+private final class PessimisticBufferItem: AVPlayerItem {
+    override var isPlaybackLikelyToKeepUp: Bool { false }
+}
+
 /// Copied into an isolated app by run-player-integration.py, never into HomeTV.
 @MainActor func runPlayerIntegration(window: UIWindow, scene: UIWindowScene) {
     Task { @MainActor in
@@ -228,6 +234,100 @@ import WebKit
             if CommandLine.arguments.contains("--navigation-only") {
                 try writeReport("player-integration.json"); fflush(stdout); return
             }
+            if !CommandLine.arguments.contains("--offline-only") && !CommandLine.arguments.contains("--sleep-minute-only") {
+                let scrubbing = PlayerController(session: session(), origin: origin, cookies: [])
+                scrubbing.modalPresentationStyle = .fullScreen
+                host.present(scrubbing, animated: false); await wait()
+                let controls = try testRequire(descendants(scrubbing.view).compactMap { $0 as? HomeTVPlayerControls }.first, "Scrubbing controls")
+                let zf = try testRequire(controls.player, "Scrubbing player")
+                let manager = try testRequire(zf.currentPlayerManager as? ZFAVPlayerManager, "Scrubbing manager")
+                _ = await until { manager.isPlaying && manager.currentTime >= 4 }
+                let originalItem = manager.playerItem
+                // Buffer-empty temporarily pauses AVPlayer while retaining play intent.
+                // A seek to already available data must not wait for the old 3s timer.
+                func injectBufferWait() {
+                    manager.setValue(NSNumber(value: 8), forKey: "loadState")
+                    manager.perform(NSSelectorFromString("bufferingSomeSecond"))
+                }
+                injectBufferWait()
+                check("seek-buffer-precondition", manager.isPlaying && manager.player?.rate == 0)
+                let beforeDrag = manager.currentTime
+                for value: Float in [0.3, 0.4, 0.5] { controls.portraitControlView.slider.delegate?.sliderValueChanged?(value) }
+                check("seek-drag-previews-without-network-seeks", abs(manager.currentTime - beforeDrag) < 0.3)
+                let start = Date()
+                controls.portraitControlView.slider.delegate?.sliderTouchEnded?(0.5)
+                _ = await until { !controls.portraitControlView.slider.isdragging && abs(manager.currentTime - 10) < 0.4 }
+                await wait(0.6)
+                results["seek-buffer-recovery-seconds"] = Date().timeIntervalSince(start)
+                check("seek-buffer-resumes-without-old-retry-delay", Date().timeIntervalSince(start) < 2 && manager.isPlaying && manager.player?.rate == 1.5 && manager.currentTime > 10.2)
+                // A pause issued after committing a seek takes priority over completion.
+                injectBufferWait()
+                controls.portraitControlView.slider.delegate?.sliderTouchEnded?(0.3)
+                controls.playButton.sendActions(for: .touchUpInside)
+                _ = await until { !controls.portraitControlView.slider.isdragging }; await wait(0.3)
+                check("seek-buffer-completion-respects-manual-pause", !manager.isPlaying && manager.player?.rate == 0)
+                controls.playButton.sendActions(for: .touchUpInside)
+                injectBufferWait()
+                for value: Float in [0.25, 0.6, 0.4] { controls.portraitControlView.slider.delegate?.sliderTouchEnded?(value) }
+                _ = await until { !controls.portraitControlView.slider.isdragging && abs(manager.currentTime - 8) < 0.4 }
+                await wait(0.3)
+                check("seek-rapid-drag-last-target-plays", manager.isPlaying && manager.player?.rate == 1.5 && manager.currentTime >= 7.75 && manager.currentTime < 9.5 && manager.playerItem === originalItem)
+                await wait(3.2)
+                check("seek-old-buffer-timer-cannot-repause", manager.isPlaying && manager.player?.rate == 1.5 && manager.currentTime > 11)
+                injectBufferWait()
+                controls.gestureBeganPan(zf.gestureControl, panDirection: .H, panLocation: .left)
+                controls.gestureChangedPan(zf.gestureControl, panDirection: .H, panLocation: .left, withVelocity: CGPoint(x: -800, y: 0))
+                controls.gestureEndedPan(zf.gestureControl, panDirection: .H, panLocation: .left)
+                _ = await until { !controls.portraitControlView.slider.isdragging }; await wait(0.6)
+                check("seek-pan-recovers-buffered-playback", manager.isPlaying && manager.player?.rate == 1.5 && manager.playerItem === originalItem)
+                controls.playButton.sendActions(for: .touchUpInside)
+                controls.portraitControlView.slider.delegate?.sliderTouchEnded?(0.25)
+                _ = await until { !controls.portraitControlView.slider.isdragging }; await wait(0.2)
+                check("seek-paused-player-stays-paused", !manager.isPlaying && manager.player?.rate == 0 && abs(manager.currentTime - 5) < 0.3)
+                scrubbing.closePlayer(); await wait(0.5)
+                check("seek-close-releases-player", manager.player == nil)
+                // HLS seeks cross a transport-stream boundary, not just an MP4 range.
+                var hlsSession = session("/offline-hls/index.m3u8", autoplay: false)
+                hlsSession.rate = 1; hlsSession.episodes[0].position = 0
+                let hlsSeeking = PlayerController(session: hlsSession, origin: origin, cookies: [])
+                hlsSeeking.modalPresentationStyle = .fullScreen
+                host.present(hlsSeeking, animated: false); await wait()
+                let hc = try testRequire(descendants(hlsSeeking.view).compactMap { $0 as? HomeTVPlayerControls }.first, "HLS seek controls")
+                let hm = try testRequire(hc.player?.currentPlayerManager as? ZFAVPlayerManager, "HLS seek manager")
+                _ = await until { hm.isPlaying && hm.totalTime > 6 }
+                let hlsItem = hm.playerItem
+                hm.setValue(NSNumber(value: 8), forKey: "loadState")
+                hm.perform(NSSelectorFromString("bufferingSomeSecond"))
+                hc.portraitControlView.slider.delegate?.sliderTouchEnded?(0.55)
+                let hlsLanded = await until { !hc.portraitControlView.slider.isdragging && hm.currentTime >= 3.1 }
+                let hlsTime = hm.currentTime
+                await wait(0.5)
+                check("seek-hls-cross-segment-recovers", hlsLanded && hm.isPlaying && hm.player?.rate == 1 && hm.currentTime > hlsTime + 0.2 && hm.playerItem === hlsItem)
+                hc.playButton.sendActions(for: .touchUpInside)
+                hc.portraitControlView.slider.delegate?.sliderTouchEnded?(0.2)
+                _ = await until { !hc.portraitControlView.slider.isdragging }; await wait(0.2)
+                check("seek-hls-paused-reposition-stays-paused", !hm.isPlaying && hm.player?.rate == 0 && abs(hm.currentTime - hm.totalTime * 0.2) <= 0.3)
+                hlsSeeking.closePlayer(); await wait(0.5)
+                let pessimistic = HomeTVPlayerManager()
+                pessimistic.assetURL = origin.appendingPathComponent("video.mp4")
+                _ = await until { pessimistic.playerItem?.status == .readyToPlay }
+                let realPlayer = try testRequire(pessimistic.player, "Pessimistic buffer player")
+                let pessimisticItem = PessimisticBufferItem(url: origin.appendingPathComponent("video.mp4"))
+                realPlayer.replaceCurrentItem(with: pessimisticItem)
+                pessimistic.setValue(pessimisticItem, forKey: "playerItem")
+                _ = await until { pessimisticItem.status == .readyToPlay && !pessimisticItem.loadedTimeRanges.isEmpty }
+                pessimistic.play(); await wait(0.3)
+                check("buffer-pessimistic-has-playable-data", !pessimisticItem.isPlaybackLikelyToKeepUp && pessimistic.currentTime > 0)
+                let stalledTime = pessimistic.currentTime
+                pessimistic.setValue(NSNumber(value: 8), forKey: "loadState")
+                pessimistic.perform(NSSelectorFromString("bufferingSomeSecond"))
+                await wait(3.7)
+                check("buffer-pessimistic-prediction-cannot-loop-pause", pessimistic.isPlaying && realPlayer.rate > 0 && pessimistic.currentTime > stalledTime + 0.3)
+                check("buffer-pessimistic-playback-clears-spinner", pessimistic.loadState.rawValue != 8)
+                pessimistic.stop()
+                if CommandLine.arguments.contains("--seek-only") { try writeReport("player-integration.json"); fflush(stdout); return }
+            }
+
             if fault == nil {
                 let downloads = OfflineDownloads.shared
                 for item in downloads.videos { try downloads.delete(item.id) }
