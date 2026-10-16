@@ -10,6 +10,7 @@ import argparse, json, shutil, subprocess, sys, tempfile, threading, time
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument("device")
 parser.add_argument("--sleep-minute-only", action="store_true", help="Verify the real one-minute menu and unattended stop")
+parser.add_argument("--navigation-only", action="store_true", help="Run browser navigation and tab layout checks only")
 parser.add_argument("--offline-only", action="store_true", help="Run download and offline playback checks only")
 parser.add_argument("--verify-failure-reporting", action="store_true", help="Exercise missing prerequisites and a failed check before the normal suite")
 parser.add_argument("--inject-failure", choices=["missing-root", "missing-controls", "missing-player", "wrong-manager", "missing-reflection", "wrong-type", "failed-check", "progress-write", "report-write"])
@@ -43,6 +44,8 @@ browser.write_text(browser_source.replace(connect,
     'if let url = URL(string: "http://127.0.0.1:18085") { connect(url) }'))
 subprocess.run([sys.executable, str(project / 'scripts/generate-ios-project.py')], check=True)
 video = (project / 'ios/Tests/Fixtures/player.mp4').read_bytes()
+# Exercise the real web theme palette without connecting to production.
+theme_css = (repo / 'src/app/globals.css').read_text().split('html,\nbody')[0]
 class Handler(BaseHTTPRequestHandler):
     offline_blocked = False
     def do_GET(self):
@@ -59,8 +62,11 @@ class Handler(BaseHTTPRequestHandler):
             self.send_response(200)
             self.send_header('Content-Type', 'application/vnd.apple.mpegurl' if fixture.suffix == '.m3u8' else 'video/mp2t')
             self.send_header('Content-Length', str(len(data))); self.end_headers(); self.wfile.write(data); return
-        if self.path.split('?')[0] in ['/', '/hd', '/settings']:
-            page = b'<html><head><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="background:#101827;color:white"><h1>HomeTV</h1><p>Local player regression fixture</p></body></html>'
+        if path in ['/', '/hd', '/settings', '/live', '/about', '/watch'] or path.startswith('/hd/'):
+            page = ('<html><head><meta name="viewport" content="width=device-width,initial-scale=1">'
+                '<script>document.documentElement.classList.toggle("dark",localStorage.getItem("fixture-theme")!=="light")</script>'
+                '<style>' + theme_css + 'body{background:rgb(var(--c-page));color:rgb(var(--c-content));font-family:-apple-system;padding:16px}</style>'
+                '</head><body><h1>HomeTV</h1><p>Local player regression fixture</p></body></html>').encode()
             self.send_response(200)
             self.send_header('Content-Type', 'text/html; charset=utf-8')
             self.send_header('Content-Length', str(len(page))); self.end_headers()
@@ -95,7 +101,7 @@ try:
         # Reinstalls preserve simulator data; never accept a previous run's report.
         for name in ['player-integration.json', 'player-progress.json']:
             (container / name).unlink(missing_ok=True)
-        launch_args = ['--harness-failure=' + fault] if fault else (['--sleep-minute-only'] if args.sleep_minute_only else ['--offline-only'] if args.offline_only else [])
+        launch_args = ['--harness-failure=' + fault] if fault else (['--sleep-minute-only'] if args.sleep_minute_only else ['--navigation-only'] if args.navigation_only else ['--offline-only'] if args.offline_only else [])
         # simctl resolves absolute output paths inside the simulator's data root.
         stderr_path = '/tmp/' + work.name + '/stderr-' + (fault or 'normal') + '.log'
         stdout_path = '/tmp/' + work.name + '/stdout-' + (fault or 'normal') + '.log'

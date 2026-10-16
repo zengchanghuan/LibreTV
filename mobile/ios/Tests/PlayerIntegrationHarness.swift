@@ -116,6 +116,7 @@ import WebKit
             let browser = try testRequire(host as? BrowserController, "Missing browser host")
             let tabs = try testRequire(descendants(host.view).compactMap { $0 as? UITabBar }.first, "Missing native tabs")
             let web = try testRequire(descendants(host.view).compactMap { $0 as? WKWebView }.first, "Missing browser web view")
+            let navigation = try testRequire(descendants(host.view).compactMap { $0 as? UINavigationBar }.first, "Missing browser navigation bar")
             let tabItems = try testRequire(tabs.items, "Missing tab items")
             try testCheck(tabItems.count == 4, "Expected home, live, HD and settings tabs")
             check("four-tabs-have-labels-and-icons", tabItems.map(\.title) == ["首页", "直播", "高清", "设置"] && tabItems.allSatisfy { $0.image != nil })
@@ -127,11 +128,11 @@ import WebKit
             browser.tabBar(tabs, didSelect: tabItems[2]); await wait()
             check("repeated-hd-tab-preserves-document", !web.isLoading && web.backForwardList.backList.count == historyCount && web.url?.path == "/hd")
             snapshot("hd-tabs-portrait")
-            check("four-tabs-portrait-layout", tabs.bounds.height >= 49 + host.view.safeAreaInsets.bottom && web.frame.maxY <= tabs.frame.minY + 1)
+            check("four-tabs-portrait-layout", tabs.bounds.height >= 49 + host.view.safeAreaInsets.bottom && web.frame.maxY <= tabs.frame.minY + 1 && navigation.frame.minY >= host.view.safeAreaInsets.top && navigation.frame.maxY <= web.frame.minY + 1 && navigation.bounds.height >= 44)
             scene.requestGeometryUpdate(.iOS(interfaceOrientations: .landscapeRight))
             _ = await until { scene.interfaceOrientation == .landscapeRight }; await wait(0.5)
             snapshot("hd-tabs-landscape")
-            check("four-tabs-landscape-layout", tabs.bounds.height >= 49 + host.view.safeAreaInsets.bottom && web.frame.maxY <= tabs.frame.minY + 1)
+            check("four-tabs-landscape-layout", tabs.bounds.height >= 49 + host.view.safeAreaInsets.bottom && web.frame.maxY <= tabs.frame.minY + 1 && navigation.frame.minY >= host.view.safeAreaInsets.top && navigation.frame.maxY <= web.frame.minY + 1 && navigation.bounds.height >= 44)
             browser.tabBar(tabs, didSelect: tabItems[3])
             let settingsLoaded = await until { !web.isLoading && web.url?.path == "/settings" && tabs.selectedItem?.tag == 3 }
             check("settings-after-hd-highlights-fourth-tab", settingsLoaded)
@@ -139,6 +140,94 @@ import WebKit
             _ = await until { !web.isLoading && tabs.selectedItem?.tag == 0 }
             scene.requestGeometryUpdate(.iOS(interfaceOrientations: .portrait))
             _ = await until { scene.interfaceOrientation == .portrait }; await wait(0.5)
+            // Native navigation follows both full loads and SPA history. Tab roots
+            // never expose a back button into another tab's browser history.
+            func tapNavigationBack() throws {
+                let item = try testRequire(navigation.topItem?.leftBarButtonItem, "Missing native back button")
+                let action = try testRequire(item.action, "Missing native back action")
+                UIApplication.shared.sendAction(action, to: item.target, from: item, for: nil)
+            }
+            for (index, title) in [(0, "首页"), (1, "直播"), (2, "高清专区"), (3, "设置")] {
+                browser.tabBar(tabs, didSelect: tabItems[index])
+                let loaded = await until { !web.isLoading && navigation.topItem?.title == title }
+                check("navigation-root-\(index)", loaded && navigation.topItem?.leftBarButtonItem == nil && tabs.selectedItem?.tag == index)
+            }
+            _ = try await web.evaluateJavaScript("history.pushState({},'', '/about')")
+            _ = await until { navigation.topItem?.title == "关于 HomeTV" }
+            check("navigation-about-has-back", navigation.topItem?.leftBarButtonItem?.accessibilityLabel == "返回")
+            try tapNavigationBack()
+            let aboutBack = await until { navigation.topItem?.title == "设置" && web.url?.path == "/settings" }
+            check("navigation-about-back-to-settings", aboutBack)
+            browser.tabBar(tabs, didSelect: tabItems[2])
+            _ = await until { !web.isLoading && web.url?.path == "/hd" }
+            _ = try await web.evaluateJavaScript("window.navigationFixture='preserved';history.replaceState({},'', '/hd?site=hdzone');history.pushState({},'', '/hd/hdzone?url=fixture')")
+            let detailReady = await until { navigation.topItem?.title == "资源详情" && navigation.topItem?.leftBarButtonItem != nil }
+            check("navigation-spa-detail-updates-title-and-tab", detailReady && tabs.selectedItem?.tag == 2)
+            await wait(0.5) // Capture after the system tab selection animation settles.
+            snapshot("navigation-hd-detail-portrait")
+            try tapNavigationBack()
+            let detailBack = await until { web.url?.path == "/hd" && navigation.topItem?.leftBarButtonItem == nil }
+            let state = try await web.evaluateJavaScript("window.navigationFixture") as? String
+            check("navigation-back-preserves-filter-and-document", detailBack && web.url?.query == "site=hdzone" && state == "preserved")
+            browser.tabBar(tabs, didSelect: tabItems[0])
+            _ = await until { !web.isLoading && navigation.topItem?.title == "首页" }
+            web.load(URLRequest(url: origin.appendingPathComponent("hd/hdzone")))
+            _ = await until { !web.isLoading && navigation.topItem?.title == "资源详情" }
+            try tapNavigationBack()
+            let directBack = await until { !web.isLoading && web.url?.path == "/hd" && web.url?.query == "site=hdzone" }
+            check("navigation-direct-detail-falls-back-to-catalog", directBack && navigation.topItem?.leftBarButtonItem == nil)
+            browser.tabBar(tabs, didSelect: tabItems[0])
+            _ = await until { !web.isLoading && navigation.topItem?.title == "首页" }
+            _ = try await web.evaluateJavaScript("history.pushState({},'', '/?s=movie');history.pushState({},'', '/watch?id=42')")
+            _ = await until { navigation.topItem?.title == "影片详情" }
+            try tapNavigationBack()
+            let searchBack = await until { navigation.topItem?.title == "搜索结果" && web.url?.query == "s=movie" }
+            check("navigation-watch-back-to-search", searchBack && navigation.topItem?.leftBarButtonItem != nil)
+            try tapNavigationBack()
+            _ = await until { navigation.topItem?.title == "首页" }
+            check("navigation-search-back-to-home", navigation.topItem?.leftBarButtonItem == nil && tabs.selectedItem?.tag == 0)
+            // Theme changes come through the actual document-start bridge. Compare
+            // the native bars to the web CSS, including full document navigation.
+            func nativeColorsMatchPage() async throws -> Bool {
+                let palette = try testRequire(try await web.evaluateJavaScript("Object.fromEntries(['surface','page','content','muted','accent'].map(k=>[k,getComputedStyle(document.documentElement).getPropertyValue('--c-'+k).trim()]))") as? [String: String], "Missing fixture theme palette")
+                func matches(_ actual: UIColor?, _ key: String) -> Bool {
+                    let channels = (palette[key] ?? "").split(separator: " ").compactMap { Double($0) }
+                    guard channels.count == 3 else { return false }
+                    let expected = UIColor(red: channels[0] / 255, green: channels[1] / 255, blue: channels[2] / 255, alpha: 1)
+                    return actual?.isEqual(expected) == true
+                }
+                return matches(navigation.standardAppearance.backgroundColor, "surface")
+                    && matches(navigation.standardAppearance.titleTextAttributes[.foregroundColor] as? UIColor, "content")
+                    && matches(tabs.standardAppearance.backgroundColor, "surface")
+                    && matches(tabs.tintColor, "accent") && matches(tabs.unselectedItemTintColor, "muted")
+                    && matches(host.view.backgroundColor, "surface") && matches(web.backgroundColor, "page")
+            }
+            let systemThemeBefore = try await web.evaluateJavaScript("matchMedia('(prefers-color-scheme: dark)').matches") as? Bool
+            for dark in [true, false] {
+                _ = try await web.evaluateJavaScript("localStorage.setItem('fixture-theme','\(dark ? "dark" : "light")');document.documentElement.classList.toggle('dark',\(dark))")
+                _ = await until { browser.preferredStatusBarStyle == (dark ? .lightContent : .darkContent) }
+                await wait(0.5)
+                check(dark ? "theme-dark-matches-web" : "theme-light-matches-web", try await nativeColorsMatchPage())
+                snapshot(dark ? "navigation-theme-dark" : "navigation-theme-light")
+            }
+            browser.tabBar(tabs, didSelect: tabItems[3])
+            _ = await until { !web.isLoading && web.url?.path == "/settings" }
+            let retainedColors = try await nativeColorsMatchPage()
+            check("theme-retained-across-document-navigation", browser.preferredStatusBarStyle == .darkContent && retainedColors)
+            let systemThemeAfter = try await web.evaluateJavaScript("matchMedia('(prefers-color-scheme: dark)').matches") as? Bool
+            check("theme-does-not-override-web-system-preference", systemThemeBefore == systemThemeAfter && web.overrideUserInterfaceStyle == .unspecified && host.overrideUserInterfaceStyle == .unspecified)
+            _ = try await web.evaluateJavaScript("localStorage.setItem('fixture-theme','dark');document.documentElement.classList.add('dark')")
+            _ = await until { browser.preferredStatusBarStyle == .lightContent }
+            scene.requestGeometryUpdate(.iOS(interfaceOrientations: .landscapeRight))
+            _ = await until { scene.interfaceOrientation == .landscapeRight }; await wait(0.5)
+            snapshot("navigation-theme-dark-landscape")
+            scene.requestGeometryUpdate(.iOS(interfaceOrientations: .portrait))
+            _ = await until { scene.interfaceOrientation == .portrait }
+            browser.tabBar(tabs, didSelect: tabItems[0])
+            _ = await until { !web.isLoading && navigation.topItem?.title == "首页" }
+            if CommandLine.arguments.contains("--navigation-only") {
+                try writeReport("player-integration.json"); fflush(stdout); return
+            }
             if fault == nil {
                 let downloads = OfflineDownloads.shared
                 for item in downloads.videos { try downloads.delete(item.id) }
@@ -350,6 +439,36 @@ import WebKit
                 rc.rotateButton.sendActions(for: .touchUpInside); await wait(0.7)
             }
             check("rotation-keeps-item-and-progress", re.playerItem === itemBeforeRotation && re.currentTime >= positionBeforeRotation && re.isPlaying)
+            rc.playButton.sendActions(for: .touchUpInside) // Inspect sheets without natural auto-next.
+            let originalEpisode = rotation.session.episodes[0]
+            let longEpisodeTitle = "第一集 · 这是用于检查长标题完整显示的特别篇：当故事跨越山川与城市，仍然保留所有章节名称和补充说明"
+            rotation.session.episodes[0] = Episode(url: originalEpisode.url, title: longEpisodeTitle, position: originalEpisode.position)
+            for dark in [false, true] {
+                _ = try await web.evaluateJavaScript("localStorage.setItem('fixture-theme','\(dark ? "dark" : "light")');document.documentElement.classList.toggle('dark',\(dark))")
+                _ = await until { NativeTheme.current.dark == dark }
+                rc.episodesButton.sendActions(for: .touchUpInside); await wait(0.6)
+                let sheet = try testRequire(rotation.presentedViewController as? UINavigationController, "Episode sheet")
+                let list = try testRequire(sheet.topViewController as? UITableViewController, "Episode list")
+                let currentCell = try testRequire(list.tableView.cellForRow(at: IndexPath(row: 0, section: 0)), "Current episode cell")
+                let theme = NativeTheme.current
+                let prefix = dark ? "episode-sheet-dark" : "episode-sheet-light"
+                check(prefix + "-matches-page", sheet.overrideUserInterfaceStyle == theme.style && sheet.navigationBar.standardAppearance.backgroundColor == theme.surface && list.tableView.backgroundColor == theme.page)
+                check(prefix + "-current-and-long-title", currentCell.accessoryType == .checkmark && currentCell.detailTextLabel?.text == "当前集" && currentCell.textLabel?.text == longEpisodeTitle && currentCell.textLabel?.numberOfLines == 0 && currentCell.frame.height > 76)
+                snapshot(prefix + "-portrait")
+                if dark {
+                    scene.requestGeometryUpdate(.iOS(interfaceOrientations: .landscapeRight))
+                    _ = await until { scene.interfaceOrientation == .landscapeRight }; await wait(0.5)
+                    check("episode-sheet-rotation-keeps-current", rotation.session.index == 0 && !re.isPlaying && list.tableView.cellForRow(at: IndexPath(row: 0, section: 0))?.accessoryType == .checkmark)
+                    snapshot(prefix + "-landscape")
+                    scene.requestGeometryUpdate(.iOS(interfaceOrientations: .portrait))
+                    _ = await until { scene.interfaceOrientation == .portrait }; await wait(0.3)
+                }
+                let done = try testRequire(list.navigationItem.rightBarButtonItem, "Episode sheet Done button")
+                UIApplication.shared.sendAction(try testRequire(done.action, "Episode sheet Done action"), to: done.target, from: done, for: nil)
+                let closed = await until { rotation.presentedViewController == nil }
+                check(prefix + "-dismiss-preserves-pause", closed && rotation.session.index == 0 && !re.isPlaying)
+            }
+            rc.playButton.sendActions(for: .touchUpInside)
             rc.episodesButton.sendActions(for: .touchUpInside); await wait(0.4)
             if let nav = rotation.presentedViewController as? UINavigationController, let table = nav.topViewController as? UITableViewController {
                 rotation.tableView(table.tableView, didSelectRowAt: IndexPath(row: 1, section: 0))

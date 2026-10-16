@@ -19,6 +19,7 @@ final class PlayerController: UIViewController, UITableViewDataSource, UITableVi
     private var stoppedDuration: Double?
     private var resolvedURL: URL?, proxied = false
     private var episodePicker: UIViewController?
+    private var episodeTheme = NativeTheme.current
     private var returnOrientation: UIInterfaceOrientationMask?
     private let playbackPosition: PlaybackPosition
 
@@ -127,6 +128,7 @@ final class PlayerController: UIViewController, UITableViewDataSource, UITableVi
         player.playerReadyToPlay = nil; player.playerPlayFailed = nil; player.playerDidToEnd = nil
         engine.stop()
         session.index = index; userPaused = false; sleeping = false; finished = false; proxied = false
+        ((episodePicker as? UINavigationController)?.topViewController as? UITableViewController)?.tableView.reloadData()
         startPlaybackWork()
         stoppedDuration = nil
         playbackPosition.selectEpisode(index)
@@ -319,16 +321,49 @@ final class PlayerController: UIViewController, UITableViewDataSource, UITableVi
         else { dismiss(animated: true, completion: finish) }
     }
     @objc private func episodes() {
-        let controller = UITableViewController(style: .plain); controller.title = "选集"; controller.tableView.dataSource = self; controller.tableView.delegate = self
+        guard presentedViewController == nil else { return }
+        episodeTheme = .current
+        let controller = UITableViewController(style: .insetGrouped)
+        controller.title = "选集"; controller.tableView.dataSource = self; controller.tableView.delegate = self
+        controller.tableView.backgroundColor = episodeTheme.page
+        controller.tableView.separatorColor = episodeTheme.line
+        controller.tableView.rowHeight = UITableView.automaticDimension
+        controller.tableView.estimatedRowHeight = 64
+        controller.tableView.tintColor = episodeTheme.accent
         let nav = UINavigationController(rootViewController: controller); nav.modalPresentationStyle = .pageSheet
-        controller.navigationItem.rightBarButtonItem = UIBarButtonItem(title: "完成", style: .done, target: self, action: #selector(dismissEpisodes))
-        nav.sheetPresentationController?.detents = [.medium(), .large()]; episodePicker = nav; present(nav, animated: true)
+        nav.overrideUserInterfaceStyle = episodeTheme.style
+        nav.view.backgroundColor = episodeTheme.surface
+        episodeTheme.apply(to: nav.navigationBar)
+        controller.navigationItem.rightBarButtonItem = UIBarButtonItem(title: "完成", style: .plain, target: self, action: #selector(dismissEpisodes))
+        controller.navigationItem.rightBarButtonItem?.tintColor = episodeTheme.accent
+        nav.sheetPresentationController?.detents = [.medium(), .large()]
+        nav.sheetPresentationController?.prefersGrabberVisible = true
+        episodePicker = nav
+        present(nav, animated: true) { [weak self, weak controller] in
+            guard let self, self.session.episodes.indices.contains(self.session.index) else { return }
+            controller?.tableView.scrollToRow(at: IndexPath(row: self.session.index, section: 0), at: .middle, animated: false)
+        }
     }
     @objc private func dismissEpisodes() { episodePicker?.dismiss(animated: true); episodePicker = nil }
     func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int { session.episodes.count }
     func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
-        let cell = UITableViewCell(style: .default, reuseIdentifier: nil); cell.textLabel?.text = session.episodes[indexPath.row].title
-        cell.accessoryType = indexPath.row == session.index ? .checkmark : .none; return cell
+        let current = indexPath.row == session.index
+        let cell = UITableViewCell(style: .subtitle, reuseIdentifier: nil)
+        cell.textLabel?.text = session.episodes[indexPath.row].title
+        cell.textLabel?.numberOfLines = 0
+        cell.textLabel?.font = .preferredFont(forTextStyle: .body)
+        cell.textLabel?.adjustsFontForContentSizeCategory = true
+        cell.textLabel?.textColor = current ? episodeTheme.accent : episodeTheme.content
+        cell.detailTextLabel?.text = current ? "当前集" : nil
+        cell.detailTextLabel?.textColor = episodeTheme.muted
+        cell.detailTextLabel?.font = .preferredFont(forTextStyle: .caption1)
+        cell.detailTextLabel?.adjustsFontForContentSizeCategory = true
+        cell.backgroundColor = current ? episodeTheme.chip : episodeTheme.surface
+        cell.tintColor = episodeTheme.accent
+        let selected = UIView(); selected.backgroundColor = episodeTheme.hover; cell.selectedBackgroundView = selected
+        cell.accessoryType = current ? .checkmark : .none
+        cell.accessibilityIdentifier = "player.episode.\(indexPath.row)"
+        return cell
     }
     func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) { dismissEpisodes(); selectEpisode(indexPath.row) }
     deinit { tick?.invalidate(); resolveTask?.cancel(); NotificationCenter.default.removeObserver(self) }

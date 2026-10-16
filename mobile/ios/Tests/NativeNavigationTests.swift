@@ -48,5 +48,26 @@ func runNativeNavigationTests() throws {
     try testCheck(NativeNavigation.url(forTab: 2, origin: origin, currentURL: hd, retrying: true) == hd)
     let hdWatch = try testRequire(URL(string: "/watch?id=42&section=hd", relativeTo: origin)?.absoluteURL, "Invalid HD watch fixture")
     try testCheck(NativeNavigation.url(forTab: 2, origin: origin, currentURL: hdWatch) == hd, "HD tab must still leave a playback page")
-    print("iOS native navigation: 21 regression scenarios passed")
+    func url(_ path: String) throws -> URL { try testRequire(URL(string: path, relativeTo: origin)?.absoluteURL, "Invalid page fixture") }
+    for (path, title) in [("/", "首页"), ("/live/", "直播"), ("/hd?site=hdzone", "高清专区"), ("/settings", "设置")] {
+        let pageURL = try url(path)
+        try testCheck(NativeNavigation.page(for: pageURL, origin: origin)?.title == title)
+        try testCheck(NativeNavigation.backURL(from: pageURL, previous: origin.appendingPathComponent("about"), origin: origin) == nil, "Tab roots must not navigate back to another tab")
+    }
+    let search = try url("/?s=movie")
+    try testCheck(NativeNavigation.page(for: search, origin: origin)?.title == "搜索结果" && NativeNavigation.page(for: search, origin: origin)?.parent == origin)
+    let watch = try url("/watch?id=42")
+    try testCheck(NativeNavigation.backURL(from: watch, previous: search, origin: origin) == search, "Back must preserve search history")
+    try testCheck(NativeNavigation.backURL(from: watch, previous: hd, origin: origin) == origin, "Cross-tab history must use the page parent")
+    let detail = try url("/hd/hdzone?url=https%3A%2F%2Fexample.com%2Ffilm")
+    let filtered = try url("/hd?site=hdzone")
+    try testCheck(NativeNavigation.page(for: detail, origin: origin)?.title == "资源详情" && NativeNavigation.backURL(from: detail, previous: origin, origin: origin) == filtered)
+    try testCheck(NativeNavigation.backURL(from: detail, previous: filtered, origin: origin) == filtered)
+    let about = try url("/about/")
+    try testCheck(NativeNavigation.page(for: about, origin: origin)?.title == "关于 HomeTV" && NativeNavigation.backURL(from: about, previous: nil, origin: origin) == origin.appendingPathComponent("settings"))
+    try testCheck(NativeNavigation.backURL(from: hdWatch, previous: nil, origin: origin) == hd)
+    let foreign = try url("https://other.example.com/hd/hdzone")
+    try testCheck(NativeNavigation.page(for: foreign, origin: origin) == nil && NativeNavigation.backURL(from: foreign, previous: origin, origin: origin) == nil)
+    try testCheck(NativeNavigation.backURL(from: detail, previous: foreign, origin: origin) == filtered, "Foreign history must never become a native back destination")
+    print("iOS native navigation: 28 regression scenarios passed")
 }

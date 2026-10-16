@@ -6,6 +6,12 @@ final class BrowserController: UIViewController, WKScriptMessageHandler, WKNavig
     private var origin: URL?
     private var player: PlayerController?
     private let status = UILabel()
+    private let navigationBar = UINavigationBar()
+    private let pageNavigationItem = UINavigationItem(title: "首页")
+    private var navigationURL: URL?
+    private let bottomBackground = UIView()
+    private var darkTheme = UserDefaults.standard.object(forKey: "native.theme.dark") as? Bool ?? true
+    override var preferredStatusBarStyle: UIStatusBarStyle { darkTheme ? .lightContent : .darkContent }
     private let tabBar = UITabBar()
     private var tabBarHeight: NSLayoutConstraint!
     private let connectionStatus = UIStackView()
@@ -15,7 +21,7 @@ final class BrowserController: UIViewController, WKScriptMessageHandler, WKNavig
     private var storageKey: String { "native.pending." + (origin?.absoluteString ?? "") }
 
     override func viewDidLoad() {
-        super.viewDidLoad(); view.backgroundColor = .black
+        super.viewDidLoad(); view.backgroundColor = .systemBackground
         let config = WKWebViewConfiguration()
         config.allowsInlineMediaPlayback = true
         config.applicationNameForUserAgent = "LibreTVNative/1"
@@ -26,15 +32,14 @@ final class BrowserController: UIViewController, WKScriptMessageHandler, WKNavig
         window.addEventListener('libretv:add-download',e=>{e.stopImmediatePropagation();window.__LIBRETV_NATIVE__.postMessage({type:'download',url:e.detail?.url,title:e.detail?.title});});
         window.dispatchEvent(new Event('libretv:native-ready'));
         """
-        config.userContentController.addUserScript(WKUserScript(source: bridge + "\n" + NativeNavigation.script, injectionTime: .atDocumentStart, forMainFrameOnly: true))
+        config.userContentController.addUserScript(WKUserScript(source: bridge + "\n" + NativeNavigation.script + "\n" + NativeNavigation.themeScript, injectionTime: .atDocumentStart, forMainFrameOnly: true))
         web = WKWebView(frame: .zero, configuration: config); web.navigationDelegate = self
         web.isOpaque = false; web.backgroundColor = .black
+        navigationBar.accessibilityIdentifier = "browser.navigation"
+        navigationBar.items = [pageNavigationItem]
         tabBar.delegate = self
         tabBar.items = [UITabBarItem(title: "首页", image: UIImage(systemName: "house"), tag: 0), UITabBarItem(title: "直播", image: UIImage(systemName: "play.tv"), tag: 1), UITabBarItem(title: "高清", image: UIImage(systemName: "4k.tv"), tag: 2), UITabBarItem(title: "设置", image: UIImage(systemName: "gearshape"), tag: 3)]
         tabBar.selectedItem = tabBar.items?.first
-        let appearance = UITabBarAppearance(); appearance.configureWithOpaqueBackground()
-        tabBar.standardAppearance = appearance; tabBar.scrollEdgeAppearance = appearance
-        let bottomBackground = UIView(); bottomBackground.backgroundColor = .systemBackground
         status.textColor = .white; status.numberOfLines = 0; status.textAlignment = .center
         retry.setTitle("重试", for: .normal); retry.isHidden = true
         retry.heightAnchor.constraint(greaterThanOrEqualToConstant: 44).isActive = true
@@ -46,14 +51,16 @@ final class BrowserController: UIViewController, WKScriptMessageHandler, WKNavig
         OfflineDownloads.shared.restore()
         connectionStatus.axis = .vertical; connectionStatus.spacing = 12
         connectionStatus.addArrangedSubview(status); connectionStatus.addArrangedSubview(retry); connectionStatus.addArrangedSubview(offlineButton)
-        for sub in [web!, connectionStatus, bottomBackground, tabBar] { sub.translatesAutoresizingMaskIntoConstraints = false; view.addSubview(sub) }
+        for sub in [web!, connectionStatus, bottomBackground, tabBar, navigationBar] { sub.translatesAutoresizingMaskIntoConstraints = false; view.addSubview(sub) }
         tabBarHeight = tabBar.heightAnchor.constraint(equalToConstant: 83)
         NSLayoutConstraint.activate([
             tabBar.bottomAnchor.constraint(equalTo: view.bottomAnchor), tabBar.leadingAnchor.constraint(equalTo: view.leadingAnchor), tabBar.trailingAnchor.constraint(equalTo: view.trailingAnchor), tabBarHeight,
             bottomBackground.topAnchor.constraint(equalTo: tabBar.topAnchor), bottomBackground.bottomAnchor.constraint(equalTo: view.bottomAnchor), bottomBackground.leadingAnchor.constraint(equalTo: view.leadingAnchor), bottomBackground.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            web.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor), web.bottomAnchor.constraint(equalTo: tabBar.topAnchor), web.leadingAnchor.constraint(equalTo: view.leadingAnchor), web.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            navigationBar.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor), navigationBar.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor), navigationBar.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor), navigationBar.heightAnchor.constraint(equalToConstant: 44),
+            web.topAnchor.constraint(equalTo: navigationBar.bottomAnchor), web.bottomAnchor.constraint(equalTo: tabBar.topAnchor), web.leadingAnchor.constraint(equalTo: view.leadingAnchor), web.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             connectionStatus.centerXAnchor.constraint(equalTo: web.centerXAnchor), connectionStatus.centerYAnchor.constraint(equalTo: web.centerYAnchor), connectionStatus.widthAnchor.constraint(lessThanOrEqualTo: web.widthAnchor, constant: -40)
         ])
+        applyTheme(dark: darkTheme)
         let saved = UserDefaults.standard.string(forKey: "serviceURL").flatMap(serviceOrigin)
         let bundled = (Bundle.main.object(forInfoDictionaryKey: "HomeTVServiceURL") as? String).flatMap(serviceOrigin)
         if let url = bundled ?? saved { connect(url) }
@@ -68,10 +75,30 @@ final class BrowserController: UIViewController, WKScriptMessageHandler, WKNavig
         let height = max(49 + view.safeAreaInsets.bottom, fitted)
         if abs(tabBarHeight.constant - height) > 0.5 { tabBarHeight.constant = height }
     }
+    private func applyTheme(dark: Bool) {
+        darkTheme = dark
+        UserDefaults.standard.set(dark, forKey: "native.theme.dark")
+        let theme = NativeTheme(dark: dark)
+        view.backgroundColor = theme.surface; view.tintColor = theme.accent
+        bottomBackground.backgroundColor = theme.surface
+        web.backgroundColor = theme.page; web.scrollView.backgroundColor = theme.page
+        status.textColor = theme.content
+        theme.apply(to: navigationBar)
+        tabBar.overrideUserInterfaceStyle = theme.style
+        let appearance = UITabBarAppearance(); appearance.configureWithOpaqueBackground()
+        appearance.backgroundColor = theme.surface; appearance.shadowColor = theme.line
+        for item in [appearance.stackedLayoutAppearance, appearance.inlineLayoutAppearance, appearance.compactInlineLayoutAppearance] {
+            item.normal.iconColor = theme.muted; item.normal.titleTextAttributes = [.foregroundColor: theme.muted]
+            item.selected.iconColor = theme.accent; item.selected.titleTextAttributes = [.foregroundColor: theme.accent]
+        }
+        tabBar.standardAppearance = appearance; tabBar.scrollEdgeAppearance = appearance
+        tabBar.tintColor = theme.accent; tabBar.unselectedItemTintColor = theme.muted
+        setNeedsStatusBarAppearanceUpdate()
+    }
     private func connect(_ url: URL) {
         origin = url; UserDefaults.standard.set(url.absoluteString, forKey: "serviceURL")
         pending = UserDefaults.standard.data(forKey: storageKey).flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: [String: Any]] } ?? [:]
-        showHome(); retry.isHidden = true; offlineButton.isHidden = false
+        showHome(); updateSelectedTab(url); retry.isHidden = true; offlineButton.isHidden = false
         status.text = "正在连接…"; web.load(URLRequest(url: url))
     }
     private func showHome() {
@@ -81,6 +108,13 @@ final class BrowserController: UIViewController, WKScriptMessageHandler, WKNavig
         guard let origin, let url = NativeNavigation.url(forTab: item.tag, origin: origin, currentURL: web.url, retrying: !retry.isHidden) else { return }
         retry.isHidden = true; offlineButton.isHidden = false; status.text = "正在连接…"
         web.load(URLRequest(url: url))
+    }
+    @objc private func navigateBack() {
+        guard let origin, let current = navigationURL ?? web.url,
+              let destination = NativeNavigation.backURL(from: current, previous: web.backForwardList.backItem?.url, origin: origin) else { return }
+        view.endEditing(true)
+        if let previous = web.backForwardList.backItem, previous.url == destination { web.go(to: previous) }
+        else { web.load(URLRequest(url: destination)) }
     }
     @objc private func showDownloads() {
         guard presentedViewController == nil else { return }
@@ -115,6 +149,16 @@ final class BrowserController: UIViewController, WKScriptMessageHandler, WKNavig
         guard let origin, let index = NativeNavigation.tabIndex(for: url, origin: origin),
               let items = tabBar.items, items.indices.contains(index) else { return }
         tabBar.selectedItem = items[index]
+        navigationURL = url
+        if let page = NativeNavigation.page(for: url, origin: origin) {
+            pageNavigationItem.title = page.title
+            if page.parent != nil {
+                let back = UIBarButtonItem(image: UIImage(systemName: "chevron.backward"), style: .plain, target: self, action: #selector(navigateBack))
+                back.accessibilityLabel = "返回"
+                back.accessibilityIdentifier = "browser.back"
+                pageNavigationItem.leftBarButtonItem = back
+            } else { pageNavigationItem.leftBarButtonItem = nil }
+        }
     }
     private func connectionFailed(_ error: Error) {
         let failure = error as NSError
@@ -129,6 +173,7 @@ final class BrowserController: UIViewController, WKScriptMessageHandler, WKNavig
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
         guard message.frameInfo.isMainFrame, let origin, let frame = message.frameInfo.request.url, sameOrigin(frame, origin),
               let body = message.body as? [String: Any], let type = body["type"] as? String else { return }
+        if type == "theme", let dark = body["dark"] as? Bool { applyTheme(dark: dark); return }
         if type == "downloads" { showDownloads(); return }
         if type == "download", let text = body["url"] as? String, let url = URL(string: text, relativeTo: origin)?.absoluteURL, let title = body["title"] as? String { download(url: url, title: title); return }
         if type == "ready" { flush(); return }
