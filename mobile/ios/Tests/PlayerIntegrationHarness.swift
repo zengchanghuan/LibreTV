@@ -439,41 +439,72 @@ import WebKit
                 rc.rotateButton.sendActions(for: .touchUpInside); await wait(0.7)
             }
             check("rotation-keeps-item-and-progress", re.playerItem === itemBeforeRotation && re.currentTime >= positionBeforeRotation && re.isPlaying)
-            rc.playButton.sendActions(for: .touchUpInside) // Inspect sheets without natural auto-next.
-            let originalEpisode = rotation.session.episodes[0]
+            let videoSurface = try testRequire(descendants(rotation.view).first { $0.accessibilityIdentifier == "player.video-surface" }, "Video surface")
+            @MainActor func checkEpisodeOverlay(_ name: String, _ picker: EpisodePickerController, landscape: Bool) {
+                let video = videoSurface.frame
+                let panel = picker.panel.frame
+                let renderer = re.view.convert(re.view.bounds, to: rotation.view)
+                check(name + "-video-unchanged", video == rotation.view.bounds && renderer == rotation.view.bounds && re.playerItem === itemBeforeRotation)
+                check(name + "-placement", landscape ? (panel.maxX == video.maxX && panel.width < video.width * 0.5 && panel.height == video.height) : (panel.maxY == video.maxY && panel.width == video.width && panel.height < video.height * 0.6))
+                let safe = rotation.view.safeAreaLayoutGuide.layoutFrame
+                let close = picker.closeButton.convert(picker.closeButton.bounds, to: rotation.view)
+                let grid = picker.collection.convert(picker.collection.bounds, to: rotation.view)
+                check(name + "-safe-controls", safe.contains(close) && safe.contains(grid) && close.width >= 44 && close.height >= 44 && !close.intersects(grid))
+                let outside = landscape ? CGPoint(x: panel.minX / 2, y: video.midY) : CGPoint(x: video.midX, y: panel.minY / 2)
+                check(name + "-outside-tap-isolated", picker.view.hitTest(outside, with: nil) === picker.backdrop && rc.isHidden)
+            }
+            let beforePaneTime = re.currentTime
+            rc.episodesButton.sendActions(for: .touchUpInside); await wait(0.5)
+            check("episode-pane-keeps-playing", re.isPlaying && re.playerItem === itemBeforeRotation && re.currentTime > beforePaneTime && rotation.presentedViewController == nil && videoSurface.frame == rotation.view.bounds)
+            rc.episodesButton.sendActions(for: .touchUpInside); await wait(0.2)
+            check("episode-pane-toggle-restores-controls", rotation.children.isEmpty && !rc.isHidden && videoSurface.frame == rotation.view.bounds && re.isPlaying && re.playerItem === itemBeforeRotation)
+            rc.playButton.sendActions(for: .touchUpInside) // Inspect drawers without natural auto-next.
+            let originalEpisodes = rotation.session.episodes
+            let originalEpisode = originalEpisodes[0]
             let longEpisodeTitle = "第一集 · 这是用于检查长标题完整显示的特别篇：当故事跨越山川与城市，仍然保留所有章节名称和补充说明"
             rotation.session.episodes[0] = Episode(url: originalEpisode.url, title: longEpisodeTitle, position: originalEpisode.position)
+            rotation.session.episodes += (3...30).map { Episode(url: originalEpisode.url, title: "第\($0 + 10)集", position: 0) }
             for dark in [false, true] {
                 _ = try await web.evaluateJavaScript("localStorage.setItem('fixture-theme','\(dark ? "dark" : "light")');document.documentElement.classList.toggle('dark',\(dark))")
                 _ = await until { NativeTheme.current.dark == dark }
                 rc.episodesButton.sendActions(for: .touchUpInside); await wait(0.6)
-                let sheet = try testRequire(rotation.presentedViewController as? UINavigationController, "Episode sheet")
-                let list = try testRequire(sheet.topViewController as? UITableViewController, "Episode list")
-                let currentCell = try testRequire(list.tableView.cellForRow(at: IndexPath(row: 0, section: 0)), "Current episode cell")
-                let theme = NativeTheme.current
-                let prefix = dark ? "episode-sheet-dark" : "episode-sheet-light"
-                check(prefix + "-matches-page", sheet.overrideUserInterfaceStyle == theme.style && sheet.navigationBar.standardAppearance.backgroundColor == theme.surface && list.tableView.backgroundColor == theme.page)
-                check(prefix + "-current-and-long-title", currentCell.accessoryType == .checkmark && currentCell.detailTextLabel?.text == "当前集" && currentCell.textLabel?.text == longEpisodeTitle && currentCell.textLabel?.numberOfLines == 0 && currentCell.frame.height > 76)
+                let picker = try testRequire(rotation.children.first as? EpisodePickerController, "Episode drawer")
+                let currentCell = try testRequire(picker.collection.cellForItem(at: IndexPath(item: 0, section: 0)) as? EpisodeGridCell, "Current episode cell")
+                let prefix = dark ? "episode-drawer-dark" : "episode-drawer-light"
+                check(prefix + "-transparent-player-style", picker.view.backgroundColor == .clear && picker.collection.backgroundColor == .clear && picker.panel.backgroundColor == NativeTheme(dark: true).page.withAlphaComponent(0.82))
+                check(prefix + "-current-and-long-title", currentCell.accessibilityTraits.contains(.selected) && currentCell.label.text == longEpisodeTitle && currentCell.label.numberOfLines == 0 && currentCell.frame.height > 76)
+                let second = try testRequire(picker.collection.layoutAttributesForItem(at: IndexPath(item: 1, section: 0)), "Second episode layout")
+                let third = try testRequire(picker.collection.layoutAttributesForItem(at: IndexPath(item: 2, section: 0)), "Third episode layout")
+                check(prefix + "-numbered-grid", second.frame.minY == third.frame.minY && second.frame.maxX < third.frame.minX && second.frame.width >= 44)
+                let thirdCell = picker.collection.cellForItem(at: IndexPath(item: 2, section: 0)) as? EpisodeGridCell
+                check(prefix + "-preserves-source-episode-number", thirdCell?.label.text == "13")
+                checkEpisodeOverlay(prefix + "-portrait", picker, landscape: false)
                 snapshot(prefix + "-portrait")
                 if dark {
                     scene.requestGeometryUpdate(.iOS(interfaceOrientations: .landscapeRight))
                     _ = await until { scene.interfaceOrientation == .landscapeRight }; await wait(0.5)
-                    check("episode-sheet-rotation-keeps-current", rotation.session.index == 0 && !re.isPlaying && list.tableView.cellForRow(at: IndexPath(row: 0, section: 0))?.accessoryType == .checkmark)
+                    check("episode-pane-rotation-keeps-current", rotation.session.index == 0 && !re.isPlaying && picker.collection.cellForItem(at: IndexPath(item: 0, section: 0))?.accessibilityTraits.contains(.selected) == true)
+                    checkEpisodeOverlay(prefix + "-landscape", picker, landscape: true)
                     snapshot(prefix + "-landscape")
+                    scene.requestGeometryUpdate(.iOS(interfaceOrientations: .landscapeLeft))
+                    _ = await until { scene.interfaceOrientation == .landscapeLeft }; await wait(0.4)
+                    checkEpisodeOverlay(prefix + "-landscape-left", picker, landscape: true)
+                    check("episode-pane-both-landscapes-preserve-item", re.playerItem === itemBeforeRotation && !re.isPlaying)
                     scene.requestGeometryUpdate(.iOS(interfaceOrientations: .portrait))
                     _ = await until { scene.interfaceOrientation == .portrait }; await wait(0.3)
                 }
-                let done = try testRequire(list.navigationItem.rightBarButtonItem, "Episode sheet Done button")
-                UIApplication.shared.sendAction(try testRequire(done.action, "Episode sheet Done action"), to: done.target, from: done, for: nil)
-                let closed = await until { rotation.presentedViewController == nil }
-                check(prefix + "-dismiss-preserves-pause", closed && rotation.session.index == 0 && !re.isPlaying)
+                // Exercise both dismissal affordances; neither may play/pause or seek.
+                (dark ? picker.backdrop : picker.closeButton).sendActions(for: .touchUpInside)
+                let closed = await until { rotation.children.isEmpty && videoSurface.frame == rotation.view.bounds }
+                check(prefix + "-dismiss-preserves-pause", closed && !rc.isHidden && rotation.session.index == 0 && !re.isPlaying && re.playerItem === itemBeforeRotation)
             }
+            rotation.session.episodes = originalEpisodes
             rc.playButton.sendActions(for: .touchUpInside)
             rc.episodesButton.sendActions(for: .touchUpInside); await wait(0.4)
-            if let nav = rotation.presentedViewController as? UINavigationController, let table = nav.topViewController as? UITableViewController {
-                rotation.tableView(table.tableView, didSelectRowAt: IndexPath(row: 1, section: 0))
+            if let picker = rotation.children.first as? EpisodePickerController {
+                picker.collectionView(picker.collection, didSelectItemAt: IndexPath(item: 1, section: 0))
                 _ = await until { rotation.session.index == 1 && re.isPlaying }
-                check("picker-selects-episode", rotation.session.index == 1 && re.currentTime >= 2 && re.currentTime < 6)
+                check("picker-selects-episode", rotation.session.index == 1 && re.currentTime >= 2 && re.currentTime < 6 && rotation.children.isEmpty && !rc.isHidden && videoSurface.frame == rotation.view.bounds)
             } else { check("picker-selects-episode", false) }
             rc.previousButton.sendActions(for: .touchUpInside)
             rc.nextButton.sendActions(for: .touchUpInside)
@@ -621,6 +652,7 @@ import WebKit
                 await wait(0.5) // A late geometry callback must not undo the restoration.
                 check(scenario + "-restores-home-orientation", returned && scene.interfaceOrientation == entry && (host.view.bounds.width > host.view.bounds.height) == landscapeHome)
                 check(scenario + "-closes-once", closeCount == 1)
+                if scenario == "close-with-episode-picker" { check("closing-player-removes-episode-pane", returning.children.isEmpty) }
                 if host.presentedViewController != nil { host.dismiss(animated: false); await wait() }
             }
 

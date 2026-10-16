@@ -1,7 +1,7 @@
 import UIKit
 import AVFoundation
 
-final class PlayerController: UIViewController, UITableViewDataSource, UITableViewDelegate {
+final class PlayerController: UIViewController {
     var session: PlaybackSession
     let origin: URL
     let cookies: [HTTPCookie]
@@ -18,8 +18,7 @@ final class PlayerController: UIViewController, UITableViewDataSource, UITableVi
     private var userPaused = false, sleeping = false, closed = false, finished = false
     private var stoppedDuration: Double?
     private var resolvedURL: URL?, proxied = false
-    private var episodePicker: UIViewController?
-    private var episodeTheme = NativeTheme.current
+    private var episodePicker: EpisodePickerController?
     private var returnOrientation: UIInterfaceOrientationMask?
     private let playbackPosition: PlaybackPosition
 
@@ -47,8 +46,8 @@ final class PlayerController: UIViewController, UITableViewDataSource, UITableVi
     }
     override func viewDidLoad() {
         super.viewDidLoad(); view.backgroundColor = .black
-        surface.translatesAutoresizingMaskIntoConstraints = false; view.addSubview(surface)
-        NSLayoutConstraint.activate([surface.topAnchor.constraint(equalTo: view.topAnchor), surface.bottomAnchor.constraint(equalTo: view.bottomAnchor), surface.leadingAnchor.constraint(equalTo: view.leadingAnchor), surface.trailingAnchor.constraint(equalTo: view.trailingAnchor)])
+        surface.accessibilityIdentifier = "player.video-surface"
+        surface.clipsToBounds = true; surface.frame = view.bounds; view.addSubview(surface)
         engine.shouldAutoPlay = false
         engine.canPlay = { [weak self] in
             guard let self, !self.closed, !self.sleeping else { return false }
@@ -107,6 +106,15 @@ final class PlayerController: UIViewController, UITableViewDataSource, UITableVi
         NotificationCenter.default.addObserver(self, selector: #selector(foreground), name: UIApplication.didBecomeActiveNotification, object: nil)
         load(session.index)
     }
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        layoutPlaybackRegions()
+    }
+    private func layoutPlaybackRegions() {
+        // Opening the drawer must never resize or move the video render surface.
+        surface.frame = view.bounds
+        episodePicker?.view.frame = view.bounds
+    }
     private func startPlaybackWork() {
         try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .moviePlayback)
         try? AVAudioSession.sharedInstance().setActive(true)
@@ -128,7 +136,7 @@ final class PlayerController: UIViewController, UITableViewDataSource, UITableVi
         player.playerReadyToPlay = nil; player.playerPlayFailed = nil; player.playerDidToEnd = nil
         engine.stop()
         session.index = index; userPaused = false; sleeping = false; finished = false; proxied = false
-        ((episodePicker as? UINavigationController)?.topViewController as? UITableViewController)?.tableView.reloadData()
+        episodePicker?.update(episodes: session.episodes, current: index)
         startPlaybackWork()
         stoppedDuration = nil
         playbackPosition.selectEpisode(index)
@@ -310,8 +318,8 @@ final class PlayerController: UIViewController, UITableViewDataSource, UITableVi
         let presenter = presentingViewController
         let orientation = returnOrientation ?? .portrait
         let onClose = onClose
-        // Dismiss from the presenter so an open episode sheet is removed along
-        // with the player. Restore only once the underlying page is visible.
+        dismissEpisodes()
+        // Restore only once the underlying page is visible.
         let finish = {
             presenter?.setNeedsUpdateOfSupportedInterfaceOrientations()
             scene?.requestGeometryUpdate(.iOS(interfaceOrientations: orientation))
@@ -321,51 +329,27 @@ final class PlayerController: UIViewController, UITableViewDataSource, UITableVi
         else { dismiss(animated: true, completion: finish) }
     }
     @objc private func episodes() {
-        guard presentedViewController == nil else { return }
-        episodeTheme = .current
-        let controller = UITableViewController(style: .insetGrouped)
-        controller.title = "选集"; controller.tableView.dataSource = self; controller.tableView.delegate = self
-        controller.tableView.backgroundColor = episodeTheme.page
-        controller.tableView.separatorColor = episodeTheme.line
-        controller.tableView.rowHeight = UITableView.automaticDimension
-        controller.tableView.estimatedRowHeight = 64
-        controller.tableView.tintColor = episodeTheme.accent
-        let nav = UINavigationController(rootViewController: controller); nav.modalPresentationStyle = .pageSheet
-        nav.overrideUserInterfaceStyle = episodeTheme.style
-        nav.view.backgroundColor = episodeTheme.surface
-        episodeTheme.apply(to: nav.navigationBar)
-        controller.navigationItem.rightBarButtonItem = UIBarButtonItem(title: "完成", style: .plain, target: self, action: #selector(dismissEpisodes))
-        controller.navigationItem.rightBarButtonItem?.tintColor = episodeTheme.accent
-        nav.sheetPresentationController?.detents = [.medium(), .large()]
-        nav.sheetPresentationController?.prefersGrabberVisible = true
-        episodePicker = nav
-        present(nav, animated: true) { [weak self, weak controller] in
-            guard let self, self.session.episodes.indices.contains(self.session.index) else { return }
-            controller?.tableView.scrollToRow(at: IndexPath(row: self.session.index, section: 0), at: .middle, animated: false)
+        guard !closed, presentedViewController == nil else { return }
+        if episodePicker != nil { dismissEpisodes(); return }
+        let picker = EpisodePickerController(episodes: session.episodes, current: session.index)
+        picker.onDismiss = { [weak self] in self?.dismissEpisodes() }
+        picker.onSelect = { [weak self] index in
+            self?.dismissEpisodes(); self?.selectEpisode(index)
         }
+        episodePicker = picker
+        controls.isHidden = true
+        addChild(picker); view.addSubview(picker.view)
+        layoutPlaybackRegions()
+        picker.didMove(toParent: self)
+        view.layoutIfNeeded(); picker.view.layoutIfNeeded()
     }
-    @objc private func dismissEpisodes() { episodePicker?.dismiss(animated: true); episodePicker = nil }
-    func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int { session.episodes.count }
-    func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
-        let current = indexPath.row == session.index
-        let cell = UITableViewCell(style: .subtitle, reuseIdentifier: nil)
-        cell.textLabel?.text = session.episodes[indexPath.row].title
-        cell.textLabel?.numberOfLines = 0
-        cell.textLabel?.font = .preferredFont(forTextStyle: .body)
-        cell.textLabel?.adjustsFontForContentSizeCategory = true
-        cell.textLabel?.textColor = current ? episodeTheme.accent : episodeTheme.content
-        cell.detailTextLabel?.text = current ? "当前集" : nil
-        cell.detailTextLabel?.textColor = episodeTheme.muted
-        cell.detailTextLabel?.font = .preferredFont(forTextStyle: .caption1)
-        cell.detailTextLabel?.adjustsFontForContentSizeCategory = true
-        cell.backgroundColor = current ? episodeTheme.chip : episodeTheme.surface
-        cell.tintColor = episodeTheme.accent
-        let selected = UIView(); selected.backgroundColor = episodeTheme.hover; cell.selectedBackgroundView = selected
-        cell.accessoryType = current ? .checkmark : .none
-        cell.accessibilityIdentifier = "player.episode.\(indexPath.row)"
-        return cell
+    @objc private func dismissEpisodes() {
+        guard let picker = episodePicker else { return }
+        picker.willMove(toParent: nil); picker.view.removeFromSuperview(); picker.removeFromParent()
+        episodePicker = nil
+        controls.isHidden = false
+        layoutPlaybackRegions()
     }
-    func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) { dismissEpisodes(); selectEpisode(indexPath.row) }
     deinit { tick?.invalidate(); resolveTask?.cancel(); NotificationCenter.default.removeObserver(self) }
 }
 
