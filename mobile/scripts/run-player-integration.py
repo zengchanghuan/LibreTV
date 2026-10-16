@@ -104,7 +104,8 @@ try:
         launch = sim('launch', '--terminate-running-process', '--stdout=' + stdout_path, '--stderr=' + stderr_path, device, bundle, *launch_args)
         pid = launch.rsplit(':', 1)[-1].strip()
         try:
-            for _ in range(180):
+            # Allow the default suite to include the sleep boundary matrix.
+            for _ in range(240):
                 errors = stderr.read_text(errors='replace') if stderr.exists() else ''
                 if 'PLAYER_REPORT_ERROR:' in errors:
                     subprocess.run(['kill', '-0', pid], check=True, capture_output=True)

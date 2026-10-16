@@ -594,6 +594,72 @@ import WebKit
                 }
             }
 
+            // Deadline races use the real engine and controls with an injected clock.
+            // Keep these 38 boundary checks in the default integration suite; the
+            // separate one-minute suite verifies actual unattended wall-clock timing.
+            for scenario in ["switch-before", "switch-at", "end-at", "late-end", "rotate-asleep", "background-expiry", "background-asleep"] {
+                let prefix = "sleep-boundary-" + scenario
+                var clock = Date(timeIntervalSince1970: 5000)
+                let deadline = SleepTimer(now: { clock })
+                let tested = PlayerController(session: session(), origin: origin, cookies: [], sleepTimer: deadline)
+                var boundaryEvents: [[String: Any]] = []
+                tested.onProgress = { boundaryEvents.append($0) }
+                tested.modalPresentationStyle = .fullScreen
+                host.present(tested, animated: false)
+                await wait()
+                let c = try testRequire(descendants(tested.view).compactMap { $0 as? HomeTVPlayerControls }.first, "Missing sleep boundary controls")
+                let z = try testRequire(c.player, "Missing sleep boundary player")
+                let e = try testRequire(z.currentPlayerManager as? ZFAVPlayerManager, "Missing sleep boundary engine")
+                let ready = await until { e.isPlaying && e.currentTime >= 4 }
+                check(prefix + "-ready", ready)
+                let oldEnd = try testRequire(z.playerDidToEnd, "Missing episode-end callback: " + scenario)
+                deadline.set(minutes: 1)
+                if scenario == "switch-before" {
+                    c.nextButton.sendActions(for: .touchUpInside)
+                    let switched = await until { tested.session.index == 1 && e.isPlaying }
+                    check(prefix + "-deadline-survives-switch", switched && deadline.minutesRemaining == 1)
+                }
+                if scenario == "background-expiry" {
+                    NotificationCenter.default.post(name: UIApplication.willResignActiveNotification, object: nil)
+                    check(prefix + "-paused-before-deadline", !e.isPlaying)
+                }
+                clock += 60
+                if scenario == "switch-at" { c.nextButton.sendActions(for: .touchUpInside) }
+                else if scenario == "end-at" { oldEnd(e) }
+                else { NotificationCenter.default.post(name: UIApplication.didBecomeActiveNotification, object: nil) }
+                _ = await until { boundaryEvents.contains { $0["reason"] as? String == "sleep" } }
+                await wait(0.3)
+                if scenario == "late-end" { oldEnd(e) }
+                if scenario == "rotate-asleep" {
+                    for mask: UIInterfaceOrientationMask in [.landscapeRight, .portrait] {
+                        scene.requestGeometryUpdate(.iOS(interfaceOrientations: mask))
+                        let rotated = await until { mask == .portrait ? scene.interfaceOrientation == .portrait : scene.interfaceOrientation == .landscapeRight }
+                        check(prefix + "-orientation-" + String(mask.rawValue), rotated && e.player == nil && !e.isPlaying && !UIApplication.shared.isIdleTimerDisabled)
+                    }
+                }
+                if scenario.hasPrefix("background") {
+                    for _ in 0..<2 {
+                        NotificationCenter.default.post(name: UIApplication.willResignActiveNotification, object: nil)
+                        NotificationCenter.default.post(name: UIApplication.didBecomeActiveNotification, object: nil)
+                    }
+                }
+                e.play()
+                await wait(0.4)
+                check(prefix + "-no-restart", !e.isPlaying && e.player == nil && !UIApplication.shared.isIdleTimerDisabled)
+                check(prefix + "-no-autonext", tested.session.index == (scenario == "switch-before" ? 1 : 0) && !tested.session.autoplayNext)
+                check(prefix + "-single-sleep", boundaryEvents.filter { $0["reason"] as? String == "sleep" }.count == 1)
+                // Explicit episode selection after stopping is intentional playback.
+                c.nextButton.sendActions(for: .touchUpInside)
+                if scenario != "switch-before" {
+                    let resumed = await until { tested.session.index == 1 && e.isPlaying }
+                    check(prefix + "-explicit-next-works", resumed && UIApplication.shared.isIdleTimerDisabled)
+                }
+                tested.closePlayer()
+                let dismissed = await until { host.presentedViewController == nil }
+                let portrait = await until { scene.interfaceOrientation == .portrait }
+                _ = try testRequire(dismissed && portrait ? true : nil, "Sleep boundary cleanup failed: " + scenario)
+            }
+
         } catch {
             aborted = true
             failures.append("harness-prerequisite")
