@@ -9,6 +9,7 @@ import argparse, json, shutil, subprocess, sys, tempfile, threading, time
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument("device")
+parser.add_argument("--sleep-minute-only", action="store_true", help="Verify the real one-minute menu and unattended stop")
 parser.add_argument("--offline-only", action="store_true", help="Run download and offline playback checks only")
 parser.add_argument("--verify-failure-reporting", action="store_true", help="Exercise missing prerequisites and a failed check before the normal suite")
 parser.add_argument("--inject-failure", choices=["missing-root", "missing-controls", "missing-player", "wrong-manager", "missing-reflection", "wrong-type", "failed-check", "progress-write", "report-write"])
@@ -94,7 +95,7 @@ try:
         # Reinstalls preserve simulator data; never accept a previous run's report.
         for name in ['player-integration.json', 'player-progress.json']:
             (container / name).unlink(missing_ok=True)
-        launch_args = ['--harness-failure=' + fault] if fault else (['--offline-only'] if args.offline_only else [])
+        launch_args = ['--harness-failure=' + fault] if fault else (['--sleep-minute-only'] if args.sleep_minute_only else ['--offline-only'] if args.offline_only else [])
         # simctl resolves absolute output paths inside the simulator's data root.
         stderr_path = '/tmp/' + work.name + '/stderr-' + (fault or 'normal') + '.log'
         stdout_path = '/tmp/' + work.name + '/stdout-' + (fault or 'normal') + '.log'

@@ -70,6 +70,47 @@ import WebKit
                 let reflected: Any? = fault == "wrong-type" ? "not a control" : Mirror(reflecting: host).children.first { $0.label == "missing" }?.value
                 _ = try testRequire(reflected as? HomeTVPlayerControls, "Missing or invalid reflected controls")
             }
+            if ProcessInfo.processInfo.arguments.contains("--sleep-minute-only") {
+                // Real elapsed time, real menu action, real media. Slow the 20s
+                // synthetic clip so it is still playing at the one-minute mark.
+                var minuteSession = session(autoplay: false)
+                minuteSession.rate = 0.25; minuteSession.episodes[0].position = 0
+                let minuteTimer = SleepTimer()
+                let minute = PlayerController(session: minuteSession, origin: origin, cookies: [], sleepTimer: minuteTimer)
+                var minuteEvents: [[String: Any]] = []
+                minute.onProgress = { minuteEvents.append($0) }
+                minute.modalPresentationStyle = .fullScreen; host.present(minute, animated: false)
+                minute.loadViewIfNeeded()
+                let mc = try testRequire(Mirror(reflecting: minute).children.first { $0.label == "controls" }?.value as? HomeTVPlayerControls, "Minute controls")
+                let me = try testRequire(mc.player?.currentPlayerManager as? ZFAVPlayerManager, "Minute engine")
+                let playing = await until { me.isPlaying }
+                try testCheck(playing, "Minute fixture must start playback")
+                let action = try testRequire(mc.sleepButton.menu?.children.compactMap { $0 as? UIAction }.first { $0.title == "1 分钟后停止" }, "One-minute menu action")
+                let began = Date()
+                mc.sleepButton.sendAction(action)
+                check("one-minute-menu-sets-deadline", minuteTimer.minutesRemaining == 1)
+                await wait(3)
+                check("one-minute-does-not-stop-early", me.isPlaying && me.currentTime > 0)
+                // No touches, foreground events, synthetic clock or manual tick.
+                for _ in 0..<65 {
+                    if minuteEvents.contains(where: { $0["reason"] as? String == "sleep" }) { break }
+                    await wait(1)
+                }
+                let elapsed = Date().timeIntervalSince(began)
+                let sleepEvents = minuteEvents.filter { $0["reason"] as? String == "sleep" }
+                check("one-minute-unattended-stops-on-time", sleepEvents.count == 1 && elapsed >= 59 && elapsed < 65 && !me.isPlaying && me.player == nil)
+                check("one-minute-releases-auto-lock", !UIApplication.shared.isIdleTimerDisabled)
+                let count = minuteEvents.count
+                let saved = sleepEvents.last?["position"] as? Double ?? -1
+                me.play(); await wait(6)
+                check("one-minute-stays-stopped-without-periodic-work", me.player == nil && minuteEvents.count == count)
+                minute.closePlayer(); _ = await until { host.presentedViewController == nil }
+                check("one-minute-close-preserves-progress", saved > 10 && abs((minuteEvents.last?["position"] as? Double ?? -1) - saved) < 0.1 && (minuteEvents.last?["duration"] as? Double ?? 0) > 19)
+                results["one-minute-elapsed-seconds"] = elapsed
+                try writeReport("player-integration.json")
+                print("PLAYER_INTEGRATION_DONE failures=\(failures.count)"); fflush(stdout)
+                return
+            }
             scene.requestGeometryUpdate(.iOS(interfaceOrientations: .portrait))
             _ = await until { scene.interfaceOrientation == .portrait && host.view.bounds.height > host.view.bounds.width }
             let browser = try testRequire(host as? BrowserController, "Missing browser host")
@@ -209,7 +250,7 @@ import WebKit
             let next = controls.nextButton.convert(controls.nextButton.bounds, to: controller.view)
             check("transport-controls-left-aligned", prev.maxX <= play.minX && play.maxX <= next.minX && next.maxX < controller.view.bounds.midX)
             snapshot("player-zf-landscape")
-            check("speed-and-sleep-menus", controls.speedButton.menu?.children.count == 8 && controls.sleepButton.menu?.children.count == 7)
+            check("speed-and-sleep-menus", controls.speedButton.menu?.children.count == 8 && controls.sleepButton.menu?.children.count == 8)
             await wait(4.5)
             check("controls-auto-hide", !controls.controlViewAppeared && controls.playButton.superview?.alpha == 0)
             controls.gestureSingleTapped(controlsPlayer.gestureControl); await wait()
@@ -235,9 +276,23 @@ import WebKit
             let autoNext = await until { controller.session.index == 1 && engine.isPlaying }
             check("natural-end-autoplays-next", autoNext && events.contains { $0["reason"] as? String == "ended" })
             timer.set(minutes: 1); now += 60
+            // A seek/replay completion can still be queued when the deadline fires.
+            engine.replay()
+            NotificationCenter.default.post(name: UIApplication.didBecomeActiveNotification, object: nil)
             let slept = await until { events.contains { $0["reason"] as? String == "sleep" } }
+            await wait(0.5)
             check("sleep-deadline-stops-and-disables-autoplay", slept && !engine.isPlaying && !controller.session.autoplayNext)
+            check("sleep-releases-media-and-screen", engine.player == nil && !UIApplication.shared.isIdleTimerDisabled)
+            let timerStopped = (Mirror(reflecting: controller).children.first { $0.label == "tick" }?.value as? Timer)?.isValid != true
+            check("sleep-stops-progress-timer", timerStopped)
+            let eventCount = events.count
+            engine.play() // Simulate a delayed library/recovery callback, without a user command.
+            await wait(1.2)
+            check("sleep-rejects-late-play", !engine.isPlaying && engine.player == nil)
+            check("sleep-has-no-periodic-work", events.count == eventCount)
             controls.playButton.sendActions(for: .touchUpInside)
+            _ = await until { engine.isPlaying }
+            check("sleep-explicit-resume-reactivates-screen", engine.isPlaying && UIApplication.shared.isIdleTimerDisabled)
             engine.seek(toTime: 19.5, completionHandler: nil)
             let finalEnd = await until { !engine.isPlaying && events.last?["reason"] as? String == "ended" }
             check("last-episode-stops-at-end", finalEnd && controller.session.index == 1)
@@ -517,7 +572,7 @@ import WebKit
                             injected = true
                             deadline.set(minutes: 1); deadlineNow += 60
                             tc.playButton.sendActions(for: .touchUpInside)
-                            pausedAtDeadline = !te.isPlaying && (te.player?.rate ?? -1) == 0 && !timed.session.autoplayNext
+                            pausedAtDeadline = !te.isPlaying && (te.player?.rate ?? 0) == 0 && !timed.session.autoplayNext
                             if immediatePlay { tc.playButton.sendActions(for: .touchUpInside) }
                         }
                     }

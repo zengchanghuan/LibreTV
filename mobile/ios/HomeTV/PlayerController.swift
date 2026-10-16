@@ -16,6 +16,7 @@ final class PlayerController: UIViewController, UITableViewDataSource, UITableVi
     private var generation = UUID(), sequence = 0, ticks = 0
     private let sleepTimer: SleepTimer
     private var userPaused = false, sleeping = false, closed = false, finished = false
+    private var stoppedDuration: Double?
     private var resolvedURL: URL?, proxied = false
     private var episodePicker: UIViewController?
     private var returnOrientation: UIInterfaceOrientationMask?
@@ -48,6 +49,10 @@ final class PlayerController: UIViewController, UITableViewDataSource, UITableVi
         surface.translatesAutoresizingMaskIntoConstraints = false; view.addSubview(surface)
         NSLayoutConstraint.activate([surface.topAnchor.constraint(equalTo: view.topAnchor), surface.bottomAnchor.constraint(equalTo: view.bottomAnchor), surface.leadingAnchor.constraint(equalTo: view.leadingAnchor), surface.trailingAnchor.constraint(equalTo: view.trailingAnchor)])
         engine.shouldAutoPlay = false
+        engine.canPlay = { [weak self] in
+            guard let self, !self.closed, !self.sleeping else { return false }
+            return !self.checkDeadline() && !self.userPaused && !self.playbackPosition.isRestoring
+        }
         player = ZFPlayerController(playerManager: engine, containerView: surface)
         player.controlView = controls
         player.allowOrentitaionRotation = false
@@ -85,9 +90,9 @@ final class PlayerController: UIViewController, UITableViewDataSource, UITableVi
             }
         })
         controls.sleepButton.showsMenuAsPrimaryAction = true
-        controls.sleepButton.menu = UIMenu(title: "定时停止", children: [0, 15, 30, 45, 60, 90, 120].map { minutes in
+        controls.sleepButton.menu = UIMenu(title: "定时停止", children: [0, 1, 15, 30, 45, 60, 90, 120].map { minutes in
             UIAction(title: minutes == 0 ? "关闭定时" : "\(minutes) 分钟后停止") { [weak self] _ in
-                self?.sleepTimer.set(minutes: minutes); self?.sleeping = false; self?.updateTime()
+                self?.sleepTimer.set(minutes: minutes); self?.updateTime()
             }
         })
         controls.failBtn.removeTarget(nil, action: nil, for: .touchUpInside)
@@ -99,20 +104,31 @@ final class PlayerController: UIViewController, UITableViewDataSource, UITableVi
         }
         NotificationCenter.default.addObserver(self, selector: #selector(background), name: UIApplication.willResignActiveNotification, object: nil)
         NotificationCenter.default.addObserver(self, selector: #selector(foreground), name: UIApplication.didBecomeActiveNotification, object: nil)
+        load(session.index)
+    }
+    private func startPlaybackWork() {
         try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .moviePlayback)
         try? AVAudioSession.sharedInstance().setActive(true)
         UIApplication.shared.isIdleTimerDisabled = true
-        tick = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
-            guard let self else { return }; self.ticks += 1; self.updateTime(); if !self.checkDeadline() && self.ticks % 5 == 0 { self.emit("progress") }
+        player.pauseWhenAppResignActive = false
+        guard tick == nil else { return }
+        let timer = Timer(timeInterval: 1, repeats: true) { [weak self] _ in
+            guard let self, !self.closed, !self.sleeping, !self.checkDeadline() else { return }
+            self.ticks += 1; self.updateTime()
+            if self.ticks % 5 == 0 { self.emit("progress") }
         }
-        load(session.index)
+        tick = timer
+        // Default-mode timers do not fire during UIKit tracking interactions.
+        RunLoop.main.add(timer, forMode: .common)
     }
     private func load(_ index: Int) {
-        guard !closed, session.episodes.indices.contains(index) else { return }
+        guard !closed, session.episodes.indices.contains(index), !checkDeadline() else { return }
         resolveTask?.cancel(); generation = UUID(); let token = generation
         player.playerReadyToPlay = nil; player.playerPlayFailed = nil; player.playerDidToEnd = nil
         engine.stop()
         session.index = index; userPaused = false; sleeping = false; finished = false; proxied = false
+        startPlaybackWork()
+        stoppedDuration = nil
         playbackPosition.selectEpisode(index)
         controls.heading.text = "\(session.title) · 第 \(index + 1)/\(session.episodes.count) 集"
         controls.previousButton.isEnabled = index > 0
@@ -216,7 +232,7 @@ final class PlayerController: UIViewController, UITableViewDataSource, UITableVi
     private var position: Double {
         playbackPosition.position(currentTime: engine.playerItem?.status == .readyToPlay ? engine.player?.currentTime().seconds ?? .nan : .nan)
     }
-    private var duration: Double { let n = engine.playerItem?.duration.seconds ?? 0; return n.isFinite && n >= 0 ? n : 0 }
+    private var duration: Double { let n = engine.playerItem?.duration.seconds ?? stoppedDuration ?? 0; return n.isFinite && n >= 0 ? n : 0 }
     private func emit(_ reason: String) {
         sequence += 1
         if !finished { playbackPosition.record(position) }
@@ -230,7 +246,25 @@ final class PlayerController: UIViewController, UITableViewDataSource, UITableVi
     private func checkDeadline() -> Bool {
         guard sleepTimer.consumeExpired() else { return false }
         sleeping = true; userPaused = true; session.autoplayNext = false
-        engine.pause(); controls.message.text = "已定时停止，自动连播已关闭"; emit("sleep"); return true
+        // Save while the current item still has its clock and duration. Freeze
+        // that position before tearing down so close/reopen cannot save zero.
+        stoppedDuration = duration
+        engine.pause(); emit("sleep")
+        playbackPosition.prepareRetry(currentPosition: position)
+        generation = UUID(); restoreAttempt = UUID()
+        resolveTask?.cancel(); resolveTask = nil
+        tick?.invalidate(); tick = nil
+        player.playerReadyToPlay = nil; player.playerPlayFailed = nil; player.playerDidToEnd = nil
+        // Prevent ZFPlayer from reactivating audio when auto-lock resigns active.
+        player.pauseWhenAppResignActive = true
+        engine.stop()
+        controls.downloadButton.isEnabled = false
+        controls.failBtn.isHidden = true
+        controls.message.text = "已定时停止，将按系统设置自动锁屏"
+        updateTime()
+        UIApplication.shared.isIdleTimerDisabled = false
+        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        return true
     }
     private func updateTime() {
         controls.updatePlaying(engine.isPlaying && !finished)
@@ -239,7 +273,8 @@ final class PlayerController: UIViewController, UITableViewDataSource, UITableVi
         controls.sleepButton.accessibilityLabel = sleepTimer.minutesRemaining.map { "定时停止，剩余 \($0) 分钟" } ?? "定时停止"
     }
     @objc private func toggle() {
-        if checkDeadline() { return }
+        guard !closed, !checkDeadline() else { return }
+        if sleeping { load(session.index); return }
         if !engine.isPlaying || finished {
             userPaused = false; sleeping = false; controls.message.text = ""
             if finished { finished = false; engine.replay() }
@@ -255,6 +290,7 @@ final class PlayerController: UIViewController, UITableViewDataSource, UITableVi
     @objc private func nextEpisode() { selectEpisode(session.index + 1) }
     private func selectEpisode(_ index: Int) { guard session.episodes.indices.contains(index), index != session.index else { return }; emit("pause"); load(index) }
     @objc private func background() {
+        guard !closed, !sleeping else { return }
         userPaused = true
         engine.pause()
         emit("pause")
