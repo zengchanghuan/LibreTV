@@ -9,11 +9,11 @@ import { Header } from '@/components/header';
 import { SiteFooter } from '@/components/site-footer';
 import { LoadingState, ErrorState } from '@/components/states';
 import { useToast } from '@/components/toast';
-import { hdResourceSite, type HDResourceDetail } from '@/lib/hd-resource-sites';
+import { ACTIVE_HD_RESOURCE_SITES, type HDResourceDetail } from '@/lib/hd-resource-sites';
 
 function ResourceDetail() {
   const params = useParams<{ site: string }>();
-  const site = hdResourceSite(params.site), url = useSearchParams().get('url') || '';
+  const site = ACTIVE_HD_RESOURCE_SITES.find(site => site.id === params.site), url = useSearchParams().get('url') || '';
   const { toast } = useToast();
   const query = useQuery<HDResourceDetail>({
     queryKey: ['hd-resource-detail', site?.id, url], enabled: !!site && !!url, staleTime: 600_000, retry: false,
