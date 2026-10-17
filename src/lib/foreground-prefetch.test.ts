@@ -85,6 +85,21 @@ describe('foreground one-fragment lookahead', () => {
     expect(mocks.network).not.toHaveBeenCalled();
   });
 
+  it('keeps useful lookahead across repeated seeks inside a fragment, but cancels a distant seek', async () => {
+    request.mockImplementation((_url, init) => new Promise((_resolve, reject) => {
+      init!.signal!.addEventListener('abort', () => reject(new DOMException('seek', 'AbortError')), { once: true });
+    }));
+    const pipeline = create();
+    pipeline.prepare(proxy('449.ts'), proxy('450.ts'), { start: 1796.24, end: 1804.12 });
+    await vi.waitFor(() => expect(request).toHaveBeenCalledOnce());
+    pipeline.seek(1799.2); pipeline.seek(1800);
+    expect(request.mock.calls[0][1]!.signal!.aborted).toBe(false);
+    expect(pipeline.take(proxy('450.ts'))).toBeDefined();
+    pipeline.seek(2100);
+    expect(request.mock.calls[0][1]!.signal!.aborted).toBe(true);
+    expect(pipeline.take(proxy('450.ts'))).toBeUndefined();
+  });
+
   it('lets the normal HLS loader recover after speculative fetch failure', async () => {
     request.mockRejectedValue(new TypeError('network unavailable'));
     const pipeline = create();

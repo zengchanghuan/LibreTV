@@ -26,9 +26,11 @@ function eligible(url: string | undefined): string | undefined {
  */
 export class ForegroundPrefetcher {
   private entries = new Map<string, Entry>();
+  private window?: { start: number; end: number };
 
-  prepare(currentUrl: string, nextUrl?: string): void {
+  prepare(currentUrl: string, nextUrl?: string, window?: { start: number; end: number }): void {
     const current = eligible(currentUrl), next = current ? eligible(nextUrl) : undefined;
+    this.window = current ? window : undefined;
     for (const [url, entry] of this.entries) {
       if (url !== current && url !== next) {
         entry.controller.abort();
@@ -48,6 +50,14 @@ export class ForegroundPrefetcher {
   clear(): void {
     for (const entry of this.entries.values()) entry.controller.abort();
     this.entries.clear();
+    this.window = undefined;
+  }
+
+  seek(time: number): void {
+    // A drag can emit several seeks inside the same fragment. HLS keeps its
+    // current request in that case, so retain its still-useful lookahead too.
+    if (this.window && time >= this.window.start && time < this.window.end) return;
+    this.clear();
   }
 
   private async download(url: string, controller: AbortController): Promise<CachedFragment | null> {

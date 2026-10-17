@@ -221,7 +221,7 @@ export function PlayerShell({
     const hls = new Hls(buildHlsConfig(foreground));
     hlsRef.current = hls;
 
-    const clearForeground = () => foreground.clear();
+    const clearForeground = () => foreground.seek(video.currentTime);
     // Register before HLS's media listeners so a seek clears old work first.
     video.addEventListener('seeking', clearForeground);
     hls.on(Hls.Events.DESTROYING, () => {
@@ -235,8 +235,10 @@ export function PlayerShell({
       if (!details || details.live || frag.type !== 'main' || typeof frag.sn !== 'number' || frag.byteRange.length) {
         foreground.clear(); return;
       }
-      foreground.prepare(frag.url,
-        next && !next.byteRange.length && !hasPlaybackHeadroom(video) ? next.url : undefined);
+      const preloadNext = next && !next.byteRange.length && !hasPlaybackHeadroom(video) ? next : undefined;
+      foreground.prepare(frag.url, preloadNext?.url, {
+        start: frag.start, end: preloadNext ? preloadNext.start + preloadNext.duration : frag.start + frag.duration,
+      });
     });
 
     hls.loadSource(mediaUrl);
