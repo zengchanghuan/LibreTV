@@ -138,7 +138,7 @@ export function PlayerShell({
   };
 
   // 片段缓存开启时调大 hls.js 自身缓冲，缓冲之外的空窗由预取器补齐
-  const buildHlsConfig = (): Partial<HlsConfig> => {
+  const buildHlsConfig = (video: HTMLVideoElement): Partial<HlsConfig> => {
     const p = propsRef.current;
     const cacheSettings = loadCacheSettings();
     const cacheEnabled = cacheSettings.enabled && !!p.episodeKey;
@@ -158,7 +158,7 @@ export function PlayerShell({
       abrEwmaDefaultEstimate: 500_000,
       appendErrorMaxRetry: 5,
       // 组合 loader：广告过滤（blockAd 随设置）+ 片段缓存命中（cacheEnabled）
-      ...playbackLoaders(Hls, p.adFilter),
+      ...playbackLoaders(Hls, p.adFilter, () => !video.seeking && video.readyState >= 3),
     };
   };
 
@@ -216,7 +216,7 @@ export function PlayerShell({
     nativeMode.current = false;
     video.crossOrigin = 'anonymous';
     currentMediaUrlRef.current = mediaUrl;
-    const hls = new Hls(buildHlsConfig());
+    const hls = new Hls(buildHlsConfig(video));
     hlsRef.current = hls;
 
     hls.loadSource(mediaUrl);

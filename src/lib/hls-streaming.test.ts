@@ -51,6 +51,21 @@ describe('progressive playback loading', () => {
     expect(onSuccess).not.toHaveBeenCalled();
   });
 
+  it('waits for the whole seek target, then streams subsequent uncached fragments', async () => {
+    mocks.cache.mockResolvedValue(null);
+    let seeking = true;
+    const Cached = createHlsLoader(Hls, { networkLoader: Loader, progressive: true, shouldStream: () => !seeking });
+    const config = { highWaterMark: 128 * 1024 };
+    new Cached({}).load({ url: 'https://cdn.example/a.ts', frag: { sn: 1 } }, config, { onSuccess: vi.fn() });
+    await Promise.resolve();
+    expect(mocks.network.mock.calls[0][1].highWaterMark).toBe(Infinity);
+    expect(config.highWaterMark).toBe(128 * 1024);
+    seeking = false;
+    new Cached({}).load({ url: 'https://cdn.example/b.ts', frag: { sn: 2 } }, config, { onSuccess: vi.fn() });
+    await Promise.resolve();
+    expect(mocks.network.mock.calls[1][1].highWaterMark).toBe(128 * 1024);
+  });
+
   it('adds foreground priority only for complete same-origin proxy TS requests', async () => {
     const setup = playbackLoaders(Hls, false).fetchSetup!;
     const proxy = 'https://tv.example/api/proxy?url=' + encodeURIComponent('https://cdn.example/a.ts');
