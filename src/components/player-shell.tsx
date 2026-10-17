@@ -218,7 +218,7 @@ export function PlayerShell({
     hls.on(Hls.Events.MANIFEST_PARSED, async () => {
       recoveryRef.current?.markHealthy();
       // HLS 在 manifest 解析时尚未必有 duration；等 loadedmetadata 再恢复进度。
-      ensurePrefetch(mediaUrl, video.currentTime);
+      // Wait for actual playback before starting background downloads.
       video.play().catch((err) => { if (err.name === 'NotAllowedError') qualityRef.current?.tracker.pause(performance.now()); });
     });
     // 播放链路恢复（FRAG_LOADED / MANIFEST_PARSED）：静默窗外清零连续失败计数
@@ -414,7 +414,15 @@ export function PlayerShell({
     });
 
     art.on('video:play', () => { sleeping.current = false; qualityRef.current?.tracker.play(performance.now()); });
-    art.on('video:seeking', () => qualityRef.current?.tracker.seek(performance.now(), true));
+    const yieldPrefetch = () => {
+      // Stop in-flight requests too: throttling only pauses the next queued item.
+      getVideoPrefetcher().stop();
+      getNextEpisodePrefetcher().stop();
+    };
+    art.on('video:seeking', () => {
+      qualityRef.current?.tracker.seek(performance.now(), true);
+      yieldPrefetch();
+    });
     art.on('video:seeked', () => qualityRef.current?.tracker.seek(performance.now(), false));
     art.on('video:playing', () => {
       if (art.video.videoWidth > 0) { qualityRef.current?.tracker.playing(performance.now()); flushQuality(); }
@@ -462,7 +470,7 @@ export function PlayerShell({
         if (!changingMedia.current && restoredRef.current) activePropsRef.current.onTimeUpdate?.(art.currentTime, art.duration);
       }
       // 每 30s 续跑一次前向预取窗口（ensure 幂等，窗口未覆盖足够余量才会重建）
-      if (now - lastPrefetchEnsureRef.current > 30_000) {
+      if (!art.video.seeking && art.video.readyState >= 3 && now - lastPrefetchEnsureRef.current > 30_000) {
         lastPrefetchEnsureRef.current = now;
         // 用 currentMediaUrlRef（代理回退后的实际地址）：否则预取的 key 与
         // loader 读取的 key 不一致，缓存永不命中且直连 fetch 白耗流量
@@ -470,7 +478,7 @@ export function PlayerShell({
       }
     });
     art.on('video:seeked', () => {
-      ensurePrefetch(currentMediaUrlRef.current, art.currentTime);
+      if (art.video.paused) ensurePrefetch(currentMediaUrlRef.current, art.currentTime, 0);
     });
     art.on('video:pause', () => {
       qualityRef.current?.tracker.pause(performance.now()); flushQuality();
@@ -478,15 +486,16 @@ export function PlayerShell({
       // 暂停 = 预取黄金窗口：解除限速并无限铺满整集（用户主动行为，带宽占用可接受）
       // waiting 触发的限速在此解除，否则黄金窗口会被 500ms 轮询冻结
       getVideoPrefetcher().setThrottled(false);
-      if (!changingMedia.current) ensurePrefetch(currentMediaUrlRef.current, art.currentTime, 0);
+      if (!changingMedia.current && !art.video.seeking) ensurePrefetch(currentMediaUrlRef.current, art.currentTime, 0);
     });
     art.on('video:waiting', () => {
       qualityRef.current?.tracker.waiting(performance.now());
-      // 卡顿：预取临时让出带宽给播放
-      getVideoPrefetcher().setThrottled(true);
+      // Cancel both episodes' background traffic so the seek target loads first.
+      yieldPrefetch();
     });
     art.on('video:playing', () => {
       getVideoPrefetcher().setThrottled(false);
+      ensurePrefetch(currentMediaUrlRef.current, art.currentTime);
     });
     art.on('video:ended', () => {
       qualityRef.current?.tracker.pause(performance.now()); flushQuality();
