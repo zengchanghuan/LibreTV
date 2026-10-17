@@ -39,6 +39,34 @@ describe('foreground segment ranges', () => {
     expect(upstream).toHaveBeenCalledOnce();
   });
 
+  it('forwards a later range before that range finishes downloading', async () => {
+    let finishRange: (() => void) | undefined;
+    upstream.mockImplementation(async (target, init) => {
+      const [start, requestedEnd] = new Headers(init?.headers).get('range')!.slice(6).split('-').map(Number);
+      const end = Math.min(requestedEnd, data.length - 1);
+      const body = start === 262144 ? new ReadableStream<Uint8Array>({ start(output) {
+        output.enqueue(data.slice(start, start + 100));
+        finishRange = () => { output.enqueue(data.slice(start + 100, end + 1)); output.close(); };
+      } }) : data.slice(start, end + 1);
+      return { res: new Response(body, { status: 206, headers: {
+        'Content-Range': `bytes ${start}-${end}/${data.length}`, ETag: '"stable"',
+      } }), finalUrl: target };
+    });
+    const result = await fetchForegroundSegment(url(), {}, 8000);
+    const reader = result.res.body!.getReader();
+    expect((await reader.read()).value).toEqual(data.slice(0, 262144));
+    const arrived = vi.fn();
+    const pending = reader.read().then(arrived);
+    // The old implementation waits for finishRange(), losing streaming overlap.
+    await vi.waitFor(() => expect(arrived).toHaveBeenCalledOnce());
+    expect(arrived.mock.calls[0][0].value).toEqual(data.slice(262144, 262244));
+    finishRange!();
+    await pending;
+    const rest: Uint8Array[] = [];
+    for (;;) { const chunk = await reader.read(); if (chunk.done) break; rest.push(chunk.value!); }
+    expect(Buffer.concat(rest)).toEqual(Buffer.from(data.slice(262244)));
+  });
+
   it.each(['W/"weak"', '', '"bad\"tag"'])('falls back to a whole file for unusable ETag %s', async etag => {
     upstream.mockImplementation(async (target, init) => ({
       finalUrl: target,

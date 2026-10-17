@@ -22,7 +22,7 @@ export function isForegroundSegment(req: Request, target: string): boolean {
 }
 
 /**
- * Keep the first 256 KiB streaming and fetch the remainder on two connections.
+ * Fetch the remainder on two connections, forwarding every range as it arrives.
  * Every range must share a strong ETag and exact total. At most three upstream
  * requests and 8 MiB per segment; background fetch and caller ranges are excluded.
  */
@@ -58,9 +58,11 @@ export async function fetchForegroundSegment(url: string, init: RequestInit, hea
     ranges.push([info.end + 1, split - 1]);
     if (split < info.total) ranges.push([split, info.total - 1]);
   }
-  // Handle rejection immediately even if a later part fails before the first.
+  // Future ranges may fill their bounded queues while an earlier range is sent.
+  // Do not await a whole range before forwarding it: that serializes upstream
+  // download and downstream delivery on slower viewer connections.
   let cancelled = false;
-  const parts = ranges.map(async ([start, end]) => {
+  const parts = ranges.map(([start, end]) => new ReadableStream<Uint8Array>({ async start(output) {
     try {
       const partHeaders = new Headers(headers);
       partHeaders.set('Range', `bytes=${start}-${end}`);
@@ -74,24 +76,26 @@ export async function fetchForegroundSegment(url: string, init: RequestInit, hea
         throw new Error('Upstream range changed or was ignored');
       }
       const reader = streamWithIdleTimeout(res.body, IDLE_MS, reason => controller.abort(reason)).getReader();
-      const bytes = new Uint8Array(end - start + 1);
       let offset = 0;
       for (;;) {
         const { done, value } = await reader.read();
         if (done) break;
-        if (offset + value.length > bytes.length) { await reader.cancel(); throw new Error('Oversized upstream range'); }
-        bytes.set(value, offset); offset += value.length;
+        if (offset + value.length > end - start + 1) { await reader.cancel(); throw new Error('Oversized upstream range'); }
+        offset += value.length;
+        output.enqueue(value);
       }
-      if (offset !== bytes.length) throw new Error('Truncated upstream range');
-      return { bytes, error: null };
+      if (offset !== end - start + 1) throw new Error('Truncated upstream range');
+      reader.releaseLock();
+      output.close();
     } catch (error) {
       if (!cancelled && !init.signal?.aborted) disable();
       controller.abort(error);
-      return { bytes: null, error };
+      output.error(error);
     }
-  });
+  } }));
   const reader = first.res.body.getReader();
   let firstDone = false, firstSize = 0, nextPart = 0;
+  let partReader: ReadableStreamDefaultReader<Uint8Array> | undefined;
   const stream = new ReadableStream<Uint8Array>({
     async pull(output) {
       try {
@@ -107,12 +111,16 @@ export async function fetchForegroundSegment(url: string, init: RequestInit, hea
           firstDone = true;
           reader.releaseLock();
         }
-        if (nextPart < parts.length) {
-          const result = await parts[nextPart++];
+        while (nextPart < parts.length) {
+          partReader ??= parts[nextPart].getReader();
+          const { done, value } = await partReader.read();
           if (cancelled) return;
-          if (result.error || !result.bytes) throw result.error;
-          output.enqueue(result.bytes);
-        } else output.close();
+          if (!done) { output.enqueue(value); return; }
+          partReader.releaseLock();
+          partReader = undefined;
+          nextPart++;
+        }
+        output.close();
       } catch (error) {
         if (cancelled) return;
         if (!init.signal?.aborted) disable();
@@ -124,6 +132,7 @@ export async function fetchForegroundSegment(url: string, init: RequestInit, hea
     cancel(reason) {
       cancelled = true;
       controller.abort(reason);
+      void partReader?.cancel(reason).catch(() => {});
       if (!firstDone) return reader.cancel(reason);
     },
   }, { highWaterMark: 0 });
