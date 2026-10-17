@@ -20,8 +20,6 @@ import { buildSegmentCacheKey, readCachedSegment, touchMeta } from './video-cach
 interface LoaderOptions {
   blockAd?: boolean;
   networkLoader?: HlsLoaderCtor;
-  progressive?: boolean;
-  shouldStream?: () => boolean;
   /** 缓存命中探针（设置面板展示命中率用），可缺省 */
   onProbe?: (hit: boolean) => void;
 }
@@ -33,7 +31,7 @@ export function createHlsLoader(
   HlsCtor: typeof HlsType,
   options: LoaderOptions = {}
 ): HlsLoaderCtor {
-  const { blockAd = false, onProbe, networkLoader, progressive = false, shouldStream } = options;
+  const { blockAd = false, onProbe, networkLoader } = options;
 
   return class CacheFirstHlsLoader extends (networkLoader ?? HlsCtor.DefaultConfig.loader as HlsLoaderCtor) {
     private destroyed = false;
@@ -84,11 +82,7 @@ export function createHlsLoader(
               total: hit.data.byteLength,
               loaded: hit.data.byteLength,
             });
-            // Progressive controllers consume onProgress payloads; onSuccess
-            // must not submit the same cached fragment a second time.
-            const streamed = progressive && context.frag && callbacks.onProgress;
-            if (streamed) callbacks.onProgress(this.stats, context, hit.data, undefined);
-            if (!this.destroyed) callbacks.onSuccess({ url: context.url, data: streamed ? new ArrayBuffer(0) : hit.data }, this.stats, context, undefined);
+            callbacks.onSuccess({ url: context.url, data: hit.data }, this.stats, context, undefined);
             return;
           }
           onProbe?.(false);
@@ -98,10 +92,6 @@ export function createHlsLoader(
           callbacks.onSuccess = (response: any, stats: any, ctx: any, networkDetails: any) => {
             if (!this.destroyed) onSuccess(response, stats, ctx, networkDetails);
           };
-          // A partial first GOP after a cold seek can make hls.js backtrack
-          // and download the previous fragment before retrying this one.
-          // FetchLoader still emits the complete payload through onProgress.
-          if (progressive && shouldStream && !shouldStream()) config = { ...config, highWaterMark: Infinity };
           load(context, config, callbacks);
         });
       };
@@ -119,15 +109,15 @@ export function createHlsLoader(
   };
 }
 
-/** Keep the default loader so hls.js can enable streaming mode. Playlist and
- * fragment overrides retain filtering/cache support without disabling it. */
-export function playbackLoaders(HlsCtor: typeof HlsType, blockAd: boolean, shouldStream?: () => boolean): Partial<HlsConfig> {
+/** Keep full-fragment decoding: progressive TS demuxing can backtrack after a
+ * cold seek. FetchLoader supplies cancellable foreground range acceleration. */
+export function playbackLoaders(HlsCtor: typeof HlsType, blockAd: boolean): Partial<HlsConfig> {
   const canStream = typeof ReadableStream !== 'undefined' && typeof fetch !== 'undefined';
   if (!canStream) return { loader: createHlsLoader(HlsCtor, { blockAd }) };
   return {
-    progressive: true,
+    progressive: false,
     pLoader: createHlsLoader(HlsCtor, { blockAd }),
-    fLoader: createHlsLoader(HlsCtor, { networkLoader: FetchLoader, progressive: true, shouldStream }),
+    fLoader: createHlsLoader(HlsCtor, { networkLoader: FetchLoader }),
     fetchSetup(context, initParams) {
       const url = new URL(context.url, document.baseURI);
       const target = url.searchParams.get('url');

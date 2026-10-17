@@ -19,28 +19,28 @@ beforeEach(() => {
 });
 afterEach(() => vi.unstubAllGlobals());
 
-describe('progressive playback loading', () => {
-  it('keeps progressive mode enabled with the real hls.js configuration', () => {
+describe('foreground playback loading', () => {
+  it('uses full-fragment decoding with the real hls.js configuration', () => {
     const hls = new Hls(playbackLoaders(Hls, false));
-    expect(hls.config.progressive).toBe(true);
+    expect(hls.config.progressive).toBe(false);
     expect(hls.config.fLoader).toBeDefined();
     expect(hls.config.pLoader).toBeDefined();
     hls.destroy();
   });
 
-  it('delivers cached bytes exactly once through the progressive callback', async () => {
-    const Cached = createHlsLoader(Hls, { networkLoader: Loader, progressive: true });
+  it('delivers complete cached bytes exactly once without partial decoding', async () => {
+    const Cached = createHlsLoader(Hls, { networkLoader: Loader });
     const progress = vi.fn(), success = vi.fn();
     new Cached({}).load({ url: 'https://cdn.example/a.ts', frag: { sn: 1 } }, {}, { onProgress: progress, onSuccess: success });
     await Promise.resolve();
-    expect(progress).toHaveBeenCalledOnce();
-    expect(new Uint8Array(progress.mock.calls[0][2])).toEqual(new Uint8Array([1, 2, 3]));
-    expect(success.mock.calls[0][0].data.byteLength).toBe(0);
+    expect(progress).not.toHaveBeenCalled();
+    expect(success).toHaveBeenCalledOnce();
+    expect(new Uint8Array(success.mock.calls[0][0].data)).toEqual(new Uint8Array([1, 2, 3]));
     expect(mocks.network).not.toHaveBeenCalled();
   });
 
   it('does not invoke callbacks after a cache lookup was aborted', async () => {
-    const Cached = createHlsLoader(Hls, { networkLoader: Loader, progressive: true });
+    const Cached = createHlsLoader(Hls, { networkLoader: Loader });
     const onProgress = vi.fn(), onSuccess = vi.fn();
     const callbacks = { onProgress, onSuccess };
     const loader = new Cached({});
@@ -49,21 +49,6 @@ describe('progressive playback loading', () => {
     await Promise.resolve();
     expect(onProgress).not.toHaveBeenCalled();
     expect(onSuccess).not.toHaveBeenCalled();
-  });
-
-  it('waits for the whole seek target, then streams subsequent uncached fragments', async () => {
-    mocks.cache.mockResolvedValue(null);
-    let seeking = true;
-    const Cached = createHlsLoader(Hls, { networkLoader: Loader, progressive: true, shouldStream: () => !seeking });
-    const config = { highWaterMark: 128 * 1024 };
-    new Cached({}).load({ url: 'https://cdn.example/a.ts', frag: { sn: 1 } }, config, { onSuccess: vi.fn() });
-    await Promise.resolve();
-    expect(mocks.network.mock.calls[0][1].highWaterMark).toBe(Infinity);
-    expect(config.highWaterMark).toBe(128 * 1024);
-    seeking = false;
-    new Cached({}).load({ url: 'https://cdn.example/b.ts', frag: { sn: 2 } }, config, { onSuccess: vi.fn() });
-    await Promise.resolve();
-    expect(mocks.network.mock.calls[1][1].highWaterMark).toBe(128 * 1024);
   });
 
   it('adds foreground priority only for complete same-origin proxy TS requests', async () => {
