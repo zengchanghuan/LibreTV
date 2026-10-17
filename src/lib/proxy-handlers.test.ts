@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { handleProxyRequest } from './proxy-handlers';
 
 vi.mock('./api-guard', () => ({ guardRequest: () => null, jsonError: vi.fn() }));
@@ -6,7 +6,15 @@ vi.mock('./ssrf', () => ({
   isValidProxyUrl: () => true, isBlockedByDNS: async () => false,
   checkUpstreamAllowed: async () => ({ ok: true }), checkLiveUrlAllowed: async () => ({ ok: true }),
 }));
-afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); });
+beforeEach(() => {
+  // Node's native AbortSignal.timeout bypasses Vitest's fake clock.
+  vi.spyOn(AbortSignal, 'timeout').mockImplementation(ms => {
+    const controller = new AbortController();
+    setTimeout(() => controller.abort(new DOMException('Timed out', 'TimeoutError')), ms);
+    return controller.signal;
+  });
+});
+afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); vi.useRealTimers(); });
 
 describe('media proxy streaming', () => {
   it('delivers a TS segment taking over 8 seconds, then cancels upstream on seek', async () => {

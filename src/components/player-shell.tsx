@@ -9,7 +9,7 @@ import { PlaybackTracker } from '@/lib/playback-quality';
 import { usePlaybackQuality } from '@/lib/playback-quality-store';
 import { PlaybackRecovery, describeHlsError } from '@/lib/playback-recovery';
 import { createHlsLoader } from '@/lib/hls-loader';
-import { hlsEngine, isAppleMobile } from '@/lib/media-support';
+import { hasPlaybackHeadroom, hlsEngine, isAppleMobile } from '@/lib/media-support';
 import { PlaybackTools } from './playback-tools';
 import {
   getVideoPrefetcher,
@@ -163,9 +163,16 @@ export function PlayerShell({
   };
 
   // 当前集预取（episodeKey 缺省 = 关闭，见 ensure 内部 settings.enabled 判断）
+  const yieldPrefetch = () => {
+    for (const prefetcher of [getVideoPrefetcher(), getNextEpisodePrefetcher()]) {
+      if (['running', 'parsing'].includes(prefetcher.getStats().state)) prefetcher.stop();
+    }
+  };
   const ensurePrefetch = (mediaUrl: string, currentTime: number, horizonSeconds?: number) => {
     const p = propsRef.current;
     if (sleeping.current || nativeMode.current || mediaTypeRef.current === 'mp4' || !p.episodeKey) return;
+    const video = artRef.current?.video as HTMLVideoElement | undefined;
+    if (video && !video.paused && !hasPlaybackHeadroom(video)) { yieldPrefetch(); return; }
     getVideoPrefetcher().ensure({
       m3u8Url: mediaUrl,
       currentTime,
@@ -173,7 +180,7 @@ export function PlayerShell({
       horizonSeconds,
       onProgress: (stats) => {
         // 当前集预取完成且存在下一集：用独立预取器预热下一集前 7 分钟
-        if (stats.state === 'done' && p.nextUrl && !p.nextUrl.startsWith('/api/site-playback?') && p.nextEpisodeKey) {
+        if (stats.state === 'done' && (!video || video.paused || hasPlaybackHeadroom(video)) && p.nextUrl && !p.nextUrl.startsWith('/api/site-playback?') && p.nextEpisodeKey) {
           getNextEpisodePrefetcher().ensure({
             m3u8Url: p.nextUrl,
             currentTime: 0,
@@ -413,12 +420,14 @@ export function PlayerShell({
       } catch { /* 忽略 */ }
     });
 
-    art.on('video:play', () => { sleeping.current = false; qualityRef.current?.tracker.play(performance.now()); });
-    const yieldPrefetch = () => {
-      // Stop in-flight requests too: throttling only pauses the next queued item.
-      getVideoPrefetcher().stop();
-      getNextEpisodePrefetcher().stop();
-    };
+    art.on('video:play', () => {
+      sleeping.current = false;
+      qualityRef.current?.tracker.play(performance.now());
+      if (!hasPlaybackHeadroom(art.video)) yieldPrefetch();
+    });
+    art.on('video:ratechange', () => {
+      if (!art.video.paused && !hasPlaybackHeadroom(art.video)) yieldPrefetch();
+    });
     art.on('video:seeking', () => {
       qualityRef.current?.tracker.seek(performance.now(), true);
       yieldPrefetch();
@@ -465,6 +474,7 @@ export function PlayerShell({
     });
     art.on('video:timeupdate', () => {
       const now = Date.now();
+      if (!art.video.paused && !hasPlaybackHeadroom(art.video)) yieldPrefetch();
       if (now - lastSave > 5000) {
         lastSave = now;
         if (!changingMedia.current && restoredRef.current) activePropsRef.current.onTimeUpdate?.(art.currentTime, art.duration);
