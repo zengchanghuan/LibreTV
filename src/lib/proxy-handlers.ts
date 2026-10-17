@@ -89,7 +89,9 @@ export async function handleProxyRequest(req: Request, targetUrl: string): Promi
     }
   } catch { /* 忽略非法 URL */ }
 
-  const isMp4 = /\.mp4$/i.test(new URL(targetUrl).pathname);
+  const pathname = new URL(targetUrl).pathname;
+  const isMp4 = /\.mp4$/i.test(pathname);
+  const isTs = /\.ts$/i.test(pathname);
   const range = req.headers.get('range');
   if (range) headers.Range = range;
 
@@ -154,9 +156,15 @@ export async function handleProxyRequest(req: Request, targetUrl: string): Promi
     const v = response.headers.get(name);
     if (v) outHeaders.set(name, v);
   }
-  if (isMp4 && !response.headers.get('content-encoding') && response.headers.get('content-length'))
-    outHeaders.set('Content-Length', response.headers.get('content-length')!);
-  // fetch 会自动解压，转发时必须去掉长度相关头避免浏览器二次解压
+  const encoding = response.headers.get('content-encoding');
+  const length = response.headers.get('content-length');
+  // HLS uses the remaining byte count to decide whether to cancel a download
+  // on a backward seek. An unknown length becomes 0/0 in FetchLoader and is
+  // mistaken for an almost-finished fragment, blocking the new seek target.
+  // Preserve exact lengths for uncompressed media (including validated ranges).
+  // fetch decompresses encoded responses, so their wire length must be omitted.
+  if ((isMp4 || isTs) && (!encoding || encoding === 'identity') && length && /^\d+$/.test(length))
+    outHeaders.set('Content-Length', length);
   // 图片基本不变：长缓存交给浏览器与边缘 CDN（分片 / key 仍保守 1 小时）
   outHeaders.set(
     'Cache-Control',
