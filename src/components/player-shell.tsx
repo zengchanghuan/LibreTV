@@ -9,6 +9,7 @@ import { PlaybackTracker } from '@/lib/playback-quality';
 import { usePlaybackQuality } from '@/lib/playback-quality-store';
 import { PlaybackRecovery, describeHlsError } from '@/lib/playback-recovery';
 import { playbackLoaders } from '@/lib/hls-loader';
+import { ForegroundPrefetcher } from '@/lib/foreground-prefetch';
 import { hasPlaybackHeadroom, hlsEngine, isAppleMobile } from '@/lib/media-support';
 import { PlaybackTools } from './playback-tools';
 import {
@@ -138,7 +139,7 @@ export function PlayerShell({
   };
 
   // 片段缓存开启时调大 hls.js 自身缓冲，缓冲之外的空窗由预取器补齐
-  const buildHlsConfig = (): Partial<HlsConfig> => {
+  const buildHlsConfig = (foreground: ForegroundPrefetcher): Partial<HlsConfig> => {
     const p = propsRef.current;
     const cacheSettings = loadCacheSettings();
     const cacheEnabled = cacheSettings.enabled && !!p.episodeKey;
@@ -158,7 +159,7 @@ export function PlayerShell({
       abrEwmaDefaultEstimate: 500_000,
       appendErrorMaxRetry: 5,
       // 组合 loader：广告过滤（blockAd 随设置）+ 片段缓存命中（cacheEnabled）
-      ...playbackLoaders(Hls, p.adFilter),
+      ...playbackLoaders(Hls, p.adFilter, foreground),
     };
   };
 
@@ -216,8 +217,27 @@ export function PlayerShell({
     nativeMode.current = false;
     video.crossOrigin = 'anonymous';
     currentMediaUrlRef.current = mediaUrl;
-    const hls = new Hls(buildHlsConfig());
+    const foreground = new ForegroundPrefetcher();
+    const hls = new Hls(buildHlsConfig(foreground));
     hlsRef.current = hls;
+
+    const clearForeground = () => foreground.clear();
+    // Register before HLS's media listeners so a seek clears old work first.
+    video.addEventListener('seeking', clearForeground);
+    hls.on(Hls.Events.DESTROYING, () => {
+      video.removeEventListener('seeking', clearForeground);
+      foreground.clear();
+    });
+    hls.on(Hls.Events.FRAG_LOADING, (_event, { frag }) => {
+      const details = hls.levels[frag.level]?.details;
+      const index = details?.fragments.findIndex(item => item === frag) ?? -1;
+      const next = details && index >= 0 ? details.fragments[index + 1] : undefined;
+      if (!details || details.live || frag.type !== 'main' || typeof frag.sn !== 'number' || frag.byteRange.length) {
+        foreground.clear(); return;
+      }
+      foreground.prepare(frag.url,
+        next && !next.byteRange.length && !hasPlaybackHeadroom(video) ? next.url : undefined);
+    });
 
     hls.loadSource(mediaUrl);
     hls.attachMedia(video);
