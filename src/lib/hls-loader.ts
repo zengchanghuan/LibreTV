@@ -1,3 +1,4 @@
+import { FetchLoader, type HlsConfig } from 'hls.js';
 import type HlsType from 'hls.js';
 import { stripAdGroups } from './m3u8';
 import { buildSegmentCacheKey, readCachedSegment, touchMeta } from './video-cache';
@@ -18,6 +19,8 @@ import { buildSegmentCacheKey, readCachedSegment, touchMeta } from './video-cach
  */
 interface LoaderOptions {
   blockAd?: boolean;
+  networkLoader?: HlsLoaderCtor;
+  progressive?: boolean;
   /** 缓存命中探针（设置面板展示命中率用），可缺省 */
   onProbe?: (hit: boolean) => void;
 }
@@ -29,9 +32,9 @@ export function createHlsLoader(
   HlsCtor: typeof HlsType,
   options: LoaderOptions = {}
 ): HlsLoaderCtor {
-  const { blockAd = false, onProbe } = options;
+  const { blockAd = false, onProbe, networkLoader, progressive = false } = options;
 
-  return class CacheFirstHlsLoader extends (HlsCtor.DefaultConfig.loader as HlsLoaderCtor) {
+  return class CacheFirstHlsLoader extends (networkLoader ?? HlsCtor.DefaultConfig.loader as HlsLoaderCtor) {
     private destroyed = false;
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -80,7 +83,11 @@ export function createHlsLoader(
               total: hit.data.byteLength,
               loaded: hit.data.byteLength,
             });
-            callbacks.onSuccess({ url: context.url, data: hit.data }, this.stats, context, undefined);
+            // Progressive controllers consume onProgress payloads; onSuccess
+            // must not submit the same cached fragment a second time.
+            const streamed = progressive && context.frag && callbacks.onProgress;
+            if (streamed) callbacks.onProgress(this.stats, context, hit.data, undefined);
+            if (!this.destroyed) callbacks.onSuccess({ url: context.url, data: streamed ? new ArrayBuffer(0) : hit.data }, this.stats, context, undefined);
             return;
           }
           onProbe?.(false);
@@ -104,5 +111,27 @@ export function createHlsLoader(
       this.destroyed = true;
       super.destroy?.();
     }
+  };
+}
+
+/** Keep the default loader so hls.js can enable streaming mode. Playlist and
+ * fragment overrides retain filtering/cache support without disabling it. */
+export function playbackLoaders(HlsCtor: typeof HlsType, blockAd: boolean): Partial<HlsConfig> {
+  const canStream = typeof ReadableStream !== 'undefined' && typeof fetch !== 'undefined';
+  if (!canStream) return { loader: createHlsLoader(HlsCtor, { blockAd }) };
+  return {
+    progressive: true,
+    pLoader: createHlsLoader(HlsCtor, { blockAd }),
+    fLoader: createHlsLoader(HlsCtor, { networkLoader: FetchLoader, progressive: true }),
+    fetchSetup(context, initParams) {
+      const url = new URL(context.url, document.baseURI);
+      const target = url.searchParams.get('url');
+      const headers = new Headers(initParams.headers);
+      if (url.origin === location.origin && url.pathname === '/api/proxy' && target &&
+          new URL(target).pathname.toLowerCase().endsWith('.ts') && !headers.has('range')) {
+        headers.set('X-Playback-Priority', 'foreground');
+      }
+      return new Request(url, { ...initParams, headers });
+    },
   };
 }

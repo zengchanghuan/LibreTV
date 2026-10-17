@@ -4,6 +4,7 @@ import { checkLiveUrlAllowed, isBlockedByDNS, isValidProxyUrl } from '@/lib/ssrf
 import { fetchWithSafeRedirects } from '@/lib/fetch-utils';
 import { rewriteM3u8, LIVE_STREAM_BASE } from '@/lib/m3u8';
 import { streamWithIdleTimeout } from '@/lib/stream-timeout';
+import { fetchForegroundSegment, isForegroundSegment } from '@/lib/parallel-segment';
 
 /**
  * 代理目标地址的两种传入形式：
@@ -99,10 +100,13 @@ export async function handleProxyRequest(req: Request, targetUrl: string): Promi
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     try {
       upstream = new AbortController();
-      const result = await fetchWithSafeRedirects(targetUrl, {
+      const init = {
         headers,
         signal: AbortSignal.any([req.signal, upstream.signal]),
-      }, { headerTimeoutMs: isMp4 ? HEADER_TIMEOUT_MS : TIMEOUT_MS });
+      };
+      const result = isForegroundSegment(req, targetUrl)
+        ? await fetchForegroundSegment(targetUrl, init, TIMEOUT_MS)
+        : await fetchWithSafeRedirects(targetUrl, init, { headerTimeoutMs: isMp4 ? HEADER_TIMEOUT_MS : TIMEOUT_MS });
       response = result.res;
       finalUrl = result.finalUrl;
       lastError = null;
@@ -146,7 +150,7 @@ export async function handleProxyRequest(req: Request, targetUrl: string): Promi
 
   // 其余（图片 / JSON / 分片 / key）流式透传
   const outHeaders = new Headers();
-  for (const name of ['content-type', 'accept-ranges', 'content-range', 'etag', 'last-modified']) {
+  for (const name of ['content-type', 'accept-ranges', 'content-range', 'etag', 'last-modified', 'x-playback-ranges']) {
     const v = response.headers.get(name);
     if (v) outHeaders.set(name, v);
   }

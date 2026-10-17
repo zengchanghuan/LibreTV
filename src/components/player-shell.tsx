@@ -8,7 +8,7 @@ import Hls, { type HlsConfig } from 'hls.js';
 import { PlaybackTracker } from '@/lib/playback-quality';
 import { usePlaybackQuality } from '@/lib/playback-quality-store';
 import { PlaybackRecovery, describeHlsError } from '@/lib/playback-recovery';
-import { createHlsLoader } from '@/lib/hls-loader';
+import { playbackLoaders } from '@/lib/hls-loader';
 import { hasPlaybackHeadroom, hlsEngine, isAppleMobile } from '@/lib/media-support';
 import { PlaybackTools } from './playback-tools';
 import {
@@ -158,7 +158,7 @@ export function PlayerShell({
       abrEwmaDefaultEstimate: 500_000,
       appendErrorMaxRetry: 5,
       // 组合 loader：广告过滤（blockAd 随设置）+ 片段缓存命中（cacheEnabled）
-      loader: createHlsLoader(Hls, { blockAd: p.adFilter }) as unknown as HlsConfig['loader'],
+      ...playbackLoaders(Hls, p.adFilter),
     };
   };
 
