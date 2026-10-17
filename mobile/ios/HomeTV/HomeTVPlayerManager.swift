@@ -6,6 +6,8 @@ import AVFoundation
 final class HomeTVPlayerManager: ZFAVPlayerManager {
     // All library-triggered play/replay paths must respect the controller's
     // deadline and explicit user intent, including delayed seek completions.
+    private let diagnosticID = UUID().uuidString
+    var diagnosticContext: (() -> [String: String])?
     var canPlay: (() -> Bool)?
     override func play() {
         guard canPlay?() != false else { trace("play-blocked"); return }
@@ -14,8 +16,10 @@ final class HomeTVPlayerManager: ZFAVPlayerManager {
     }
 
     var onSeek: ((Double) -> (() -> Void)?)?
+    private(set) var seekRevision = UUID()
 
     override func seek(toTime time: TimeInterval, completionHandler: ((Bool) -> Void)? = nil) {
+        seekRevision = UUID()
         let finished = onSeek?(time)
         let traceID = UUID().uuidString.prefix(8)
         let started = Date()
@@ -30,20 +34,41 @@ final class HomeTVPlayerManager: ZFAVPlayerManager {
             }
         }
     }
-    /// Opt-in stdout diagnostics for a connected device; never include URLs,
-    /// cookies, titles or server credentials. Release builds emit nothing.
+    /// File logging works in Release without a connected Mac. Never include URLs,
+    /// cookies, titles, server addresses or free-form AVFoundation error messages.
     func trace(_ event: String) {
-        #if DEBUG
-        guard ProcessInfo.processInfo.arguments.contains("--playback-diagnostics") else { return }
-        let ranges = playerItem?.loadedTimeRanges.map { range -> String in
+        let ranges = playerItem?.loadedTimeRanges.prefix(8).map { range -> String in
             let value = range.timeRangeValue
             return "\(value.start.seconds)+\(value.duration.seconds)"
         }.joined(separator: ",") ?? "none"
-        print("HOMETV_PLAYBACK \(Date().timeIntervalSince1970) \(event) time=\(currentTime) duration=\(totalTime) intent=\(isPlaying) rate=\(player?.rate ?? 0) clock=\(player?.timeControlStatus.rawValue ?? -1) wait=\(player?.reasonForWaitingToPlay?.rawValue ?? "none") item=\(playerItem?.status.rawValue ?? -1) empty=\(playerItem?.isPlaybackBufferEmpty ?? false) likely=\(playerItem?.isPlaybackLikelyToKeepUp ?? false) load=\(loadState.rawValue) buffered=\(ranges)")
-        fflush(stdout)
+        let access = playerItem?.accessLog()?.events.last
+        var fields = diagnosticContext?() ?? [:]
+        fields.merge([
+            "player": diagnosticID, "position": "\(currentTime)", "duration": "\(totalTime)",
+            "intent": "\(isPlaying)", "rate": "\(player?.rate ?? 0)",
+            "clock": "\(player?.timeControlStatus.rawValue ?? -1)",
+            "waiting": player?.reasonForWaitingToPlay?.rawValue ?? "none",
+            "item": "\(playerItem?.status.rawValue ?? -1)",
+            "empty": "\(playerItem?.isPlaybackBufferEmpty ?? false)",
+            "likely": "\(playerItem?.isPlaybackLikelyToKeepUp ?? false)",
+            "load": "\(loadState.rawValue)", "buffered": ranges,
+            "observedBitrate": "\(access?.observedBitrate ?? -1)",
+            "indicatedBitrate": "\(access?.indicatedBitrate ?? -1)",
+            "bytes": "\(access?.numberOfBytesTransferred ?? -1)",
+            "transferSeconds": "\(access?.transferDuration ?? -1)",
+            "stalls": "\(access?.numberOfStalls ?? -1)",
+            "transportError": "\(playerItem?.errorLog()?.events.last?.errorStatusCode ?? 0)",
+            "itemError": "\((playerItem?.error as NSError?)?.code ?? 0)"
+        ]) { _, new in new }
+        PlaybackLogStore.shared.record(event, fields: fields)
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("--playback-diagnostics") {
+            print("HOMETV_PLAYBACK \(Date().timeIntervalSince1970) \(event) \(fields)")
+            fflush(stdout)
+        }
         #endif
     }
     override func pause() { super.pause(); trace("pause") }
-    override func stop() { trace("stop"); super.stop() }
+    override func stop() { seekRevision = UUID(); trace("stop"); super.stop() }
 
 }

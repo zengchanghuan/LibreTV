@@ -325,6 +325,84 @@ private final class PessimisticBufferItem: AVPlayerItem {
                 check("buffer-pessimistic-prediction-cannot-loop-pause", pessimistic.isPlaying && realPlayer.rate > 0 && pessimistic.currentTime > stalledTime + 0.3)
                 check("buffer-pessimistic-playback-clears-spinner", pessimistic.loadState.rawValue != 8)
                 pessimistic.stop()
+                // A remote item may report EOF before its advertised duration.
+                // Exercise the real notification chain at mid-film position.
+                let premature = PlayerController(session: session(autoplay: false), origin: origin, cookies: [])
+                var prematureEvents: [[String: Any]] = []
+                premature.onProgress = { prematureEvents.append($0) }
+                premature.modalPresentationStyle = .fullScreen
+                host.present(premature, animated: false)
+                _ = await until { premature.isViewLoaded && host.presentedViewController === premature }
+                let pc = try testRequire(descendants(premature.view).compactMap { $0 as? HomeTVPlayerControls }.first, "Premature EOF controls")
+                let pm = try testRequire(pc.player?.currentPlayerManager as? ZFAVPlayerManager, "Premature EOF manager")
+                _ = await until { pm.isPlaying && pm.currentTime >= 4 }
+                let eofPosition = pm.currentTime
+                NotificationCenter.default.post(name: AVPlayerItem.didPlayToEndTimeNotification, object: pm.playerItem)
+                await wait(0.4)
+                check("premature-eof-does-not-mark-watched", !prematureEvents.contains { $0["reason"] as? String == "ended" })
+                _ = await until { pm.isPlaying && pm.currentTime >= eofPosition - 0.25 }
+                check("premature-eof-recovers-same-position", pm.isPlaying && pm.currentTime >= eofPosition - 0.25 && premature.session.index == 0)
+                // A second EOF must stop bounded recovery, retaining the retry
+                // position rather than presenting a replay-from-zero action.
+                NotificationCenter.default.post(name: AVPlayerItem.didPlayToEndTimeNotification, object: pm.playerItem)
+                await wait(0.3)
+                check("premature-eof-repeat-shows-retry", !pm.isPlaying && !pc.failBtn.isHidden)
+                pc.playButton.sendActions(for: .touchUpInside)
+                _ = await until { pm.isPlaying }
+                check("premature-eof-play-button-never-restarts-zero", pm.currentTime >= eofPosition - 0.25)
+                let stableItem = pm.playerItem
+                // Deliver EOF, then supersede it before the queued handler runs.
+                NotificationCenter.default.post(name: AVPlayerItem.didPlayToEndTimeNotification, object: stableItem)
+                pc.portraitControlView.slider.delegate?.sliderTouchEnded?(0.5)
+                _ = await until { !pc.portraitControlView.slider.isdragging && pm.currentTime >= 9.75 }
+                check("queued-eof-cannot-override-new-user-seek", pm.playerItem === stableItem && pm.isPlaying && pm.currentTime >= 9.75)
+                // And the opposite ordering: an EOF during an outstanding seek.
+                pc.portraitControlView.slider.delegate?.sliderTouchEnded?(0.6)
+                NotificationCenter.default.post(name: AVPlayerItem.didPlayToEndTimeNotification, object: stableItem)
+                _ = await until { !pc.portraitControlView.slider.isdragging && pm.currentTime >= 11.75 }
+                check("eof-during-seek-preserves-target", pm.playerItem === stableItem && pm.isPlaying && pm.currentTime >= 11.75)
+                pc.playButton.sendActions(for: .touchUpInside)
+                NotificationCenter.default.post(name: AVPlayerItem.didPlayToEndTimeNotification, object: pm.playerItem)
+                await wait(0.3)
+                check("premature-eof-respects-manual-pause", !pm.isPlaying && pm.playerItem === stableItem && pm.currentTime >= 11.75)
+                NotificationCenter.default.post(name: UIApplication.willResignActiveNotification, object: nil)
+                NotificationCenter.default.post(name: AVPlayerItem.didPlayToEndTimeNotification, object: pm.playerItem)
+                await wait(0.2)
+                check("premature-eof-respects-background", !pm.isPlaying && pm.playerItem === stableItem)
+                NotificationCenter.default.post(name: UIApplication.didBecomeActiveNotification, object: nil)
+                check("premature-eof-foreground-stays-paused", !pm.isPlaying)
+                premature.closePlayer(); await wait(0.5)
+                let prematureAuto = PlayerController(session: session(), origin: origin, cookies: [])
+                var autoEndEvents: [[String: Any]] = []
+                prematureAuto.onProgress = { autoEndEvents.append($0) }
+                prematureAuto.modalPresentationStyle = .fullScreen
+                host.present(prematureAuto, animated: false)
+                _ = await until { prematureAuto.isViewLoaded && host.presentedViewController === prematureAuto }
+                let ac = try testRequire(descendants(prematureAuto.view).compactMap { $0 as? HomeTVPlayerControls }.first, "Premature autoplay controls")
+                let am = try testRequire(ac.player?.currentPlayerManager as? ZFAVPlayerManager, "Premature autoplay manager")
+                _ = await until { am.isPlaying && am.currentTime >= 4 }
+                let obsoleteItem = am.playerItem
+                NotificationCenter.default.post(name: AVPlayerItem.didPlayToEndTimeNotification, object: obsoleteItem)
+                _ = await until { am.playerItem !== obsoleteItem && am.isPlaying }
+                check("premature-eof-cannot-auto-advance-episode", prematureAuto.session.index == 0 && !autoEndEvents.contains { $0["reason"] as? String == "ended" })
+                let recoveredItem = am.playerItem
+                NotificationCenter.default.post(name: AVPlayerItem.didPlayToEndTimeNotification, object: obsoleteItem)
+                await wait(0.2)
+                check("obsolete-item-eof-cannot-interrupt-replacement", am.playerItem === recoveredItem && am.isPlaying)
+                NotificationCenter.default.post(name: AVPlayerItem.didPlayToEndTimeNotification, object: recoveredItem)
+                ac.nextButton.sendActions(for: .touchUpInside)
+                _ = await until { prematureAuto.session.index == 1 && am.isPlaying }
+                check("queued-eof-cannot-override-manual-next-episode", prematureAuto.session.index == 1 && am.isPlaying && am.currentTime >= 2 && am.currentTime < 5)
+                prematureAuto.closePlayer(); await wait(0.5)
+                // Real player diagnostics must persist in ordinary launches,
+                // without --playback-diagnostics or an attached console.
+                PlaybackLogStore.shared.flush()
+                let logDirectory = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("PlaybackLogs")
+                let logData = try Data(contentsOf: logDirectory.appendingPathComponent("playback-0.jsonl"))
+                let logText = String(decoding: logData, as: UTF8.self)
+                check("file-logs-record-player-seeks-without-console-flag", logText.contains("seek-start") && logText.contains("seek-end"))
+                check("file-logs-include-pause-intent-and-network-metrics", logText.contains("toggle-request") && logText.contains("userPaused") && logText.contains("observedBitrate"))
+                check("file-logs-omit-media-addresses", !logText.contains("127.0.0.1") && !logText.contains("video.mp4") && !logText.contains("http:"))
                 if CommandLine.arguments.contains("--seek-only") { try writeReport("player-integration.json"); fflush(stdout); return }
             }
 

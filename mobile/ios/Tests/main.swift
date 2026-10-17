@@ -38,6 +38,7 @@ do {
     try runPlaybackPositionTests()
     try runNativeNavigationTests()
     try runOfflineLibraryTests()
+    try runPlaybackLogStoreTests()
 } catch {
     FileHandle.standardError.write(Data("REGRESSION_FAILED: \(error)\n".utf8))
     exit(1)

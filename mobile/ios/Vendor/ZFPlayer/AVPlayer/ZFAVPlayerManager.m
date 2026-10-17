@@ -396,7 +396,7 @@ static NSString *const kPresentationSize         = @"presentationSize";
     
     _itemEndObserver = [[NSNotificationCenter defaultCenter] addObserverForName:AVPlayerItemDidPlayToEndTimeNotification object:self.playerItem queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification * _Nonnull note) {
         @zf_strongify(self)
-        if (!self) return;
+        if (!self || note.object != self.playerItem) return;
         self.playState = ZFPlayerPlayStatePlayStopped;
         if (self.playerDidToEnd) self.playerDidToEnd(self);
     }];

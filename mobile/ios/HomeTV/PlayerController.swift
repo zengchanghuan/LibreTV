@@ -16,6 +16,7 @@ final class PlayerController: UIViewController {
     private var generation = UUID(), sequence = 0, ticks = 0
     private let sleepTimer: SleepTimer
     private var userPaused = false, sleeping = false, closed = false, finished = false
+    private var earlyEndRetried = false, playbackInterrupted = false
     private var stoppedDuration: Double?
     private var resolvedURL: URL?, proxied = false
     private var episodePicker: EpisodePickerController?
@@ -49,6 +50,14 @@ final class PlayerController: UIViewController {
         surface.accessibilityIdentifier = "player.video-surface"
         surface.clipsToBounds = true; surface.frame = view.bounds; view.addSubview(surface)
         engine.shouldAutoPlay = false
+        engine.diagnosticContext = { [weak self] in
+            guard let self else { return [:] }
+            return ["episode": "\(self.session.index)", "userPaused": "\(self.userPaused)",
+                    "restoring": "\(self.playbackPosition.isRestoring)", "sleeping": "\(self.sleeping)",
+                    "closed": "\(self.closed)", "proxy": "\(self.proxied)",
+                    "finished": "\(self.finished)", "earlyEndRetried": "\(self.earlyEndRetried)",
+                    "appState": "\(UIApplication.shared.applicationState.rawValue)"]
+        }
         engine.canPlay = { [weak self] in
             guard let self, !self.closed, !self.sleeping else { return false }
             return !self.checkDeadline() && !self.userPaused && !self.playbackPosition.isRestoring
@@ -70,7 +79,7 @@ final class PlayerController: UIViewController {
                 self.engine.playerItem?.cancelPendingSeeks()
             }
         }
-        controls.onToggle = { [weak self] in self?.toggle() }
+        controls.onToggle = { [weak self] in self?.engine.trace("gesture-double-tap"); self?.toggle() }
         engine.onSeek = { [weak self] target in
             guard let self else { return nil }
             let id = self.playbackPosition.beginSeek(to: target)
@@ -105,6 +114,8 @@ final class PlayerController: UIViewController {
         player.playerLoadStateChanged = { [weak self] _, _ in self?.engine.trace("buffer-state") }
         NotificationCenter.default.addObserver(self, selector: #selector(background), name: UIApplication.willResignActiveNotification, object: nil)
         NotificationCenter.default.addObserver(self, selector: #selector(foreground), name: UIApplication.didBecomeActiveNotification, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(audioInterruption), name: AVAudioSession.interruptionNotification, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(audioRouteChanged), name: AVAudioSession.routeChangeNotification, object: nil)
         load(session.index)
     }
     override func viewDidLayoutSubviews() {
@@ -137,6 +148,8 @@ final class PlayerController: UIViewController {
         player.playerReadyToPlay = nil; player.playerPlayFailed = nil; player.playerDidToEnd = nil
         engine.stop()
         session.index = index; userPaused = false; sleeping = false; finished = false; proxied = false
+        earlyEndRetried = false; playbackInterrupted = false
+        engine.trace("episode-load")
         episodePicker?.update(episodes: session.episodes, current: index)
         startPlaybackWork()
         stoppedDuration = nil
@@ -193,13 +206,17 @@ final class PlayerController: UIViewController {
         present(prompt, animated: true)
     }
     private var restoreAttempt = UUID()
+    private var attachmentID = UUID()
     private func attach(_ url: URL, token: UUID) {
         restoreAttempt = UUID()
         let attempt = restoreAttempt
+        attachmentID = UUID()
+        let attachment = attachmentID
         let restorePosition = playbackPosition.restorePosition
+        engine.trace("attach restore=\(restorePosition)")
         engine.requestHeader = sameOrigin(url, origin) ? [AVURLAssetHTTPCookiesKey: cookies] : [:]
         player.playerReadyToPlay = { [weak self] _, assetURL in
-            guard let self, self.generation == token, assetURL == url, !self.closed else { return }
+            guard let self, self.generation == token, self.attachmentID == attachment, assetURL == url, !self.closed else { return }
             self.controls.message.text = ""
             let item = self.engine.playerItem
             let duration = item?.duration.seconds ?? 0
@@ -207,15 +224,19 @@ final class PlayerController: UIViewController {
             self.engine.player?.seek(to: CMTime(seconds: start, preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] completed in
                 DispatchQueue.main.async {
                     guard let self, completed, self.restoreAttempt == attempt, self.generation == token, self.engine.playerItem === item, !self.closed else { return }
+                    self.engine.trace("restore-completed")
                     self.playbackPosition.didRestore()
                     if !self.checkDeadline() && !self.userPaused && !self.sleeping { self.engine.rate = self.session.rate; self.engine.play() }
                 }
             }
         }
         player.playerPlayFailed = { [weak self] _, _ in
+            guard let self else { return }
+            let failedItem = self.engine.playerItem
             // Leave ZFPlayer's failure callback before replacing its current item.
             DispatchQueue.main.async {
-                guard let self, self.generation == token, self.engine.assetURL == url, !self.closed else { return }
+                guard self.generation == token, self.attachmentID == attachment,
+                      self.engine.playerItem === failedItem, self.engine.assetURL == url, !self.closed else { return }
                 if !self.proxied, let target = self.resolvedURL, !target.isFileURL, !(sameOrigin(target, self.origin) && target.path == "/api/proxy") {
                     self.proxied = true
                     self.playbackPosition.prepareRetry(currentPosition: self.engine.player?.currentTime().seconds ?? self.playbackPosition.savedPosition)
@@ -226,9 +247,29 @@ final class PlayerController: UIViewController {
             }
         }
         player.playerDidToEnd = { [weak self] _ in
+            guard let self else { return }
+            let item = self.engine.playerItem
+            let seekRevision = self.engine.seekRevision
+            let wasSeeking = self.playbackPosition.hasPendingSeek || self.playbackPosition.isRestoring
+            self.engine.trace("end-notification")
             DispatchQueue.main.async {
-                guard let self, self.generation == token, self.engine.assetURL == url, !self.closed else { return }
+                guard self.generation == token, self.engine.assetURL == url, !self.closed,
+                      self.engine.playerItem === item, self.attachmentID == attachment,
+                      self.engine.seekRevision == seekRevision else { return }
                 if self.checkDeadline() { return }
+                guard !wasSeeking, !self.playbackPosition.hasPendingSeek, !self.playbackPosition.isRestoring else {
+                    self.engine.trace("end-ignored-during-seek"); return
+                }
+                let clock = item?.currentTime().seconds ?? .nan
+                let duration = item?.duration.seconds ?? .nan
+                // Some remote streams signal EOF at a truncated segment or
+                // transport interruption. Only a clock at the actual tail may
+                // clear progress, enable replay, or advance to another episode.
+                guard clock.isFinite, duration.isFinite, duration > 0,
+                      clock >= max(0, duration - 1) else {
+                    self.handlePrematureEnd(url: url, token: token); return
+                }
+                self.engine.trace("end-confirmed")
                 self.finished = true; self.engine.pause(); self.playbackPosition.record(0); self.emit("ended")
                 self.controls.updatePlaying(false)
                 if self.session.autoplayNext && self.session.index + 1 < self.session.episodes.count { self.load(self.session.index + 1) }
@@ -239,7 +280,23 @@ final class PlayerController: UIViewController {
         controls.downloadButton.isEnabled = !url.isFileURL
         controls.showTitle(controls.heading.text ?? session.title, cover: nil, fullScreenMode: .landscape)
     }
-    private func fail() { engine.pause(); controls.message.text = "无法播放此源，请重试或返回换源"; controls.failBtn.isHidden = false; emit("error") }
+    private func handlePrematureEnd(url: URL, token: UUID) {
+        engine.trace("end-premature")
+        // A late notification must never override a user's pause or background.
+        guard !userPaused, !sleeping, !closed else { return }
+        playbackPosition.prepareRetry(currentPosition: position)
+        engine.pause(); emit("interrupted")
+        if !earlyEndRetried, !url.isFileURL {
+            earlyEndRetried = true
+            controls.message.text = "播放意外中断，正在从当前位置恢复…"
+            attach(url, token: token)
+        } else {
+            playbackInterrupted = true
+            controls.message.text = "播放源提前中断，进度已保留，请重试或返回换源"
+            controls.failBtn.isHidden = false
+        }
+    }
+    private func fail() { engine.trace("playback-failed"); engine.pause(); controls.message.text = "无法播放此源，请重试或返回换源"; controls.failBtn.isHidden = false; emit("error") }
     private var position: Double {
         playbackPosition.position(currentTime: engine.playerItem?.status == .readyToPlay ? engine.player?.currentTime().seconds ?? .nan : .nan)
     }
@@ -257,6 +314,7 @@ final class PlayerController: UIViewController {
     private func checkDeadline() -> Bool {
         guard sleepTimer.consumeExpired() else { return false }
         sleeping = true; userPaused = true; session.autoplayNext = false
+        engine.trace("sleep-deadline")
         // Save while the current item still has its clock and duration. Freeze
         // that position before tearing down so close/reopen cannot save zero.
         stoppedDuration = duration
@@ -284,8 +342,10 @@ final class PlayerController: UIViewController {
         controls.sleepButton.accessibilityLabel = sleepTimer.minutesRemaining.map { "定时停止，剩余 \($0) 分钟" } ?? "定时停止"
     }
     @objc private func toggle() {
+        engine.trace("toggle-request")
         guard !closed, !checkDeadline() else { return }
         if sleeping { load(session.index); return }
+        if playbackInterrupted { retry(); return }
         if !engine.isPlaying || finished {
             userPaused = false; sleeping = false; controls.message.text = ""
             if finished { finished = false; engine.replay() }
@@ -293,6 +353,7 @@ final class PlayerController: UIViewController {
         } else { userPaused = true; engine.pause(); emit("pause") }
     }
     @objc private func retry() {
+        engine.trace("retry-request")
         guard !closed else { return }
         playbackPosition.prepareRetry(currentPosition: position)
         load(session.index)
@@ -301,18 +362,28 @@ final class PlayerController: UIViewController {
     @objc private func nextEpisode() { selectEpisode(session.index + 1) }
     private func selectEpisode(_ index: Int) { guard session.episodes.indices.contains(index), index != session.index else { return }; emit("pause"); load(index) }
     @objc private func background() {
+        engine.trace("app-resign-active")
         guard !closed, !sleeping else { return }
         userPaused = true
         engine.pause()
         emit("pause")
     }
-    @objc private func foreground() { _ = checkDeadline(); updateTime() }
+    @objc private func foreground() { engine.trace("app-become-active"); _ = checkDeadline(); updateTime() }
+    @objc private func audioInterruption(_ notification: Notification) {
+        let type = (notification.userInfo?[AVAudioSessionInterruptionTypeKey] as? NSNumber)?.intValue ?? -1
+        DispatchQueue.main.async { [weak self] in self?.engine.trace("audio-interruption type=\(type)") }
+    }
+    @objc private func audioRouteChanged(_ notification: Notification) {
+        let reason = (notification.userInfo?[AVAudioSessionRouteChangeReasonKey] as? NSNumber)?.intValue ?? -1
+        DispatchQueue.main.async { [weak self] in self?.engine.trace("audio-route-change reason=\(reason)") }
+    }
     @objc private func rotate() {
         guard let scene = view.window?.windowScene else { return }
         let landscape = view.bounds.width > view.bounds.height
         scene.requestGeometryUpdate(.iOS(interfaceOrientations: landscape ? .portrait : .landscapeRight))
     }
     @objc func closePlayer() {
+        engine.trace("close-request")
         guard !closed else { return }; emit("close"); closed = true; resolveTask?.cancel(); tick?.invalidate(); player.stop()
         UIApplication.shared.isIdleTimerDisabled = false; try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
         let scene = view.window?.windowScene

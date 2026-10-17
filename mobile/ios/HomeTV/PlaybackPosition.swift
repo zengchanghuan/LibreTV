@@ -7,6 +7,7 @@ final class PlaybackPosition {
     private(set) var restorePosition: Double = 0
     private(set) var isRestoring = true
     private var pendingSeek: (id: UUID, position: Double)?
+    var hasPendingSeek: Bool { pendingSeek != nil }
     var savedPosition: Double { positions[index] }
 
     init(positions: [Double]) { self.positions = positions }
