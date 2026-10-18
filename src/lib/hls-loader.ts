@@ -1,5 +1,6 @@
 import { FetchLoader, type HlsConfig } from 'hls.js';
 import type HlsType from 'hls.js';
+import type { LoaderContext, LoaderResponse, LoaderStats } from 'hls.js';
 import { stripAdGroups } from './m3u8';
 import { buildSegmentCacheKey, readCachedSegment, touchMeta } from './video-cache';
 import type { ForegroundPrefetcher } from './foreground-prefetch';
@@ -18,10 +19,13 @@ import type { ForegroundPrefetcher } from './foreground-prefetch';
  * hls.js 对每次请求都会 new 一个 loader 实例，因此实例上的 destroyed 标记
  * 生命周期安全（abort/destroy 后不再回调，防孤儿 onSuccess）。
  */
+export type PlaybackFragmentObserver = (response: LoaderResponse, stats: LoaderStats, context: LoaderContext) => void;
+
 interface LoaderOptions {
   blockAd?: boolean;
   networkLoader?: HlsLoaderCtor;
   foreground?: ForegroundPrefetcher;
+  onFragment?: PlaybackFragmentObserver;
   /** 缓存命中探针（设置面板展示命中率用），可缺省 */
   onProbe?: (hit: boolean) => void;
 }
@@ -33,7 +37,7 @@ export function createHlsLoader(
   HlsCtor: typeof HlsType,
   options: LoaderOptions = {}
 ): HlsLoaderCtor {
-  const { blockAd = false, onProbe, networkLoader, foreground } = options;
+  const { blockAd = false, onProbe, networkLoader, foreground, onFragment } = options;
 
   return class CacheFirstHlsLoader extends (networkLoader ?? HlsCtor.DefaultConfig.loader as HlsLoaderCtor) {
     private destroyed = false;
@@ -72,6 +76,13 @@ export function createHlsLoader(
         }
 
         // —— 片段：cache-first ——
+        const deliver = callbacks.onSuccess;
+        callbacks.onSuccess = (response: LoaderResponse, stats: LoaderStats, ctx: LoaderContext, networkDetails: unknown) => {
+          if (this.destroyed) return;
+          // Observe complete bytes before HLS can transfer them to its worker.
+          onFragment?.(response, stats, ctx);
+          deliver(response, stats, ctx, networkDetails);
+        };
         const key = buildSegmentCacheKey(context.url);
         readCachedSegment(key).then(async (hit) => {
           if (this.destroyed) return;
@@ -117,13 +128,13 @@ export function createHlsLoader(
 
 /** Keep full-fragment decoding: progressive TS demuxing can backtrack after a
  * cold seek. FetchLoader supplies cancellable foreground range acceleration. */
-export function playbackLoaders(HlsCtor: typeof HlsType, blockAd: boolean, foreground?: ForegroundPrefetcher): Partial<HlsConfig> {
+export function playbackLoaders(HlsCtor: typeof HlsType, blockAd: boolean, foreground?: ForegroundPrefetcher, onFragment?: PlaybackFragmentObserver): Partial<HlsConfig> {
   const canStream = typeof ReadableStream !== 'undefined' && typeof fetch !== 'undefined';
-  if (!canStream) return { loader: createHlsLoader(HlsCtor, { blockAd }) };
+  if (!canStream) return { loader: createHlsLoader(HlsCtor, { blockAd, onFragment }) };
   return {
     progressive: false,
     pLoader: createHlsLoader(HlsCtor, { blockAd }),
-    fLoader: createHlsLoader(HlsCtor, { networkLoader: FetchLoader, foreground }),
+    fLoader: createHlsLoader(HlsCtor, { networkLoader: FetchLoader, foreground, onFragment }),
     fetchSetup(context, initParams) {
       const url = new URL(context.url, document.baseURI);
       const target = url.searchParams.get('url');

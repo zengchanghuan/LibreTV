@@ -172,6 +172,25 @@ describe('VideoPrefetcher.ensure 幂等', () => {
     expect(m3u8Fetches).toHaveBeenCalledTimes(3);
     release();
   });
+
+  it('does not download cached segments again when a window restarts', async () => {
+    const stored = new Set<string>();
+    vi.stubGlobal('caches', { open: async () => ({
+      match: async (key: string) => stored.has(key) ? new Response('cached') : undefined,
+      put: async (key: string) => { stored.add(key); },
+    }) });
+    const { segUrls } = makePrefetcher();
+    const pf = new VideoPrefetcher();
+    ensureAt(pf, 0);
+    await vi.waitFor(() => expect(pf.getStats().state).toBe('done'));
+    const firstDownloads = segUrls.length;
+    expect(firstDownloads).toBeGreaterThan(0);
+    ensureAt(pf, 0);
+    await vi.waitFor(() => expect(pf.getStats().state).toBe('done'));
+    expect(segUrls).toHaveLength(firstDownloads);
+    expect(pf.getStats().cached).toBe(pf.getStats().total);
+    pf.stop();
+  });
 });
 
 describe('缓存 key 归一（代理形态根相对地址）', () => {

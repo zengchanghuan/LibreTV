@@ -20,6 +20,18 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('foreground playback loading', () => {
+  it('captures a complete fragment before HLS detaches the loader response', async () => {
+    let saved: ArrayBuffer | undefined;
+    const Cached = createHlsLoader(Hls, { networkLoader: Loader, onFragment: response => {
+      saved = (response.data as ArrayBuffer).slice(0);
+    } });
+    const success = vi.fn(response => structuredClone(response.data, { transfer: [response.data] }));
+    new Cached({}).load({ url: 'https://cdn.example/a.ts', frag: { sn: 1 } }, {}, { onSuccess: success });
+    await vi.waitFor(() => expect(success).toHaveBeenCalledOnce());
+    expect(new Uint8Array(saved!)).toEqual(new Uint8Array([1, 2, 3]));
+    expect(success.mock.calls[0][0].data.byteLength).toBe(0);
+  });
+
   it('uses full-fragment decoding with the real hls.js configuration', () => {
     const hls = new Hls(playbackLoaders(Hls, false));
     expect(hls.config.progressive).toBe(false);
