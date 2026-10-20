@@ -3,13 +3,15 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import Artplayer from 'artplayer';
-import Hls, { type HlsConfig } from 'hls.js';
+import Hls, { type HlsConfig, type FragmentLoaderContext } from 'hls.js';
 
 import { PlaybackTracker } from '@/lib/playback-quality';
 import { usePlaybackQuality } from '@/lib/playback-quality-store';
 import { PlaybackRecovery, describeHlsError } from '@/lib/playback-recovery';
-import { createHlsLoader } from '@/lib/hls-loader';
-import { hlsEngine, isAppleMobile } from '@/lib/media-support';
+import { playbackLoaders, type PlaybackFragmentObserver } from '@/lib/hls-loader';
+import { ForegroundPrefetcher } from '@/lib/foreground-prefetch';
+import { PlaybackFragmentCache } from '@/lib/playback-fragment-cache';
+import { hasPlaybackHeadroom, hlsEngine, isAppleMobile } from '@/lib/media-support';
 import { PlaybackTools } from './playback-tools';
 import {
   getVideoPrefetcher,
@@ -36,7 +38,7 @@ interface PlayerShellProps {
   autoplayNext: boolean;
   /** 剧集标识 `${source}:${vodId}:${episodeIndex}`（片段缓存按集淘汰的分组键） */
   episodeKey?: string;
-  /** 下一集 m3u8 地址：当前集预取完成后预热下一集前 7 分钟 */
+  /** Reserved for callers; automatic next-episode downloads are disabled. */
   nextUrl?: string;
   nextEpisodeKey?: string;
   /** 进度恢复：优先 URL position，其次查询该回调（返回 0 表示无记录） */
@@ -59,8 +61,6 @@ export function PlayerShell({
   adFilter,
   autoplayNext,
   episodeKey,
-  nextUrl,
-  nextEpisodeKey,
   getRestorePosition,
   onTimeUpdate,
   onEnded,
@@ -89,11 +89,11 @@ export function PlayerShell({
 
   // 始终持有最新 props/回调，避免重建播放器
   const propsRef = useRef({
-    url, qualitySource, title, adFilter, autoplayNext, episodeKey, nextUrl, nextEpisodeKey,
+    url, qualitySource, title, adFilter, autoplayNext, episodeKey,
     getRestorePosition, onTimeUpdate, onEnded, onPause, onRequestSwitchSource,
   });
   propsRef.current = {
-    url, qualitySource, title, adFilter, autoplayNext, episodeKey, nextUrl, nextEpisodeKey,
+    url, qualitySource, title, adFilter, autoplayNext, episodeKey,
     getRestorePosition, onTimeUpdate, onEnded, onPause, onRequestSwitchSource,
   };
   const activePropsRef = useRef(propsRef.current);
@@ -108,8 +108,6 @@ export function PlayerShell({
   const videoErrorRetryUsedRef = useRef(false);
   // 进度恢复每集只执行一次（MANIFEST_PARSED 可能因代理回退再次触发）
   const restoredRef = useRef(false);
-  // timeupdate 续跑预取的游标：必须按集清零，否则会沿用上一集的时间戳推迟首次续跑
-  const lastPrefetchEnsureRef = useRef(0);
   // setupHls 可能改走代理形式，video:error 重试要用最近一次的地址
   const currentMediaUrlRef = useRef(url);
   // 本集的恢复策略实例：跨直连/代理两级重建共享计数
@@ -137,8 +135,8 @@ export function PlayerShell({
     hintTimerRef.current = setTimeout(() => setHint(''), 2500);
   };
 
-  // 片段缓存开启时调大 hls.js 自身缓冲，缓冲之外的空窗由预取器补齐
-  const buildHlsConfig = (): Partial<HlsConfig> => {
+  // A bounded HLS buffer owns all automatic downloads on the 4 Mbps link.
+  const buildHlsConfig = (foreground: ForegroundPrefetcher, onFragment: PlaybackFragmentObserver): Partial<HlsConfig> => {
     const p = propsRef.current;
     const cacheSettings = loadCacheSettings();
     const cacheEnabled = cacheSettings.enabled && !!p.episodeKey;
@@ -146,9 +144,9 @@ export function PlayerShell({
       debug: false,
       enableWorker: true,
       backBufferLength: 90,
-      maxBufferLength: cacheEnabled ? 120 : 30,
-      maxMaxBufferLength: cacheEnabled ? 600 : 60,
-      maxBufferSize: (cacheEnabled ? 90 : 30) * 1000 * 1000,
+      maxBufferLength: cacheEnabled ? 60 : 30,
+      maxMaxBufferLength: cacheEnabled ? 120 : 60,
+      maxBufferSize: 30 * 1000 * 1000,
       maxBufferHole: 0.5,
       fragLoadingMaxRetry: 6,
       fragLoadingRetryDelay: 1000,
@@ -158,33 +156,16 @@ export function PlayerShell({
       abrEwmaDefaultEstimate: 500_000,
       appendErrorMaxRetry: 5,
       // 组合 loader：广告过滤（blockAd 随设置）+ 片段缓存命中（cacheEnabled）
-      loader: createHlsLoader(Hls, { blockAd: p.adFilter }) as unknown as HlsConfig['loader'],
+      ...playbackLoaders(Hls, p.adFilter, foreground, onFragment),
     };
   };
 
-  // 当前集预取（episodeKey 缺省 = 关闭，见 ensure 内部 settings.enabled 判断）
-  const ensurePrefetch = (mediaUrl: string, currentTime: number, horizonSeconds?: number) => {
-    const p = propsRef.current;
-    if (sleeping.current || nativeMode.current || mediaTypeRef.current === 'mp4' || !p.episodeKey) return;
-    getVideoPrefetcher().ensure({
-      m3u8Url: mediaUrl,
-      currentTime,
-      episodeKey: p.episodeKey,
-      horizonSeconds,
-      onProgress: (stats) => {
-        // 当前集预取完成且存在下一集：用独立预取器预热下一集前 7 分钟
-        if (stats.state === 'done' && p.nextUrl && !p.nextUrl.startsWith('/api/site-playback?') && p.nextEpisodeKey) {
-          getNextEpisodePrefetcher().ensure({
-            m3u8Url: p.nextUrl,
-            currentTime: 0,
-            episodeKey: p.nextEpisodeKey,
-            horizonSeconds: 420,
-          });
-        }
-      },
-    });
+  // Retire any automatic prefetch left by a previous player instance.
+  const yieldPrefetch = () => {
+    for (const prefetcher of [getVideoPrefetcher(), getNextEpisodePrefetcher()]) {
+      if (['running', 'parsing'].includes(prefetcher.getStats().state)) prefetcher.stop();
+    }
   };
-
   const setupNativeHls = (video: HTMLVideoElement, mediaUrl: string) => {
     hlsRef.current?.destroy(); hlsRef.current = null;
     nativeMode.current = true;
@@ -209,8 +190,43 @@ export function PlayerShell({
     nativeMode.current = false;
     video.crossOrigin = 'anonymous';
     currentMediaUrlRef.current = mediaUrl;
-    const hls = new Hls(buildHlsConfig());
+    yieldPrefetch();
+    const foreground = new ForegroundPrefetcher();
+    const playbackCache = new PlaybackFragmentCache(propsRef.current.episodeKey);
+    const hls: Hls = new Hls(buildHlsConfig(foreground, (response, stats, context) => {
+      const { frag, part } = context as FragmentLoaderContext;
+      if (!frag || !(response.data instanceof ArrayBuffer)) return;
+      const details = hls.levels[frag.level]?.details;
+      // Only complete VOD media fragments, never keys, init data, live or ranges.
+      if (!details || details.live || part || frag.type !== 'main' ||
+          typeof frag.sn !== 'number' || frag.byteRange.length) return;
+      const index = details.fragments.findIndex(item => item === frag);
+      if (index < 0) return;
+      playbackCache.remember(context.url, response.data, index + 1,
+        Math.max(1, stats.loading.end - stats.loading.start));
+    }));
     hlsRef.current = hls;
+
+    const clearForeground = () => foreground.seek(video.currentTime);
+    // Register before HLS's media listeners so a seek clears old work first.
+    video.addEventListener('seeking', clearForeground);
+    hls.on(Hls.Events.DESTROYING, () => {
+      video.removeEventListener('seeking', clearForeground);
+      foreground.clear();
+      playbackCache.dispose();
+    });
+    hls.on(Hls.Events.FRAG_LOADING, (_event, { frag }) => {
+      const details = hls.levels[frag.level]?.details;
+      const index = details?.fragments.findIndex(item => item === frag) ?? -1;
+      const next = details && index >= 0 ? details.fragments[index + 1] : undefined;
+      if (!details || details.live || frag.type !== 'main' || typeof frag.sn !== 'number' || frag.byteRange.length) {
+        foreground.clear(); return;
+      }
+      const preloadNext = next && !next.byteRange.length && !hasPlaybackHeadroom(video) ? next : undefined;
+      foreground.prepare(frag.url, preloadNext?.url, {
+        start: frag.start, end: preloadNext ? preloadNext.start + preloadNext.duration : frag.start + frag.duration,
+      });
+    });
 
     hls.loadSource(mediaUrl);
     hls.attachMedia(video);
@@ -218,7 +234,7 @@ export function PlayerShell({
     hls.on(Hls.Events.MANIFEST_PARSED, async () => {
       recoveryRef.current?.markHealthy();
       // HLS 在 manifest 解析时尚未必有 duration；等 loadedmetadata 再恢复进度。
-      ensurePrefetch(mediaUrl, video.currentTime);
+      // Wait for actual playback before starting background downloads.
       video.play().catch((err) => { if (err.name === 'NotAllowedError') qualityRef.current?.tracker.pause(performance.now()); });
     });
     // 播放链路恢复（FRAG_LOADED / MANIFEST_PARSED）：静默窗外清零连续失败计数
@@ -329,7 +345,6 @@ export function PlayerShell({
     playbackStartedRef.current = false;
     videoErrorRetryUsedRef.current = false;
     restoredRef.current = false;
-    lastPrefetchEnsureRef.current = 0;
     recoveryRef.current?.dispose();
     recoveryRef.current = new PlaybackRecovery();
     // 换集时清掉上一集的预取窗口，避免带宽被旧集占用
@@ -401,7 +416,6 @@ export function PlayerShell({
           const saved = await activePropsRef.current.getRestorePosition?.() || 0;
           if (media === currentMediaUrlRef.current && saved > 10 && saved < art.duration - 2) {
             art.currentTime = saved;
-            ensurePrefetch(media, saved);
             showHint(`已从 ${formatTime(saved)} 继续播放`);
           }
         } catch { /* ignore unavailable progress */ }
@@ -413,8 +427,18 @@ export function PlayerShell({
       } catch { /* 忽略 */ }
     });
 
-    art.on('video:play', () => { sleeping.current = false; qualityRef.current?.tracker.play(performance.now()); });
-    art.on('video:seeking', () => qualityRef.current?.tracker.seek(performance.now(), true));
+    art.on('video:play', () => {
+      sleeping.current = false;
+      qualityRef.current?.tracker.play(performance.now());
+      yieldPrefetch();
+    });
+    art.on('video:ratechange', () => {
+      if (!art.video.paused && !hasPlaybackHeadroom(art.video)) yieldPrefetch();
+    });
+    art.on('video:seeking', () => {
+      qualityRef.current?.tracker.seek(performance.now(), true);
+      yieldPrefetch();
+    });
     art.on('video:seeked', () => qualityRef.current?.tracker.seek(performance.now(), false));
     art.on('video:playing', () => {
       if (art.video.videoWidth > 0) { qualityRef.current?.tracker.playing(performance.now()); flushQuality(); }
@@ -457,37 +481,25 @@ export function PlayerShell({
     });
     art.on('video:timeupdate', () => {
       const now = Date.now();
+      if (!art.video.paused && !hasPlaybackHeadroom(art.video)) yieldPrefetch();
       if (now - lastSave > 5000) {
         lastSave = now;
         if (!changingMedia.current && restoredRef.current) activePropsRef.current.onTimeUpdate?.(art.currentTime, art.duration);
       }
-      // 每 30s 续跑一次前向预取窗口（ensure 幂等，窗口未覆盖足够余量才会重建）
-      if (now - lastPrefetchEnsureRef.current > 30_000) {
-        lastPrefetchEnsureRef.current = now;
-        // 用 currentMediaUrlRef（代理回退后的实际地址）：否则预取的 key 与
-        // loader 读取的 key 不一致，缓存永不命中且直连 fetch 白耗流量
-        ensurePrefetch(currentMediaUrlRef.current, art.currentTime);
-      }
-    });
-    art.on('video:seeked', () => {
-      ensurePrefetch(currentMediaUrlRef.current, art.currentTime);
     });
     art.on('video:pause', () => {
       qualityRef.current?.tracker.pause(performance.now()); flushQuality();
       if (!changingMedia.current && restoredRef.current && !endedRef.current) activePropsRef.current.onPause?.(art.currentTime, art.duration);
-      // 暂停 = 预取黄金窗口：解除限速并无限铺满整集（用户主动行为，带宽占用可接受）
-      // waiting 触发的限速在此解除，否则黄金窗口会被 500ms 轮询冻结
-      getVideoPrefetcher().setThrottled(false);
-      if (!changingMedia.current) ensurePrefetch(currentMediaUrlRef.current, art.currentTime, 0);
+      // HLS may fill its bounded forward buffer while paused; no whole-episode
+      // or next-episode queue competes when the user resumes or seeks.
+      yieldPrefetch();
     });
     art.on('video:waiting', () => {
       qualityRef.current?.tracker.waiting(performance.now());
-      // 卡顿：预取临时让出带宽给播放
-      getVideoPrefetcher().setThrottled(true);
+      // Cancel both episodes' background traffic so the seek target loads first.
+      yieldPrefetch();
     });
-    art.on('video:playing', () => {
-      getVideoPrefetcher().setThrottled(false);
-    });
+    art.on('video:playing', yieldPrefetch);
     art.on('video:ended', () => {
       qualityRef.current?.tracker.pause(performance.now()); flushQuality();
       endedRef.current = true;

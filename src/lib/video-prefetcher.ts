@@ -1,6 +1,7 @@
 import { parseM3u8Playlist, type ParsedPlaylist } from './m3u8-parse';
 import {
   buildSegmentCacheKey,
+  hasCachedSegment,
   loadCacheSettings,
   putCachedSegmentResilient,
   enforceQuota,
@@ -271,6 +272,15 @@ export class VideoPrefetcher {
         const key = buildSegmentCacheKey(task.url);
         const started = performance.now();
         try {
+          // A restarted/sliding window overlaps earlier work. Reuse stored
+          // fragments instead of downloading the entire window again.
+          const hit = await hasCachedSegment(key);
+          if (generation !== this.generation) return;
+          if (hit) {
+            cached += 1;
+            this.setState({ state: 'running', cached, total: taskQueue.length, bytes });
+            continue;
+          }
           const res = await fetch(task.url, { signal: this.abort.signal, headers: { Accept: '*/*' } });
           if (!res.ok) continue;
           const buffer = await res.arrayBuffer();
