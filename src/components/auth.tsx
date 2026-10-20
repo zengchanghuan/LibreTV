@@ -6,6 +6,7 @@ import { api, onUnauthorized, STATUS_QUERY_KEY } from '@/lib/client-api';
 import { applyEnvPresets } from '@/lib/subscription-sync';
 import type { AuthStatusResponse } from '@/lib/types';
 import { useToast } from './toast';
+import { ACCOUNT_KEY, activeAccountId, applyAccount, readAccountId } from '@/lib/account-client';
 
 /**
  * 认证上下文：
@@ -55,6 +56,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .fetchQuery({ queryKey: STATUS_QUERY_KEY, queryFn: () => api.status() })
       .then((s) => {
         if (cancelled) return;
+        if (s.verified && applyAccount(s.accountId || null)) return;
         setVerified(s.verified);
         setSetupRequired(!s.passwordRequired);
         setVersion(s.version);
@@ -78,6 +80,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }),
     []
   );
+
+  useEffect(() => {
+    const changed = (event: StorageEvent) => {
+      if (event.key === ACCOUNT_KEY && readAccountId() !== activeAccountId) location.replace('/');
+    };
+    window.addEventListener('storage', changed);
+    return () => window.removeEventListener('storage', changed);
+  }, []);
 
   const openLogin = useCallback(() => setModalOpen(true), []);
 
@@ -138,6 +148,8 @@ function LoginModal({
   onClose: () => void;
 }) {
   const [password, setPassword] = useState('');
+  const [username, setUsername] = useState('');
+  const [accountMode, setAccountMode] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -159,7 +171,8 @@ function LoginModal({
     setLoading(true);
     setError('');
     try {
-      await api.login(password);
+      const result = await api.login(password, accountMode ? username.trim() : undefined);
+      if (applyAccount(result.accountId)) return;
       onSuccess();
     } catch (err) {
       const msg = err instanceof Error ? err.message : '验证失败';
@@ -195,14 +208,20 @@ function LoginModal({
         ) : (
           <>
             <h2 className="text-lg font-semibold text-content mb-1">访问验证</h2>
-            <p className="text-sm text-muted mb-4">请输入密码继续访问</p>
+            <p className="text-sm text-muted mb-4">原有用户仍可直接使用访问密码</p>
+            <div className="flex gap-2 mb-4" role="group" aria-label="登录方式">
+              <button type="button" className={accountMode ? 'btn-ghost' : 'btn-primary'} onClick={() => { setAccountMode(false); setError(''); }}>原有密码登录</button>
+              <button type="button" className={accountMode ? 'btn-primary' : 'btn-ghost'} onClick={() => { setAccountMode(true); setError(''); }}>账号登录</button>
+            </div>
             <form
               onSubmit={(e) => {
                 e.preventDefault();
                 submit();
               }}
             >
+              {accountMode && <input type="text" aria-label="用户名" placeholder="用户名" autoComplete="username" value={username} onChange={e => setUsername(e.target.value)} maxLength={32} required className="input w-full mb-3" />}
               <input
+                aria-label="密码"
                 ref={inputRef}
                 type="password"
                 value={password}
@@ -212,7 +231,7 @@ function LoginModal({
                 autoComplete="current-password"
               />
               {error && <p className="mt-2 text-sm text-danger">{error}</p>}
-              <button type="submit" className="btn-primary w-full mt-4" disabled={loading || !password.trim()}>
+              <button type="submit" className="btn-primary w-full mt-4" disabled={loading || !password.trim() || (accountMode && !username.trim())}>
                 {loading ? '验证中...' : '进入'}
               </button>
             </form>

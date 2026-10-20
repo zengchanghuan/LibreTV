@@ -1,3 +1,4 @@
+import { localDatabaseName } from './account-client';
 import { SETTINGS_FORMAT, isSettingsFormat } from './settings-format';
 import Dexie, { type EntityTable } from 'dexie';
 import type { SourceConfig } from './types';
@@ -76,7 +77,7 @@ export interface DownloadTaskEntry {
 
 // A profile change reloads the page. Each open page keeps writing to its original profile.
 export const activeProfileId = readProfileId();
-export const db = new Dexie(activeProfileId ? `libretv-family-${activeProfileId}` : 'libretv') as Dexie & {
+export const db = new Dexie(activeProfileId ? `libretv-family-${activeProfileId}` : localDatabaseName) as Dexie & {
   history: EntityTable<HistoryEntry, 'id'>;
   progress: EntityTable<ProgressEntry, 'key'>;
   searchHistory: EntityTable<SearchHistoryEntry, 'text'>;

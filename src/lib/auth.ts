@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { readAccounts, type Account } from './accounts';
 
 /**
  * 会话鉴权：httpOnly cookie + HMAC 签名。
@@ -30,9 +31,9 @@ function hmac(payload: string): string {
 }
 
 /** 生成签名会话 token：`<expiresAtMs>.<hmac>` */
-export function signSession(): { token: string; expiresAt: number } {
+export function signSession(account?: Account): { token: string; expiresAt: number } {
   const expiresAt = Date.now() + SESSION_TTL_MS;
-  const payload = String(expiresAt);
+  const payload = account ? `v1.${expiresAt}.${account.id}.${account.sessionVersion}` : String(expiresAt);
   return { token: `${payload}.${hmac(payload)}`, expiresAt };
 }
 
@@ -47,7 +48,14 @@ export function verifySession(token: string | undefined | null): boolean {
   const a = Buffer.from(sig);
   const b = Buffer.from(expected);
   if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return false;
-  const expiresAt = parseInt(payload, 10);
+  const parts = payload.split('.');
+  if (parts[0] === 'v1') {
+    if (parts.length !== 4) return false;
+    try {
+      if (!readAccounts().some(a => a.id === parts[2] && a.sessionVersion === parts[3])) return false;
+    } catch { return false; }
+  } else if (!/^\d+$/.test(payload)) return false;
+  const expiresAt = Number(parts[0] === 'v1' ? parts[1] : payload);
   if (!Number.isFinite(expiresAt)) return false;
   return Date.now() < expiresAt;
 }
@@ -70,7 +78,7 @@ export function sessionFromCookieHeader(cookieHeader: string | null): boolean {
     if (eq === -1) continue;
     const name = c.slice(0, eq).trim();
     if (name === SESSION_COOKIE) {
-      return verifySession(decodeURIComponent(c.slice(eq + 1).trim()));
+      try { return verifySession(decodeURIComponent(c.slice(eq + 1).trim())); } catch { return false; }
     }
   }
   return false;
@@ -108,4 +116,17 @@ if (typeof setInterval === 'function') {
   }, 60 * 1000);
   // 不阻止 Node 进程退出
   if (typeof timer.unref === 'function') timer.unref();
+}
+
+/** null means the original shared-password session; caller must first authenticate. */
+export function accountIdFromCookie(header: string | null): string | null {
+  for (const cookie of (header || '').split(';')) {
+    const equal = cookie.indexOf('=');
+    if (cookie.slice(0, equal).trim() !== SESSION_COOKIE) continue;
+    try {
+      const token = decodeURIComponent(cookie.slice(equal + 1).trim());
+      return verifySession(token) && token.startsWith('v1.') ? token.split('.')[2] : null;
+    } catch { return null; }
+  }
+  return null;
 }

@@ -1,6 +1,7 @@
 'use client';
 
 import Dexie from 'dexie';
+import { localDatabaseName } from './account-client';
 import { activeProfileId, db, type HistoryEntry, type ProgressEntry } from './db';
 import type { SyncResponse } from './family-types';
 
@@ -60,9 +61,9 @@ async function performSync() {
 /** Explicit opt-in import. The original local-only database is never cleared. */
 export async function importLocalHistory() {
   if (!activeProfileId) return;
-  const legacy = new Dexie('libretv');
+  const legacy = new Dexie(localDatabaseName);
   try {
-    if (!(await Dexie.exists('libretv'))) return;
+    if (!(await Dexie.exists(localDatabaseName))) return;
     await legacy.open();
     const rows = await legacy.table<HistoryEntry>('history').toArray();
     const progress = await legacy.table<ProgressEntry>('progress').toArray();

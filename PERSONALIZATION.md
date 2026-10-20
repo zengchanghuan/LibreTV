@@ -201,3 +201,12 @@ Apple 明确支持使用 [AVPlayerLayer 自建播放器界面](https://developer
 - 网页 lint、类型检查、365 项测试通过；iOS 模拟器及真机 arm64 Release 未签名构建通过，独立原生定时测试 5 个场景通过；Android Debug APK、3 项定时测试及 lint 完成（lint 有本地化等非阻断提示）。
 - iOS 模拟器已完成安装/进程启动；Mac 锁屏阻止界面操作，尚未验证实际视频解码和菜单点击。Android 当前没有连接设备或已创建的模拟器。以上不等于双端真机验收。
 - 尚未产出可安装的 Ad Hoc IPA，Android 正式签名未配置。服务端未部署，现有线上网页不含本轮桥接，需要以后更新同一服务版本才能从影片页打开原生播放器。打包、签名及验收步骤见 [`mobile/README.md`](mobile/README.md)。
+
+### 独立账号登录（2026-10-20）
+
+- 登录框新增「账号登录」；默认保留「原有密码登录」。原 `PASSWORD`、`PROXY_SECRET` 和旧会话格式不变，既有会话无需重新登录。
+- 独立账号使用带盐 scrypt 哈希，保存在持久数据目录的 `accounts.json`（权限 0600）；浏览器只得到签名的 HttpOnly 会话。按 IP 和用户名限制登录尝试，账号删除或 `sessionVersion` 更新后，其会话失效。
+- 独立账号的家庭数据写入 `family-<accountId>.json`，原用户仍使用 `family.json`。本设备记录及成员选择按账号区分，切换账号重新加载页面；设置及播放源仍属于设备设置。原家庭记录不会自动复制到朋友账号。
+- 管理员在服务器运行 `sudo -u libretv env LIBRETV_DATA_DIR=/var/lib/libretv node /opt/libretv/current/scripts/create-account.mjs USERNAME` 创建账号。用户名限 1–32 位字母、数字、下划线或连字符，统一为小写；脚本随机生成六位数字密码，只输出一次，不覆盖已有账号。不要把输出写入仓库或普通部署日志。
+- 本次构建以已部署 `cors-fallback-20261019` 源码归档（SHA-256 `bc98a92d17bb19b0e656d96d3ae173eea14a00ea78c78f1f6d72bfd5519b56fc`）为基础，只叠加账号相关文件，保留线上播放修复；当前工作目录的既有播放器改动未纳入此次发布。
+- 已部署到 `/opt/libretv/releases/2.16.12-personal-accounts-20261020`。Linux 全量 488 项测试、lint、类型检查和生产构建通过；备用端口及正式 HTTPS 验证确认旧会话、原密码、bruce 登录、跨账号记录隔离均通过，环境文件与源配置未变。备份位于 `/var/backups/libretv/accounts-20261020`，可回滚至 `cors-fallback-20261019`。bruce 密码不记入本文或源码。

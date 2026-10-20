@@ -98,7 +98,7 @@ export function FamilyProvider({ children }: { children: ReactNode }) {
   return <FamilyContext.Provider value={{ ready, profile: current, open: () => { if (!verified) openLogin(); else { setOpen(true); void refreshProfiles().catch(error => setStatus(error.message)); } } }}>
     {children}
     <Drawer open={open} onClose={() => setOpen(false)} title="谁在观看？">
-      <p className="text-sm text-muted mb-4">每台设备选择同一头像，即可同步该成员的历史和进度。家庭成员共用访问密码，头像用于区分记录。</p>
+      <p className="text-sm text-muted mb-4">每台设备选择同一头像，即可同步该成员的历史和进度。同一登录账号内，头像用于区分成员记录。</p>
       <div className="grid grid-cols-3 gap-3">
         {profiles.map(profile => <button key={profile.id} className={`rounded-xl border p-3 ${profile.id === activeProfileId ? 'border-accent bg-chip' : 'border-line'}`} disabled={busy} onClick={() => void select(profile)}>
           <span className="text-3xl block">{profile.avatar}</span><span className="text-sm block truncate mt-2">{profile.name}</span>

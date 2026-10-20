@@ -1,3 +1,4 @@
+import { activeAccountId } from './account-client';
 import type { HistoryEntry, ProgressEntry } from './db';
 
 export const AVATARS = ['🐱', '🐼', '🦊', '🐰', '🐻', '🐶', '🐨', '🐯'] as const;
@@ -14,7 +15,7 @@ export interface SyncMutation {
 export interface SyncRow { kind: SyncKind; key: string; value: HistoryEntry | ProgressEntry | null; revision: number }
 export interface FamilySnapshot { revision: number; floorRevision: number; rows: SyncRow[] }
 export interface SyncResponse extends FamilySnapshot { accepted: string[]; conflicts: string[] }
-export const PROFILE_KEY = 'libretv-family-profile';
+export const PROFILE_KEY = activeAccountId ? `libretv-family-profile-${activeAccountId}` : 'libretv-family-profile';
 export function validProfileId(value: unknown): value is string { return typeof value === 'string' && /^[a-f0-9-]{36}$/.test(value); }
 export function readProfileId(): string | null {
   try { const id = localStorage.getItem(PROFILE_KEY); return validProfileId(id) ? id : null; }

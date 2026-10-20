@@ -8,9 +8,10 @@ interface FamilyFile { version: 1; profiles: FamilyProfile[]; states: Record<str
 const shared = globalThis as typeof globalThis & { libretvFamilyQueues?: Map<string, Promise<unknown>> };
 const queues = shared.libretvFamilyQueues ??= new Map();
 
-async function transact<T>(change: (file: FamilyFile) => T, write: boolean): Promise<T> {
+async function transact<T>(change: (file: FamilyFile) => T, write: boolean, accountId?: string | null): Promise<T> {
   const directory = process.env.LIBRETV_DATA_DIR || path.join(process.cwd(), '.data');
-  const filename = path.join(directory, 'family.json');
+  if (accountId && !/^[a-f0-9-]{36}$/.test(accountId)) throw new Error('无效账号');
+  const filename = path.join(directory, accountId ? `family-${accountId}.json` : 'family.json');
   const previous = queues.get(filename) || Promise.resolve();
   const operation = previous.catch(() => {}).then(async () => {
     let file: FamilyFile;
@@ -37,9 +38,9 @@ async function transact<T>(change: (file: FamilyFile) => T, write: boolean): Pro
   finally { if (queues.get(filename) === operation) queues.delete(filename); }
 }
 
-export function listProfiles() { return transact(file => file.profiles, false); }
+export function listProfiles(accountId?: string | null) { return transact(file => file.profiles, false, accountId); }
 
-export function createProfile(name: unknown, avatar: unknown) {
+export function createProfile(name: unknown, avatar: unknown, accountId?: string | null) {
   if (typeof name !== 'string' || !name.trim() || name.trim().length > 24 || !AVATARS.includes(avatar as typeof AVATARS[number])) throw new Error('请输入 1–24 字的名字并选择头像');
   return transact(file => {
     if (file.profiles.length >= 12) throw new Error('最多可创建 12 位家庭成员');
@@ -48,14 +49,14 @@ export function createProfile(name: unknown, avatar: unknown) {
     file.profiles.push(profile);
     file.states[profile.id] = { revision: 0, floorRevision: 0, rows: [] };
     return profile;
-  }, true);
+  }, true, accountId);
 }
 
-export function syncProfile(id: string, mutations: SyncMutation[]) {
+export function syncProfile(id: string, mutations: SyncMutation[], accountId?: string | null) {
   return transact(file => {
     if (!file.profiles.some(profile => profile.id === id)) throw new Error('家庭成员不存在');
     const result = mergeFamily(file.states[id], mutations);
     file.states[id] = { revision: result.revision, floorRevision: result.floorRevision, rows: result.rows };
     return result;
-  }, mutations.length > 0);
+  }, mutations.length > 0, accountId);
 }
