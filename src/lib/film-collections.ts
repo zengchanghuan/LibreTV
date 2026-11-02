@@ -1093,7 +1093,7 @@ export const filmCollections: FilmCollection[] = [
   },
   {
     id: 'kurosawa',
-    name: '黑泽明专题',
+    name: '黑泽明',
     intro: '按创作时期收录黑泽明独立执导的三十部长片。先从熟悉的武士片入门，也能沿年份读完他的都市犯罪、文学改编和晚年作品。',
     sections: [
       {

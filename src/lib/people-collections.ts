@@ -3,7 +3,7 @@ import type { FilmCollection } from './film-collections';
 type PersonRole = 'director' | 'actor' | 'both';
 
 function person(name: string, role: PersonRole, fullName: string, sections: FilmCollection['sections'], intro = fullName) {
-  return { id: 'person-' + name, name: name + '专题', role, fullName, intro, sections };
+  return { id: 'person-' + name, name, role, fullName, intro, sections };
 }
 
 export const peopleCollections = [

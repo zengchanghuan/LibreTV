@@ -50,7 +50,7 @@ export function RecommendSection({ visible, onPick }: { visible: boolean; onPick
     <nav aria-label="必看片单" className="mb-5">
       <div className="mb-2 flex items-baseline gap-2">
         <h2 className="text-lg font-bold">必看片单</h2>
-        <span className="text-xs text-muted">{topicOptions.length - 1 + peopleCollections.length} 个专题</span>
+        <span className="text-xs text-muted">{topicOptions.length - 1 + peopleCollections.length} 份片单</span>
       </div>
       <div className="mb-2 flex flex-wrap items-center gap-1">
         {directoryLabels.map(([key, label]) => (
@@ -67,7 +67,7 @@ export function RecommendSection({ visible, onPick }: { visible: boolean; onPick
         {options.map(({ id, name }) => <option key={id} value={id}>{name}</option>)}
       </select>
       {directory !== 'topics' && (
-        <input type="search" aria-label="筛选人物" placeholder="输入人名筛选专题" value={filter}
+        <input type="search" aria-label="筛选人物" placeholder="输入人名" value={filter}
           onChange={event => setFilter(event.target.value)}
           className="mb-2 hidden w-full rounded-lg bg-chip px-3 py-2 text-sm sm:block" />
       )}
