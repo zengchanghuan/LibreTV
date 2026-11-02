@@ -1,4 +1,7 @@
+'use client';
+
 import Image from 'next/image';
+import { useState } from 'react';
 
 export interface PosterFilm {
   id: string;
@@ -18,14 +21,7 @@ export function FilmPosterGrid({ films, onPick }: { films: PosterFilm[]; onPick:
         <li key={id}>
           <button type="button" aria-label={`搜索《${searchTitle}》`} onClick={() => onPick(searchTitle)} className="group w-full text-left">
             <span className="relative block overflow-hidden rounded-lg bg-chip">
-              {poster ? (
-                <Image src={poster} alt={`《${title}》海报`} width={264} height={377}
-                  className="aspect-[7/10] w-full object-cover" />
-              ) : (
-                <span className="flex aspect-[7/10] items-center justify-center px-4 text-center text-sm text-muted">
-                  {title}
-                </span>
-              )}
+              <PosterImage key={poster} poster={poster} title={title} />
               <span aria-hidden="true" className="absolute top-2 left-2 rounded bg-black/80 px-2 py-1 text-xs font-bold text-white">#{i + 1}</span>
             </span>
             <strong className="mt-2 block group-hover:text-accent">{title}</strong>
@@ -36,5 +32,15 @@ export function FilmPosterGrid({ films, onPick }: { films: PosterFilm[]; onPick:
         </li>
       ))}
     </ol>
+  );
+}
+
+function PosterImage({ poster, title }: { poster?: string; title: string }) {
+  const [failed, setFailed] = useState(false);
+  const showLogo = !poster || failed;
+  return (
+    <Image src={showLogo ? '/icons/icon-512.png' : poster} alt={showLogo ? 'HomeTV' : `《${title}》海报`}
+      width={264} height={377} onError={() => setFailed(true)}
+      className={`aspect-[7/10] w-full ${showLogo ? 'object-contain p-6' : 'object-cover'}`} />
   );
 }
