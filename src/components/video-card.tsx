@@ -7,22 +7,12 @@ import type { SearchResultItem } from '@/lib/types';
 import { useAppStore } from '@/lib/store';
 import { cn } from '@/lib/utils';
 import { SmartImage } from './smart-image';
-import { classifyMediaType, MEDIA_TYPE_LABELS, type MediaType } from '@/lib/media-type';
+import { classifyMediaType, type MediaType } from '@/lib/media-type';
 import type { AggregatedGroup } from '@/lib/search-result-groups';
+import { MediaTypeLabel } from './media-type-label';
 
 export { aggregateResults } from '@/lib/search-result-groups';
 export type { AggregatedGroup } from '@/lib/search-result-groups';
-
-function MediaTypeLabel({ type }: { type: MediaType }) {
-  return (
-    <span
-      aria-label={`内容类型：${MEDIA_TYPE_LABELS[type]}`}
-      className="shrink-0 whitespace-nowrap text-xs text-muted"
-    >
-      {MEDIA_TYPE_LABELS[type]}
-    </span>
-  );
-}
 
 /**
  * 聚合影片卡片：
@@ -239,7 +229,11 @@ export function VideoCard({ item, onClick }: { item: SearchResultItem; onClick: 
 }
 
 /** 豆瓣推荐卡片（无来源徽章，点击直接搜索） */
-export function DoubanCard({ item, onClick }: { item: { title: string; cover: string; rating?: string }; onClick: () => void }) {
+export function DoubanCard({ item, mediaType, onClick }: {
+  item: { title: string; cover: string; rating?: string; isTv?: boolean };
+  mediaType?: MediaType;
+  onClick: () => void;
+}) {
   const imageProxyMode = useAppStore((s) => s.imageProxyMode);
   const customImageProxy = useAppStore((s) => s.customImageProxy);
   const [imgFailed, setImgFailed] = useState(false);
@@ -276,8 +270,9 @@ export function DoubanCard({ item, onClick }: { item: { title: string; cover: st
             </svg>
           </div>
         )}
+        <MediaTypeLabel type={mediaType ?? (item.isTv === true ? 'tv' : item.isTv === false ? 'movie' : 'unknown')} overlay />
         {item.rating && (
-          <span className={cn('absolute top-1.5 right-1.5 tag bg-black/70 text-rating font-medium')}>
+          <span className="absolute top-1.5 left-1.5 tag bg-black/70 text-rating font-medium">
             ★ {item.rating}
           </span>
         )}

@@ -165,7 +165,9 @@ function DoubanView({ onPick }: { onPick: (title: string) => void }) {
       ) : (
         <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2.5">
           {items.map((item) => (
-            <DoubanCard key={item.id} item={item} onClick={() => onPick(item.title)} />
+            <DoubanCard key={item.id} item={item}
+              mediaType={type === 'movie' ? 'movie' : tag === '综艺' ? 'variety' : tag === '日本动画' ? 'animation' : tag === '纪录片' ? 'documentary' : 'tv'}
+              onClick={() => onPick(item.title)} />
           ))}
         </div>
       )}
@@ -209,7 +211,7 @@ function BangumiView({ onPick }: { onPick: (title: string) => void }) {
       ) : (
         <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2.5">
           {items.map((item) => (
-            <DoubanCard key={item.id} item={item} onClick={() => onPick(item.title)} />
+            <DoubanCard key={item.id} item={item} mediaType="animation" onClick={() => onPick(item.title)} />
           ))}
         </div>
       )}
@@ -254,7 +256,9 @@ function HotListView({ onPick }: { onPick: (title: string) => void }) {
       ) : (
         <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2.5">
           {items.map((item) => (
-            <DoubanCard key={item.id} item={item} onClick={() => onPick(item.title)} />
+            <DoubanCard key={item.id} item={item}
+              mediaType={listId === 'douban_movie_weekly' ? 'movie' : listId.startsWith('douban_show_') ? 'variety' : 'tv'}
+              onClick={() => onPick(item.title)} />
           ))}
         </div>
       )}
