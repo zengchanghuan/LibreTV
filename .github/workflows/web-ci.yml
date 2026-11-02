@@ -55,7 +55,21 @@ jobs:
       - name: Package Linux server
         if: github.event_name != 'pull_request'
         run: |
+          mkdir -p public/live-sources
+          cp config/live-sources.m3u public/live-sources/verified.m3u
+          python3 scripts/sync_iptv_org.py --output public/live-sources/iptv-org.m3u --state-dir "$RUNNER_TEMP/iptv-sync"
           cp -r public config .next/standalone/
+          # Next loads these defaults at startup. Runtime environment overrides take priority.
+          node --input-type=commonjs <<'NODE'
+          const fs = require('node:fs');
+          const presets = { DEFAULT_SOURCES: 'sources', DEFAULT_LIVE_SOURCES: 'live-sources' };
+          const lines = Object.entries(presets).map(([key, file]) => {
+            const { sources } = require('./config/' + file + '.json');
+            if (!sources.length) throw new Error('Empty preset: ' + file);
+            return key + "='" + JSON.stringify(sources) + "'";
+          });
+          fs.writeFileSync('.next/standalone/.env.production', lines.join('\n') + '\n');
+          NODE
           rm -f .next/standalone/config/family-accounts.json.age
           cp -r .next/static .next/standalone/.next/
           printf '%s\n' "$GITHUB_SHA" > .next/standalone/REVISION
