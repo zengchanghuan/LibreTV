@@ -7,58 +7,26 @@ import type { SearchResultItem } from '@/lib/types';
 import { useAppStore } from '@/lib/store';
 import { cn } from '@/lib/utils';
 import { SmartImage } from './smart-image';
+import { classifyMediaType, MEDIA_TYPE_LABELS, type MediaType } from '@/lib/media-type';
+import type { AggregatedGroup } from '@/lib/search-result-groups';
 
-// —— 跨源同名聚合 ——
+export { aggregateResults } from '@/lib/search-result-groups';
+export type { AggregatedGroup } from '@/lib/search-result-groups';
 
-export interface AggregatedGroup {
-  key: string;
-  name: string;
-  year?: string;
-  typeName?: string;
-  pic?: string;
-  remarks?: string;
-  items: SearchResultItem[];
-}
-
-function buildGroup(name: string, year: string | undefined, items: SearchResultItem[]): AggregatedGroup {
-  return {
-    key: `${name}|${year ?? ''}|${items.map((i) => `${i.sourceKey}_${i.vodId}`).join(',')}`,
-    name,
-    year,
-    typeName: items.find((i) => i.typeName)?.typeName,
-    pic: items.find((i) => i.pic)?.pic,
-    remarks: items.find((i) => i.remarks)?.remarks,
-    items,
-  };
-}
-
-/**
- * 把扁平的跨源搜索结果按「同名影片」聚合：
- * - 以名称分桶；桶内年份不一致时（同名翻拍）按年份拆分，无年份的条目并入年份桶；
- * - 保持传入顺序（搜索结果已按名称排序）。
- */
-export function aggregateResults(list: SearchResultItem[]): AggregatedGroup[] {
-  const byName = new Map<string, SearchResultItem[]>();
-  for (const item of list) {
-    const k = (item.name || '').trim();
-    if (!k) continue;
-    if (!byName.has(k)) byName.set(k, []);
-    byName.get(k)!.push(item);
-  }
-  const groups: AggregatedGroup[] = [];
-  for (const [name, items] of byName) {
-    const years = [...new Set(items.map((i) => i.year).filter(Boolean))] as string[];
-    if (years.length > 1) {
-      for (const y of years) {
-        groups.push(buildGroup(name, y, items.filter((i) => i.year === y)));
-      }
-      const noYear = items.filter((i) => !i.year);
-      if (noYear.length) groups.push(buildGroup(name, undefined, noYear));
-    } else {
-      groups.push(buildGroup(name, years[0], items));
-    }
-  }
-  return groups;
+function MediaTypeBadge({ type }: { type: MediaType }) {
+  return (
+    <span
+      aria-label={`内容类型：${MEDIA_TYPE_LABELS[type]}`}
+      className={cn(
+        'tag shrink-0 whitespace-nowrap font-medium',
+        type === 'movie' ? 'bg-cyan-500/15 text-cyan-700 dark:text-cyan-300'
+          : type === 'tv' ? 'bg-violet-500/15 text-violet-700 dark:text-violet-300'
+            : 'bg-chip text-muted'
+      )}
+    >
+      {MEDIA_TYPE_LABELS[type]}
+    </span>
+  );
 }
 
 /**
@@ -136,9 +104,12 @@ export function AggregatedCard({
 
         <div className="p-2.5 flex flex-col flex-grow min-w-0">
           <div className="flex-grow">
-            <h3 className="font-semibold text-sm text-content mb-1.5 line-clamp-2" title={group.name}>
-              {group.name}
-            </h3>
+            <div className="flex items-start justify-between gap-2 mb-1.5">
+              <h3 className="min-w-0 font-semibold text-sm text-content line-clamp-2" title={group.name}>
+                {group.name}
+              </h3>
+              <MediaTypeBadge type={group.mediaType} />
+            </div>
             <div className="flex flex-wrap gap-1 mb-1.5">
               {group.typeName && <span className="tag bg-accent/15 text-accent">{group.typeName}</span>}
               {group.year && <span className="tag bg-purple-500/15 text-purple-600 dark:text-purple-300">{group.year}</span>}
@@ -251,9 +222,12 @@ export function VideoCard({ item, onClick }: { item: SearchResultItem; onClick: 
 
         <div className="p-2.5 flex flex-col flex-grow min-w-0">
           <div className="flex-grow">
-            <h3 className="font-semibold text-sm text-content mb-1.5 line-clamp-2" title={item.name}>
-              {item.name}
-            </h3>
+            <div className="flex items-start justify-between gap-2 mb-1.5">
+              <h3 className="min-w-0 font-semibold text-sm text-content line-clamp-2" title={item.name}>
+                {item.name}
+              </h3>
+              <MediaTypeBadge type={classifyMediaType(item.typeName)} />
+            </div>
             <div className="flex flex-wrap gap-1 mb-1.5">
               {item.typeName && <span className="tag bg-accent/15 text-accent">{item.typeName}</span>}
               {item.year && <span className="tag bg-purple-500/15 text-purple-600 dark:text-purple-300">{item.year}</span>}
