@@ -8,6 +8,8 @@ import { cn } from '@/lib/utils';
 import type { DoubanItem } from '@/lib/types';
 import { filmCollections, type FilmCollection } from '@/lib/film-collections';
 import { peopleCollections } from '@/lib/people-collections';
+import { filmPosterMetadata } from '@/lib/film-poster-metadata';
+import { FilmPosterGrid } from './film-poster-grid';
 import { KoreanThrillers } from './korean-thrillers';
 import { DoubanCard } from './video-card';
 
@@ -86,30 +88,17 @@ export function RecommendSection({ visible, onPick }: { visible: boolean; onPick
 }
 
 function CollectionList({ collection, onPick }: { collection: FilmCollection; onPick: (title: string) => void }) {
-  const count = collection.sections.reduce((sum, section) => sum + section.films.length, 0);
-  let rank = 0;
+  const films = collection.sections.flatMap(({ label, films }) => films.map(([title, year]) => {
+    const id = title + '|' + year;
+    const metadata = filmPosterMetadata[id];
+    return { id, title, year, poster: metadata?.poster, cast: metadata?.cast, theme: metadata?.genre || label };
+  }));
   return (
     <section aria-label={collection.name}>
       <h2 className="text-xl font-bold">{collection.name}</h2>
       {collection.intro && <p className="mt-1 text-sm text-muted">{collection.intro}</p>}
-      <p className="mt-1 text-xs text-muted">共 {count} 部 · 选择影片搜索片源</p>
-      {collection.sections.map(({ label, films }) => (
-        <section key={label} aria-label={label} className="mt-5">
-          <h3 className="mb-2 font-semibold">{label}</h3>
-          <ol start={rank + 1} className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-            {films.map(([title, year]) => (
-              <li key={title + year}>
-                <button type="button" onClick={() => onPick(title)} aria-label={`搜索《${title}》（${year}）`}
-                  className="flex h-full w-full items-baseline gap-3 rounded-lg bg-chip px-3 py-2.5 text-left hover:bg-hover hover:text-accent">
-                  <span aria-hidden="true" className="text-xs tabular-nums text-muted">{String(++rank).padStart(2, '0')}</span>
-                  <span className="grow text-sm font-medium">{title}</span>
-                  <span className="text-xs tabular-nums text-muted">{year}</span>
-                </button>
-              </li>
-            ))}
-          </ol>
-        </section>
-      ))}
+      <p className="mb-4 mt-1 text-sm text-muted">共 {films.length} 部 · 选择影片搜索片源</p>
+      <FilmPosterGrid films={films} onPick={onPick} />
     </section>
   );
 }
