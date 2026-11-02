@@ -159,7 +159,6 @@ function LoginModal({
 }) {
   const [password, setPassword] = useState('');
   const [username, setUsername] = useState('');
-  const [accountMode, setAccountMode] = useState(true);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -177,13 +176,13 @@ function LoginModal({
   }, [onClose]);
 
   const submit = async () => {
-    if (!password.trim() || loading) return;
+    if (!username.trim() || !password.trim() || loading) return;
     setLoading(true);
     setError('');
     try {
-      const result = await api.login(password, accountMode ? username.trim() : undefined);
+      const result = await api.login(password, username.trim());
       if (applyAccount(result.accountId)) return;
-      onSuccess(accountMode ? username.trim().toLowerCase() : null);
+      onSuccess(username.trim().toLowerCase());
     } catch (err) {
       const msg = err instanceof Error ? err.message : '验证失败';
       setError(msg === '需要登录' ? '密码错误' : msg);
@@ -205,7 +204,7 @@ function LoginModal({
         className="bg-surface-raised rounded-xl p-6 w-full max-w-sm mx-4 shadow-2xl"
         role="dialog"
         aria-modal="true"
-        aria-label={setupRequired ? '需要配置密码' : '访问验证'}
+        aria-label={setupRequired ? '需要配置密码' : '账号登录'}
       >
         {setupRequired ? (
           <>
@@ -217,22 +216,16 @@ function LoginModal({
           </>
         ) : (
           <>
-            <h2 className="text-lg font-semibold text-content mb-1">访问验证</h2>
-            <p className="text-sm text-muted mb-4">原有用户仍可直接使用访问密码</p>
-            <div className="flex gap-2 mb-4" role="group" aria-label="登录方式">
-              <button type="button" className={accountMode ? 'btn-ghost' : 'btn-primary'} onClick={() => { setAccountMode(false); setError(''); }}>原有密码登录</button>
-              <button type="button" className={accountMode ? 'btn-primary' : 'btn-ghost'} onClick={() => { setAccountMode(true); setError(''); }}>账号登录</button>
-            </div>
+            <h2 className="text-lg font-semibold text-content mb-4">账号登录</h2>
             <form
               onSubmit={(e) => {
                 e.preventDefault();
                 submit();
               }}
             >
-              {accountMode && <input type="text" aria-label="用户名" placeholder="用户名" autoComplete="username" value={username} onChange={e => setUsername(e.target.value)} maxLength={32} required className="input w-full mb-3" />}
+              <input ref={inputRef} type="text" aria-label="用户名" placeholder="用户名" autoComplete="username" value={username} onChange={e => setUsername(e.target.value)} maxLength={32} required className="input w-full mb-3" />
               <input
                 aria-label="密码"
-                ref={inputRef}
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
@@ -241,8 +234,8 @@ function LoginModal({
                 autoComplete="current-password"
               />
               {error && <p className="mt-2 text-sm text-danger">{error}</p>}
-              <button type="submit" className="btn-primary w-full mt-4" disabled={loading || !password.trim() || (accountMode && !username.trim())}>
-                {loading ? '验证中...' : '进入'}
+              <button type="submit" className="btn-primary w-full mt-4" disabled={loading || !password.trim() || !username.trim()}>
+                {loading ? '登录中…' : '登录'}
               </button>
             </form>
           </>
