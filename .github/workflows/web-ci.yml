@@ -6,6 +6,7 @@ on:
     paths:
       - 'src/**'
       - 'public/**'
+      - 'config/**'
       - 'scripts/**'
       - 'package.json'
       - 'package-lock.json'
@@ -15,6 +16,7 @@ on:
     paths:
       - 'src/**'
       - 'public/**'
+      - 'config/**'
       - 'scripts/**'
       - 'package.json'
       - 'package-lock.json'
@@ -49,3 +51,18 @@ jobs:
         run: npm run build
         env:
           DOCKER_BUILD: '1'
+
+      - name: Package Linux server
+        if: github.event_name != 'pull_request'
+        run: |
+          cp -r public config .next/standalone/
+          rm -f .next/standalone/config/family-accounts.json.age
+          cp -r .next/static .next/standalone/.next/
+          printf '%s\n' "$GITHUB_SHA" > .next/standalone/REVISION
+          tar -C .next/standalone -czf "$RUNNER_TEMP/hometv.tgz" .
+      - uses: actions/upload-artifact@v4
+        if: github.event_name != 'pull_request'
+        with:
+          name: hometv-linux-${{ github.sha }}
+          path: ${{ runner.temp }}/hometv.tgz
+          retention-days: 14
