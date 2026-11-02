@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { accountIdFromCookie, isPasswordConfigured, sessionFromCookieHeader } from '@/lib/auth';
+import { readAccounts } from '@/lib/accounts';
 import { getEnvSources } from '@/lib/env-sources';
 import { getEnvLiveSources } from '@/lib/env-live-sources';
 import { getEnvSubscriptions } from '@/lib/env-subscriptions';
@@ -12,10 +13,12 @@ export const runtime = 'nodejs';
 export async function GET(req: Request) {
   const passwordRequired = isPasswordConfigured();
   const verified = passwordRequired && sessionFromCookieHeader(req.headers.get('cookie'));
+  const accountId = verified ? accountIdFromCookie(req.headers.get('cookie')) : null;
   return NextResponse.json({
     passwordRequired,
     verified,
-    accountId: verified ? accountIdFromCookie(req.headers.get('cookie')) : null,
+    accountId,
+    username: accountId ? readAccounts().find(account => account.id === accountId)?.username : null,
     // 构建时由 next.config.ts 从 package.json 注入
     version: process.env.APP_VERSION || 'dev',
     // 部署者通过 DEFAULT_SOURCES 预置的采集站

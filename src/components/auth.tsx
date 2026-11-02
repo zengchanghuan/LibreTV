@@ -17,6 +17,7 @@ import { ACCOUNT_KEY, activeAccountId, applyAccount, readAccountId } from '@/lib
 type SetupRequired = boolean;
 
 interface AuthContextValue {
+  username: string | null;
   checked: boolean;
   verified: boolean;
   /** 服务器未设置 PASSWORD，需要管理员配置 */
@@ -28,6 +29,7 @@ interface AuthContextValue {
 }
 
 const AuthContext = createContext<AuthContextValue>({
+  username: null,
   checked: false,
   verified: false,
   setupRequired: false,
@@ -41,6 +43,7 @@ export function useAuth(): AuthContextValue {
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const [username, setUsername] = useState<string | null>(null);
   const [checked, setChecked] = useState(false);
   const [verified, setVerified] = useState(false);
   const [setupRequired, setSetupRequired] = useState(false);
@@ -57,6 +60,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .then((s) => {
         if (cancelled) return;
         if (s.verified && applyAccount(s.accountId || null)) return;
+        setUsername(s.username ?? null);
         setVerified(s.verified);
         setSetupRequired(!s.passwordRequired);
         setVersion(s.version);
@@ -94,13 +98,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = useCallback(async () => {
     try {
       await api.logout();
-    } finally {
-      setVerified(false);
-      toast('已退出登录', 'info');
+    } catch {
+      toast('退出失败，请重试', 'error');
+      return;
     }
-  }, [toast]);
+    setUsername(null);
+    setVerified(false);
+    queryClient.removeQueries({ queryKey: STATUS_QUERY_KEY });
+    if (applyAccount(null)) return;
+    toast('已退出登录', 'info');
+  }, [toast, queryClient]);
 
-  const handleLoginSuccess = useCallback(async () => {
+  const handleLoginSuccess = useCallback(async (name: string | null) => {
+    setUsername(name);
     setVerified(true);
     setSetupRequired(false);
     setModalOpen(false);
@@ -125,7 +135,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [toast, queryClient]);
 
   return (
-    <AuthContext.Provider value={{ checked, verified, setupRequired, version, openLogin, logout }}>
+    <AuthContext.Provider value={{ username, checked, verified, setupRequired, version, openLogin, logout }}>
       {children}
       {modalOpen && (
         <LoginModal
@@ -144,12 +154,12 @@ function LoginModal({
   onClose,
 }: {
   setupRequired: boolean;
-  onSuccess: () => void;
+  onSuccess: (name: string | null) => void;
   onClose: () => void;
 }) {
   const [password, setPassword] = useState('');
   const [username, setUsername] = useState('');
-  const [accountMode, setAccountMode] = useState(false);
+  const [accountMode, setAccountMode] = useState(true);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -173,7 +183,7 @@ function LoginModal({
     try {
       const result = await api.login(password, accountMode ? username.trim() : undefined);
       if (applyAccount(result.accountId)) return;
-      onSuccess();
+      onSuccess(accountMode ? username.trim().toLowerCase() : null);
     } catch (err) {
       const msg = err instanceof Error ? err.message : '验证失败';
       setError(msg === '需要登录' ? '密码错误' : msg);

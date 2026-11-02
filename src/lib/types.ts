@@ -93,6 +93,7 @@ export interface BangumiCalendarResponse {
 }
 
 export interface AuthStatusResponse {
+  username?: string | null;
   accountId?: string | null;
   /** 服务器是否配置了 PASSWORD */
   passwordRequired: boolean;

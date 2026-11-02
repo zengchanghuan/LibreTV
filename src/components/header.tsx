@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
+import { useAuth } from './auth';
 import { ThemeToggle } from './theme';
 import { SourceManagerDrawer } from './source-manager';
 import { HistoryPanel } from './history-panel';
@@ -18,6 +19,7 @@ import { useNativeApp } from './native-player';
 export function Header({ showSearch = false }: { showSearch?: boolean }) {
   const router = useRouter();
   const pathname = usePathname();
+  const { checked, verified, username, logout, openLogin } = useAuth();
   const native = useNativeApp();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -122,6 +124,14 @@ export function Header({ showSearch = false }: { showSearch?: boolean }) {
             </IconButton></>}
           </nav>
         </div>
+        {pathname === '/' && checked && (
+          <div className="max-w-6xl mx-auto px-4 pb-1 flex items-center justify-end gap-3 text-sm">
+            {verified && <span className="truncate text-muted">当前账号 · {username || '共享访问'}</span>}
+            <button type="button" className="btn-ghost shrink-0" onClick={verified ? logout : openLogin}>
+              {verified ? '退出登录' : '账号登录'}
+            </button>
+          </div>
+        )}
         {!native && <InstallBanner />}
       </header>
 
