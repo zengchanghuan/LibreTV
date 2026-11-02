@@ -11,6 +11,7 @@ import { peopleCollections } from '@/lib/people-collections';
 import { filmPosterMetadata } from '@/lib/film-poster-metadata';
 import { FilmPosterGrid } from './film-poster-grid';
 import { KoreanThrillers } from './korean-thrillers';
+import { Spinner } from './states';
 import { DoubanCard } from './video-card';
 
 const MOVIE_TAGS = ['热门', '最新', '经典', '豆瓣高分', '冷门佳片', '华语', '欧美', '韩国', '日本', '动画'];
@@ -268,13 +269,16 @@ function HotListView({ onPick }: { onPick: (title: string) => void }) {
 
 function GridSkeleton() {
   return (
-    <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2.5">
-      {Array.from({ length: 16 }).map((_, i) => (
-        <div key={i}>
-          <div className="aspect-[2/3] rounded-lg bg-chip animate-pulse" />
-          <div className="h-3 mt-2 rounded bg-chip animate-pulse" />
-        </div>
-      ))}
+    <div role="status" aria-label="正在加载推荐…">
+      <div className="flex items-center justify-center gap-2 py-4 text-sm text-muted"><Spinner size="md" />正在加载推荐…</div>
+      <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2.5">
+        {Array.from({ length: 16 }).map((_, i) => (
+          <div key={i}>
+            <div className="aspect-[2/3] rounded-lg bg-chip animate-pulse" />
+            <div className="h-3 mt-2 rounded bg-chip animate-pulse" />
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

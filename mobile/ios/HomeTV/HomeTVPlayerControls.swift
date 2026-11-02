@@ -1,6 +1,6 @@
 import UIKit
 
-/// ZFPlayer owns the slider, buffering indicator and playback gestures. HomeTV
+/// ZFPlayer owns the slider and playback gestures. HomeTV
 /// adds its episode/sleep actions; rotation stays with our presented controller.
 final class HomeTVPlayerControls: ZFPlayerControlView {
     var onToggle: (() -> Void)?
@@ -26,6 +26,9 @@ final class HomeTVPlayerControls: ZFPlayerControlView {
         seekToPlay = false
         prepareShowControlView = true
         prepareShowLoading = true
+        activity.loadingView.removeFromSuperview()
+        activity.loadingView = HomeTVLoadingView()
+        activity.addSubview(activity.loadingView)
         autoHiddenTimeInterval = 4
         bottomPgrogress.isHidden = true
         portraitControlView.topToolView.isHidden = true
@@ -115,5 +118,48 @@ final class HomeTVPlayerControls: ZFPlayerControlView {
     func updatePlaying(_ playing: Bool) {
         playButton.setImage(UIImage(systemName: playing ? "pause.fill" : "play.fill"), for: .normal)
         playButton.accessibilityLabel = playing ? "暂停" : "播放"
+    }
+}
+
+/// Reuse ZFPlayer's buffering lifecycle with the app's current brand artwork.
+private final class HomeTVLoadingView: ZFLoadingView {
+    private let logo = UIImageView(image: UIImage(named: "BrandLogo"))
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        lineColor = .clear
+        hidesWhenStopped = true
+        logo.contentMode = .scaleAspectFit
+        logo.layer.cornerRadius = 8
+        logo.clipsToBounds = true
+        addSubview(logo)
+        accessibilityLabel = "正在加载视频"
+        isAccessibilityElement = true
+        NotificationCenter.default.addObserver(self, selector: #selector(updateMotion), name: UIAccessibility.reduceMotionStatusDidChangeNotification, object: nil)
+    }
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+    deinit { NotificationCenter.default.removeObserver(self) }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        logo.frame = bounds
+    }
+    override func startAnimating() {
+        super.startAnimating()
+        updateMotion()
+    }
+    override func stopAnimating() {
+        super.stopAnimating()
+        logo.layer.removeAllAnimations()
+    }
+    @objc private func updateMotion() {
+        logo.layer.removeAllAnimations()
+        guard isAnimating, !UIAccessibility.isReduceMotionEnabled else { return }
+        let pulse = CABasicAnimation(keyPath: "opacity")
+        pulse.fromValue = 0.55; pulse.toValue = 1
+        pulse.duration = 0.7; pulse.autoreverses = true
+        pulse.repeatCount = .infinity
+        pulse.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+        logo.layer.add(pulse, forKey: "hometv.loading")
     }
 }

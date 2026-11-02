@@ -4,8 +4,9 @@ import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { LiveChannelName } from './live-channel-name';
 import Artplayer from 'artplayer';
+import { PLAYER_LOADING_ICON } from '@/lib/brand';
 import Hls, { type HlsConfig } from 'hls.js';
-import { Spinner } from './states';
+import { Spinner, PlayerLoadingState } from './states';
 import { hlsEngine, isAppleMobile } from '@/lib/media-support';
 
 /**
@@ -64,7 +65,7 @@ export function LivePlayer({ url, title, onPrevChannel, onNextChannel }: LivePla
   const [loading, setLoading] = useState(true);
   // 手动重试计数：变化时重建整个播放器实例（比 location.reload() 轻得多）
   const [retryNonce, setRetryNonce] = useState(0);
-  // 起播前的品牌占位图（与点播 player-shell 共用 /player-poster.png），实际开始播放后隐藏
+  // 起播前的品牌占位图（与点播共用当前 HomeTV logo），实际开始播放后隐藏
   const [showPoster, setShowPoster] = useState(true);
   // 换台 OSD：切台后短暂显示频道名（键盘换台/控制条换台时的视觉反馈，全屏内同样可见）
   const [osdTitle, setOsdTitle] = useState('');
@@ -299,6 +300,7 @@ export function LivePlayer({ url, title, onPrevChannel, onNextChannel }: LivePla
       });
     }
     const art = new Artplayer({
+      icons: { loading: PLAYER_LOADING_ICON },
       container: containerRef.current,
       url,
       // 原生容器统一用 'mp4'（仅用于选择处理函数，实际容器由浏览器嗅探）
@@ -393,20 +395,10 @@ export function LivePlayer({ url, title, onPrevChannel, onNextChannel }: LivePla
   }, [url, retryNonce, onPrevChannel, onNextChannel]);
 
   return (
-    <div className="relative w-full h-full">
+    <div className={`relative w-full h-full${(showPoster || loading) && !error ? ' hometv-starting' : ''}`}>
       <div ref={containerRef} className="w-full h-full" />
       {/* 起播前的品牌占位图 */}
-      {showPoster && !error && (
-        <div
-          className="absolute inset-0 bg-black pointer-events-none"
-          style={{
-            backgroundImage: 'url(/player-poster.png)',
-            backgroundSize: 'contain',
-            backgroundPosition: 'center',
-            backgroundRepeat: 'no-repeat',
-          }}
-        />
-      )}
+      {showPoster && !error && <PlayerLoadingState />}
       {/* LIVE 呼吸标识 */}
       {!error && (
         <div className="absolute top-3 right-3 flex items-center gap-1.5 bg-black/60 px-2 py-1 rounded-full pointer-events-none">
@@ -421,7 +413,7 @@ export function LivePlayer({ url, title, onPrevChannel, onNextChannel }: LivePla
         </div>,
         osdHost,
       )}
-      {loading && !error && (
+      {loading && !showPoster && !error && (
         <div className="absolute inset-0 flex items-center justify-center bg-black/40 pointer-events-none">
           <Spinner size="lg" tone="onDark" />
         </div>

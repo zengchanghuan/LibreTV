@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import Artplayer from 'artplayer';
+import { PLAYER_LOADING_ICON } from '@/lib/brand';
 import Hls, { type HlsConfig, type FragmentLoaderContext } from 'hls.js';
 
 import { PlaybackTracker } from '@/lib/playback-quality';
@@ -12,6 +13,7 @@ import { playbackLoaders, type PlaybackFragmentObserver } from '@/lib/hls-loader
 import { ForegroundPrefetcher } from '@/lib/foreground-prefetch';
 import { PlaybackFragmentCache } from '@/lib/playback-fragment-cache';
 import { hasPlaybackHeadroom, hlsEngine, isAppleMobile } from '@/lib/media-support';
+import { PlayerLoadingState } from './states';
 import { PlaybackTools } from './playback-tools';
 import {
   getVideoPrefetcher,
@@ -374,6 +376,7 @@ export function PlayerShell({
 
     startQuality();
     const art = new Artplayer({
+      icons: { loading: PLAYER_LOADING_ICON },
       container: containerRef.current,
       url: initialUrl,
       type: 'm3u8',
@@ -642,24 +645,14 @@ export function PlayerShell({
   }, [adFilter]);
 
   return (
-    <div className="relative w-full h-full">
+    <div className={`relative w-full h-full${showPoster && !error ? ' hometv-starting' : ''}`}>
       <div ref={containerRef} className="w-full h-full" style={{ WebkitTouchCallout: 'none' }} />
       {player && createPortal(<PlaybackTools player={player} count={episodeCount} index={episodeIndex} onEpisode={onEpisode} onSleep={() => {
         sleeping.current = true;
         getVideoPrefetcher().stop(); getNextEpisodePrefetcher().stop();
         onSleep?.();
       }} />, player.template.$player)}
-      {showPoster && !error && (
-        <div
-          className="absolute inset-0 bg-black pointer-events-none"
-          style={{
-            backgroundImage: 'url(/player-poster.png)',
-            backgroundSize: 'contain',
-            backgroundPosition: 'center',
-            backgroundRepeat: 'no-repeat',
-          }}
-        />
-      )}
+      {showPoster && !error && <PlayerLoadingState />}
       {error && (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/80">
           <p className="text-danger text-sm">{error}</p>

@@ -5,6 +5,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { api, onUnauthorized, STATUS_QUERY_KEY } from '@/lib/client-api';
 import { applyEnvPresets } from '@/lib/subscription-sync';
 import type { AuthStatusResponse } from '@/lib/types';
+import { Spinner } from './states';
 import { useToast } from './toast';
 import { ACCOUNT_KEY, activeAccountId, applyAccount, readAccountId } from '@/lib/account-client';
 
@@ -235,7 +236,7 @@ function LoginModal({
               />
               {error && <p className="mt-2 text-sm text-danger">{error}</p>}
               <button type="submit" className="btn-primary w-full mt-4" disabled={loading || !password.trim() || !username.trim()}>
-                {loading ? '登录中…' : '登录'}
+                {loading ? <span className="inline-flex items-center gap-2"><Spinner size="sm" />登录中…</span> : '登录'}
               </button>
             </form>
           </>

@@ -1,6 +1,7 @@
 'use client';
 
 import type { ReactNode } from 'react';
+import { BRAND_LOGO } from '@/lib/brand';
 import { cn } from '@/lib/utils';
 import { Icon, type IconName } from './icon';
 
@@ -11,9 +12,9 @@ import { Icon, type IconName } from './icon';
  */
 
 const SPINNER_SIZE = {
-  sm: 'w-4 h-4 border-2',
-  md: 'w-8 h-8 border-4',
-  lg: 'w-9 h-9 border-4',
+  sm: 'w-4 h-4',
+  md: 'w-8 h-8',
+  lg: 'w-12 h-12',
 } as const;
 
 export function Spinner({
@@ -27,11 +28,16 @@ export function Spinner({
   className?: string;
 }) {
   return (
-    <span
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={BRAND_LOGO}
+      alt=""
+      width={96}
+      height={96}
       className={cn(
-        'inline-block rounded-full animate-spin shrink-0',
+        'hometv-loading-logo inline-block rounded-lg shrink-0 object-contain',
         SPINNER_SIZE[size],
-        tone === 'onDark' ? 'border-white/30 border-t-white' : 'border-line border-t-accent',
+        tone === 'onDark' && 'drop-shadow-lg',
         className
       )}
       aria-hidden
@@ -42,7 +48,7 @@ export function Spinner({
 /** 加载中：spinner + 可选文案（替代各处「纯文字 加载中...」） */
 export function LoadingState({ label, className }: { label?: string; className?: string }) {
   return (
-    <div className={cn('flex flex-col items-center justify-center gap-3 py-10', className)}>
+    <div role="status" aria-label={label || '加载中'} className={cn('flex flex-col items-center justify-center gap-3 py-10', className)}>
       <Spinner size="md" />
       {label && <p className="text-sm text-muted">{label}</p>}
     </div>
@@ -105,6 +111,17 @@ export function ErrorState({
           {retryLabel}
         </button>
       )}
+    </div>
+  );
+}
+
+/** 起播占位与缓冲共用当前品牌 logo，避免旧品牌文字残留在位图中。 */
+export function PlayerLoadingState() {
+  return (
+    <div role="status" aria-label="正在加载视频" className="absolute inset-0 bg-black pointer-events-none flex flex-col items-center justify-center gap-3">
+      <Spinner size="lg" tone="onDark" />
+      <span className="text-xl font-semibold text-white">HomeTV</span>
+      <span className="text-xs text-white/60">正在加载视频…</span>
     </div>
   );
 }

@@ -13,7 +13,7 @@ import type { SearchResultItem, SourceSearchOutcome } from '@/lib/types';
 import { SearchHistoryDropdown, useSearchHistory } from '@/components/search-history';
 import { cn, formatDisableTtl, validateSourceUrl } from '@/lib/utils';
 import { useToast } from '@/components/toast';
-import { EmptyState } from '@/components/states';
+import { EmptyState, Spinner } from '@/components/states';
 import { Icon } from '@/components/icon';
 import { sourcesForSection, searchPageUrl } from '@/lib/hd-sources';
 import { SiteFooter } from '@/components/site-footer';
@@ -395,18 +395,21 @@ function HomeContent() {
 
 function ResultsSkeleton() {
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-      {Array.from({ length: 6 }).map((_, i) => (
-        // 结构对齐真实结果卡（左侧缩略图 + 右侧文字块），避免占位与真实卡片形状不符
-        <div key={i} className="card flex h-28 overflow-hidden">
-          <div className="w-[105px] sm:w-[120px] shrink-0 bg-chip animate-pulse" />
-          <div className="flex-1 p-2.5 space-y-2">
-            <div className="h-4 w-3/4 rounded bg-chip animate-pulse" />
-            <div className="h-3 w-1/2 rounded bg-chip animate-pulse" />
-            <div className="h-3 w-full rounded bg-chip animate-pulse" />
+    <div role="status" aria-label="正在搜索影片…">
+      <div className="flex items-center justify-center gap-2 py-4 text-sm text-muted"><Spinner size="md" />正在搜索影片…</div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        {Array.from({ length: 6 }).map((_, i) => (
+          // 结构对齐真实结果卡（左侧缩略图 + 右侧文字块），避免占位与真实卡片形状不符
+          <div key={i} className="card flex h-28 overflow-hidden">
+            <div className="w-[105px] sm:w-[120px] shrink-0 bg-chip animate-pulse" />
+            <div className="flex-1 p-2.5 space-y-2">
+              <div className="h-4 w-3/4 rounded bg-chip animate-pulse" />
+              <div className="h-3 w-1/2 rounded bg-chip animate-pulse" />
+              <div className="h-3 w-full rounded bg-chip animate-pulse" />
+            </div>
           </div>
-        </div>
-      ))}
+        ))}
+      </div>
     </div>
   );
 }
