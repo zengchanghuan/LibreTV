@@ -13,16 +13,11 @@ import type { AggregatedGroup } from '@/lib/search-result-groups';
 export { aggregateResults } from '@/lib/search-result-groups';
 export type { AggregatedGroup } from '@/lib/search-result-groups';
 
-function MediaTypeBadge({ type }: { type: MediaType }) {
+function MediaTypeLabel({ type }: { type: MediaType }) {
   return (
     <span
       aria-label={`内容类型：${MEDIA_TYPE_LABELS[type]}`}
-      className={cn(
-        'tag shrink-0 whitespace-nowrap font-medium',
-        type === 'movie' ? 'bg-cyan-500/15 text-cyan-700 dark:text-cyan-300'
-          : type === 'tv' ? 'bg-violet-500/15 text-violet-700 dark:text-violet-300'
-            : 'bg-chip text-muted'
-      )}
+      className="shrink-0 whitespace-nowrap text-xs text-muted"
     >
       {MEDIA_TYPE_LABELS[type]}
     </span>
@@ -108,7 +103,7 @@ export function AggregatedCard({
               <h3 className="min-w-0 font-semibold text-sm text-content line-clamp-2" title={group.name}>
                 {group.name}
               </h3>
-              <MediaTypeBadge type={group.mediaType} />
+              <MediaTypeLabel type={group.mediaType} />
             </div>
             <div className="flex flex-wrap gap-1 mb-1.5">
               {group.typeName && <span className="tag bg-accent/15 text-accent">{group.typeName}</span>}
@@ -226,7 +221,7 @@ export function VideoCard({ item, onClick }: { item: SearchResultItem; onClick: 
               <h3 className="min-w-0 font-semibold text-sm text-content line-clamp-2" title={item.name}>
                 {item.name}
               </h3>
-              <MediaTypeBadge type={classifyMediaType(item.typeName)} />
+              <MediaTypeLabel type={classifyMediaType(item.typeName)} />
             </div>
             <div className="flex flex-wrap gap-1 mb-1.5">
               {item.typeName && <span className="tag bg-accent/15 text-accent">{item.typeName}</span>}
