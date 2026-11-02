@@ -7,6 +7,7 @@ import { useAppStore } from '@/lib/store';
 import { cn } from '@/lib/utils';
 import type { DoubanItem } from '@/lib/types';
 import { filmCollections, type FilmCollection } from '@/lib/film-collections';
+import { peopleCollections } from '@/lib/people-collections';
 import { KoreanThrillers } from './korean-thrillers';
 import { DoubanCard } from './video-card';
 
@@ -14,34 +15,67 @@ const MOVIE_TAGS = ['热门', '最新', '经典', '豆瓣高分', '冷门佳片'
 const TV_TAGS = ['热门', '美剧', '英剧', '韩剧', '日剧', '国产剧', '港剧', '日本动画', '综艺', '纪录片'];
 const WEEKDAYS = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
 
-const collectionOptions = [
+const topicOptions = [
   { id: 'home', name: '首页推荐' },
   { id: 'korean', name: '韩国政治惊悚片' },
   { id: 'zhangyan', name: '张燕版韩国政治惊悚片' },
   ...filmCollections.map(({ id, name }) => ({ id, name })),
 ];
+const allCollections: FilmCollection[] = [...filmCollections, ...peopleCollections];
+const directories = {
+  topics: topicOptions,
+  directors: [
+    ...peopleCollections.filter(({ role }) => role !== 'actor'),
+    ...filmCollections.filter(({ id }) => id === 'kurosawa'),
+  ],
+  actors: peopleCollections.filter(({ role }) => role !== 'director'),
+};
+const directoryLabels = [
+  ['topics', '主题片单'], ['directors', '按导演'], ['actors', '按演员'],
+] as const;
 
 export function RecommendSection({ visible, onPick }: { visible: boolean; onPick: (title: string) => void }) {
   const doubanEnabled = useAppStore((s) => s.doubanEnabled);
   const recommendSource = useAppStore((s) => s.recommendSource);
 
   const [collection, setCollection] = useState('home');
+  const [directory, setDirectory] = useState<keyof typeof directories>('topics');
+  const [filter, setFilter] = useState('');
   if (!visible || !doubanEnabled) return null;
-  const selected = filmCollections.find(({ id }) => id === collection);
+  const selected = allCollections.find(({ id }) => id === collection);
+  const options = directories[directory];
+  const matches = directory === 'topics' ? options : options.filter(option =>
+    (option.name + ('fullName' in option ? option.fullName : '')).includes(filter.trim()));
   return <>
     <nav aria-label="必看片单" className="mb-5">
       <div className="mb-2 flex items-baseline gap-2">
         <h2 className="text-lg font-bold">必看片单</h2>
-        <span className="text-xs text-muted">{collectionOptions.length - 1} 个专题</span>
+        <span className="text-xs text-muted">{topicOptions.length - 1 + peopleCollections.length} 个专题</span>
+      </div>
+      <div className="mb-2 flex flex-wrap items-center gap-1">
+        {directoryLabels.map(([key, label]) => (
+          <TypeButton key={key} active={directory === key} onClick={() => {
+            if (directory === key) return;
+            setDirectory(key);
+            setFilter('');
+            setCollection(directories[key][0].id);
+          }}>{label}</TypeButton>
+        ))}
       </div>
       <select aria-label="选择片单" value={collection} onChange={(event) => setCollection(event.target.value)}
         className="w-full rounded-lg bg-chip px-3 py-2 text-sm text-content sm:hidden">
-        {collectionOptions.map(({ id, name }) => <option key={id} value={id}>{name}</option>)}
+        {options.map(({ id, name }) => <option key={id} value={id}>{name}</option>)}
       </select>
-      <div className="hidden flex-wrap gap-1 rounded-lg bg-chip p-1 sm:flex">
-        {collectionOptions.map(({ id, name }) => (
+      {directory !== 'topics' && (
+        <input type="search" aria-label="筛选人物" placeholder="输入人名筛选专题" value={filter}
+          onChange={event => setFilter(event.target.value)}
+          className="mb-2 hidden w-full rounded-lg bg-chip px-3 py-2 text-sm sm:block" />
+      )}
+      <div className="hidden max-h-52 flex-wrap gap-1 overflow-y-auto rounded-lg bg-chip p-1 sm:flex">
+        {matches.map(({ id, name }) => (
           <TypeButton key={id} active={collection === id} onClick={() => setCollection(id)}>{name}</TypeButton>
         ))}
+        {!matches.length && <p className="p-2 text-sm text-muted">没有匹配的人物</p>}
       </div>
     </nav>
     {selected ? <CollectionList collection={selected} onPick={onPick} /> :
@@ -57,7 +91,7 @@ function CollectionList({ collection, onPick }: { collection: FilmCollection; on
   return (
     <section aria-label={collection.name}>
       <h2 className="text-xl font-bold">{collection.name}</h2>
-      <p className="mt-1 text-sm text-muted">{collection.intro}</p>
+      {collection.intro && <p className="mt-1 text-sm text-muted">{collection.intro}</p>}
       <p className="mt-1 text-xs text-muted">共 {count} 部 · 选择影片搜索片源</p>
       {collection.sections.map(({ label, films }) => (
         <section key={label} aria-label={label} className="mt-5">
