@@ -66,6 +66,26 @@
       "name": "白嫖者",
       "url": "https://baipiaozhe.ai",
       "isAdult": false
+    },
+    {
+      "name": "索尼资源",
+      "url": "https://suoniapi.com/api.php/provide/vod",
+      "isAdult": false
+    },
+    {
+      "name": "淘片资源",
+      "url": "https://taopianapi.com/cjapi/mc/vod/json.html",
+      "isAdult": false
+    },
+    {
+      "name": "虎牙资源",
+      "url": "https://www.huyaapi.com/api.php/provide/vod/from/hym3u8",
+      "isAdult": false
+    },
+    {
+      "name": "百度资源",
+      "url": "https://api.apibdzy.com/api.php/provide/vod",
+      "isAdult": false
     }
   ]
 }
