@@ -60,3 +60,28 @@ export const koreanThrillers = [
   ['president', '孝子洞理发师', '2004', '独裁时期政治讽刺', '宋康昊、文素利', '总统府附近的理发师成为总统的御用理发师，政治风波却一路追进他自己的家。'],
   ['gabi', '咖啡', '2012', '宫廷政治暗杀', '金素妍、朱镇模、朴熹洵', '高宗避居俄国公使馆期间，一名咖啡师因能接近国王，被卷入刺杀计划。'],
 ] as const;
+
+// 豆列 160554947 的默认展示顺序，2026-11-02 核对。
+const byId = new Map(koreanThrillers.map(film => [film[0], film] as const));
+function fromMainList(id: typeof koreanThrillers[number][0]) {
+  return byId.get(id)!;
+}
+
+export const zhangYanThrillers = [
+  fromMainList('attorney'),
+  fromMainList('devil'),
+  fromMainList('inside'),
+  fromMainList('king'),
+  ['discloser', '一级机密', '2017', '军购黑幕', '金相庆、金玉彬、崔武成', '一名军官追查战机零件的采购记录，在军方压力下决定与记者合作。'],
+  fromMainList('terror'),
+  fromMainList('buylaw'),
+  fromMainList('spy'),
+  fromMainList('berlin'),
+  fromMainList('steel2'),
+  fromMainList('steel'),
+  fromMainList('double'),
+  fromMainList('jsa'),
+  fromMainList('silmido'),
+  fromMainList('years'),
+  fromMainList('seoul'),
+] as const;
