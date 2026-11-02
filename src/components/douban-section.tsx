@@ -6,6 +6,7 @@ import { api } from '@/lib/client-api';
 import { useAppStore } from '@/lib/store';
 import { cn } from '@/lib/utils';
 import type { DoubanItem } from '@/lib/types';
+import { filmCollections, type FilmCollection } from '@/lib/film-collections';
 import { KoreanThrillers } from './korean-thrillers';
 import { DoubanCard } from './video-card';
 
@@ -13,23 +14,70 @@ const MOVIE_TAGS = ['热门', '最新', '经典', '豆瓣高分', '冷门佳片'
 const TV_TAGS = ['热门', '美剧', '英剧', '韩剧', '日剧', '国产剧', '港剧', '日本动画', '综艺', '纪录片'];
 const WEEKDAYS = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
 
-/** 首页推荐区：数据源由设置决定（豆瓣热门 / Bangumi 新番放送 / 影视热榜），二选一展示 */
-export function RecommendSection({ onPick }: { onPick: (title: string) => void }) {
+const collectionOptions = [
+  { id: 'home', name: '首页推荐' },
+  { id: 'korean', name: '韩国政治惊悚片' },
+  { id: 'zhangyan', name: '张燕版韩国政治惊悚片' },
+  ...filmCollections.map(({ id, name }) => ({ id, name })),
+];
+
+export function RecommendSection({ visible, onPick }: { visible: boolean; onPick: (title: string) => void }) {
   const doubanEnabled = useAppStore((s) => s.doubanEnabled);
   const recommendSource = useAppStore((s) => s.recommendSource);
 
-  const [collection, setCollection] = useState<'home' | 'korean' | 'zhangyan'>('home');
-  if (!doubanEnabled) return null;
+  const [collection, setCollection] = useState('home');
+  if (!visible || !doubanEnabled) return null;
+  const selected = filmCollections.find(({ id }) => id === collection);
   return <>
-    <div className="mb-4 inline-flex flex-wrap rounded-lg bg-chip p-0.5">
-      <TypeButton active={collection === 'home'} onClick={() => setCollection('home')}>首页推荐</TypeButton>
-      <TypeButton active={collection === 'korean'} onClick={() => setCollection('korean')}>韩国政治惊悚片</TypeButton>
-      <TypeButton active={collection === 'zhangyan'} onClick={() => setCollection('zhangyan')}>张燕版韩国政治惊悚片</TypeButton>
-    </div>
-    {collection !== 'home' ? <KoreanThrillers onPick={onPick} zhangYan={collection === 'zhangyan'} /> :
+    <nav aria-label="必看片单" className="mb-5">
+      <div className="mb-2 flex items-baseline gap-2">
+        <h2 className="text-lg font-bold">必看片单</h2>
+        <span className="text-xs text-muted">{collectionOptions.length - 1} 个专题</span>
+      </div>
+      <select aria-label="选择片单" value={collection} onChange={(event) => setCollection(event.target.value)}
+        className="w-full rounded-lg bg-chip px-3 py-2 text-sm text-content sm:hidden">
+        {collectionOptions.map(({ id, name }) => <option key={id} value={id}>{name}</option>)}
+      </select>
+      <div className="hidden flex-wrap gap-1 rounded-lg bg-chip p-1 sm:flex">
+        {collectionOptions.map(({ id, name }) => (
+          <TypeButton key={id} active={collection === id} onClick={() => setCollection(id)}>{name}</TypeButton>
+        ))}
+      </div>
+    </nav>
+    {selected ? <CollectionList collection={selected} onPick={onPick} /> :
+      collection === 'korean' || collection === 'zhangyan' ? <KoreanThrillers onPick={onPick} zhangYan={collection === 'zhangyan'} /> :
       recommendSource === 'bangumi' ? <BangumiView onPick={onPick} /> :
       recommendSource === 'hot-list' ? <HotListView onPick={onPick} /> : <DoubanView onPick={onPick} />}
   </>;
+}
+
+function CollectionList({ collection, onPick }: { collection: FilmCollection; onPick: (title: string) => void }) {
+  const count = collection.sections.reduce((sum, section) => sum + section.films.length, 0);
+  let rank = 0;
+  return (
+    <section aria-label={collection.name}>
+      <h2 className="text-xl font-bold">{collection.name}</h2>
+      <p className="mt-1 text-sm text-muted">{collection.intro}</p>
+      <p className="mt-1 text-xs text-muted">共 {count} 部 · 选择影片搜索片源</p>
+      {collection.sections.map(({ label, films }) => (
+        <section key={label} aria-label={label} className="mt-5">
+          <h3 className="mb-2 font-semibold">{label}</h3>
+          <ol start={rank + 1} className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {films.map(([title, year]) => (
+              <li key={title + year}>
+                <button type="button" onClick={() => onPick(title)} aria-label={`搜索《${title}》（${year}）`}
+                  className="flex h-full w-full items-baseline gap-3 rounded-lg bg-chip px-3 py-2.5 text-left hover:bg-hover hover:text-accent">
+                  <span aria-hidden="true" className="text-xs tabular-nums text-muted">{String(++rank).padStart(2, '0')}</span>
+                  <span className="grow text-sm font-medium">{title}</span>
+                  <span className="text-xs tabular-nums text-muted">{year}</span>
+                </button>
+              </li>
+            ))}
+          </ol>
+        </section>
+      ))}
+    </section>
+  );
 }
 
 /**

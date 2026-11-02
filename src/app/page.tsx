@@ -378,14 +378,12 @@ function HomeContent() {
         )}
 
         {/* 首页推荐（有搜索时隐藏） */}
-        {!urlQuery && (
-          <RecommendSection
-            onPick={(title) => {
-              setInput(title);
-              runSearch(title);
-            }}
-          />
-        )}
+        <RecommendSection visible={!urlQuery}
+          onPick={(title) => {
+            setInput(title);
+            runSearch(title);
+          }}
+        />
       </main>
 
       <SiteFooter />
