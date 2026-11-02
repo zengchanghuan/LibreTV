@@ -6,8 +6,12 @@ export function KoreanThrillers({ onPick, zhangYan }: { zhangYan: boolean; onPic
   const films = zhangYan ? zhangYanThrillers : koreanThrillers;
   const heading = zhangYan ? '张燕版韩国政治惊悚片' : '韩国政治惊悚片必看榜';
   return <section aria-label={heading}>
-    <h2 className="text-xl font-bold">{heading}</h2>
-    <p className="mb-4 mt-1 text-sm text-muted">共 {films.length} 部 · {zhangYan ? <a href="https://www.douban.com/doulist/160554947/" className="underline" target="_blank" rel="noreferrer">按豆瓣原单顺序排列</a> : '按推荐观看顺序排列'} · 选择影片搜索片源</p>
+    {!zhangYan && (
+      <>
+        <h2 className="text-xl font-bold">{heading}</h2>
+        <p className="mb-4 mt-1 text-sm text-muted">共 {films.length} 部 · 按推荐观看顺序排列 · 选择影片搜索片源</p>
+      </>
+    )}
     <ol className="grid grid-cols-2 gap-x-3 gap-y-6 sm:grid-cols-3 lg:grid-cols-6">
       {films.map(([id, title, year, theme, cast, intro], i) => <li key={id}>
         <button type="button" aria-label={`搜索《${title}》`} onClick={() => onPick(title)} className="group w-full text-left">
