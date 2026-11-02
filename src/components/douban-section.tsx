@@ -6,6 +6,7 @@ import { api } from '@/lib/client-api';
 import { useAppStore } from '@/lib/store';
 import { cn } from '@/lib/utils';
 import type { DoubanItem } from '@/lib/types';
+import { KoreanThrillers } from './korean-thrillers';
 import { DoubanCard } from './video-card';
 
 const MOVIE_TAGS = ['热门', '最新', '经典', '豆瓣高分', '冷门佳片', '华语', '欧美', '韩国', '日本', '动画'];
@@ -17,10 +18,17 @@ export function RecommendSection({ onPick }: { onPick: (title: string) => void }
   const doubanEnabled = useAppStore((s) => s.doubanEnabled);
   const recommendSource = useAppStore((s) => s.recommendSource);
 
+  const [collection, setCollection] = useState(false);
   if (!doubanEnabled) return null;
-  if (recommendSource === 'bangumi') return <BangumiView onPick={onPick} />;
-  if (recommendSource === 'hot-list') return <HotListView onPick={onPick} />;
-  return <DoubanView onPick={onPick} />;
+  return <>
+    <div className="mb-4 inline-flex rounded-lg bg-chip p-0.5">
+      <TypeButton active={!collection} onClick={() => setCollection(false)}>首页推荐</TypeButton>
+      <TypeButton active={collection} onClick={() => setCollection(true)}>韩国政治惊悚片</TypeButton>
+    </div>
+    {collection ? <KoreanThrillers onPick={onPick} /> :
+      recommendSource === 'bangumi' ? <BangumiView onPick={onPick} /> :
+      recommendSource === 'hot-list' ? <HotListView onPick={onPick} /> : <DoubanView onPick={onPick} />}
+  </>;
 }
 
 /**
