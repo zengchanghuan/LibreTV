@@ -24,10 +24,10 @@ const topicOptions = [
 const allCollections: FilmCollection[] = [...filmCollections, ...peopleCollections];
 const directories = {
   topics: topicOptions,
-  directors: [
-    ...peopleCollections.filter(({ role }) => role !== 'actor'),
-    ...filmCollections.filter(({ id }) => id === 'kurosawa'),
-  ],
+  directors: peopleCollections.filter(({ role }) => role !== 'actor').flatMap<FilmCollection>(person =>
+    person.id === 'person-宫崎骏'
+      ? [...filmCollections.filter(({ id }) => id === 'kurosawa'), person]
+      : [person]),
   actors: peopleCollections.filter(({ role }) => role !== 'director'),
 };
 const directoryLabels = [
