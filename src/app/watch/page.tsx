@@ -32,6 +32,7 @@ import {
   db,
 } from '@/lib/db';
 import { cn } from '@/lib/utils';
+import { RelatedVideos } from '@/components/related-videos';
 
 /**
  * 播放页（唯一入口，替代旧版 watch.html → player.html 跳转链）。
@@ -41,9 +42,17 @@ import { cn } from '@/lib/utils';
 export default function WatchPage() {
   return (
     <Suspense>
-      <WatchContent />
+      <WatchRoute />
     </Suspense>
   );
+}
+
+function WatchRoute() {
+  const params = useSearchParams();
+  // A related-film navigation must cancel the previous film's timers and player state.
+  // Episode changes retain the same component so normal episode switching stays seamless.
+  const key = JSON.stringify([params.get('source'), params.get('sourceUrl'), params.get('id') || params.get('url')]);
+  return <WatchContent key={key} />;
 }
 
 function WatchContent() {
@@ -359,6 +368,12 @@ function WatchContent() {
             </p>
           </aside>
         </div>
+        <RelatedVideos
+          source={source}
+          vodId={vodId}
+          ready={detailQuery.isSuccess || detailQuery.isError}
+          section={searchParams.get('section') === 'hd' ? 'hd' : undefined}
+        />
       </main>
 
       {switchOpen && (

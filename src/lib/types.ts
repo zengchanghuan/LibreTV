@@ -42,6 +42,17 @@ export interface VideoInfo {
   sourceUrl?: string;
 }
 
+export interface RelatedVideo extends SearchResultItem {
+  score: number;
+  reasons: string[];
+}
+
+export interface RelatedVideosResponse {
+  items: RelatedVideo[];
+  unsupported?: boolean;
+  partial?: boolean;
+}
+
 export interface VideoDetail {
   episodes: string[];
   videoInfo: VideoInfo;

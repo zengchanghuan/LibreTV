@@ -1,6 +1,7 @@
 'use client';
 
 import type { HDResourceCatalog, HDResourceDetail } from './hd-resource-sites';
+import type { RelatedVideosResponse } from './types';
 import type { SearchResponse, SearchStreamEvent, SourceSearchOutcome, VideoDetail, DoubanResponse, BangumiCalendarResponse, AuthStatusResponse, SourceConfig, SearchResultItem, LivePlaylistResponse, LiveEpgResponse, SourceListPayload } from './types';
 
 /**
@@ -150,6 +151,11 @@ export const api = {
   detail: (id: string, source: SourceConfig, signal?: AbortSignal) => {
     const sp = new URLSearchParams({ id, source: JSON.stringify(source) });
     return request<VideoDetail>(`/api/detail?${sp.toString()}`, { signal });
+  },
+
+  related: (id: string, source: SourceConfig, filterAdult: boolean, signal?: AbortSignal) => {
+    const sp = new URLSearchParams({ id, source: JSON.stringify(source), filterAdult: String(filterAdult) });
+    return request<RelatedVideosResponse>(`/api/related?${sp}`, { signal });
   },
 
   douban: (type: 'movie' | 'tv', tag: string, pageStart: number, pageSize: number, signal?: AbortSignal) => {
