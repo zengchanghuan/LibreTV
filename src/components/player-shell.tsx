@@ -21,6 +21,7 @@ import {
 } from '@/lib/video-prefetcher';
 import { loadCacheSettings } from '@/lib/video-cache';
 import { formatTime } from '@/lib/utils';
+import { bindAutoMini } from '@/lib/player-auto-mini';
 
 /**
  * 播放器外壳：ArtPlayer + hls.js（旧版 player.js 的 React 化）。
@@ -384,7 +385,7 @@ export function PlayerShell({
       volume: 0.8,
       autoplay: true,
       pip: true,
-      autoMini: true,
+      autoMini: false, // Our frame-scheduled observer cannot drop the final scroll position.
       screenshot: true,
       setting: true,
       playbackRate: false, // The persistent speed selector lives in PlaybackTools.
@@ -408,6 +409,7 @@ export function PlayerShell({
     });
     art.template.$player.classList.add('hometv-vod-player');
     artRef.current = art;
+    const unbindAutoMini = bindAutoMini(art);
     setPlayer(art);
     const updateProgressTime = () => {
       const video = art.video;
@@ -614,6 +616,7 @@ export function PlayerShell({
     document.addEventListener('visibilitychange', saveOnHide);
 
     return () => {
+      unbindAutoMini();
       clearInterval(qualityTimer); flushQuality(); qualityRef.current = null;
       // 卸载前刷一次最终进度，避免丢失最后几秒。
       // 已自然播完的集数不回写，避免覆盖 onEnded 里清除的「已看完」记录
