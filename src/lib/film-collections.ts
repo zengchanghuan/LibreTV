@@ -2,8 +2,41 @@ export interface FilmCollection {
   id: string;
   name: string;
   intro: string;
+  source?: { name: string; url: string };
   sections: { label: string; films: [title: string, year: number][] }[];
 }
+
+export const koreanModernHistory: FilmCollection = {
+  id: 'korean-modern-history',
+  name: '韩国近代史必看电影',
+  intro: '从战后社会、劳工运动到光州与济州岛事件，按 Vogue Taiwan 原文顺序收录。',
+  source: {
+    name: 'Vogue Taiwan 原文',
+    url: 'https://www.vogue.com.tw/article/tfai-korea-morden-on-screen',
+  },
+  sections: [
+    {
+      label: '韩国近代史',
+      films: [
+        ['自由夫人', 1956],
+        ['误发弹', 1961],
+        ['最后的证人', 1980],
+        ['成功时代', 1988],
+        ['苍白战争', 1992],
+        ['西便制', 1993],
+        ['美丽青年全泰壹', 1995],
+        ['花瓣', 1996],
+        ['薄荷糖', 1999],
+        ['共同警备区', 2000],
+        ['我的韩国电影', 2002],
+        ['欢迎来到东莫村', 2005],
+        ['芝瑟', 2012],
+        ['初恋三重奏', 2015],
+        ['摇摆男孩', 2018],
+      ],
+    },
+  ],
+};
 
 export const filmCollections: FilmCollection[] = [
   {

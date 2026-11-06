@@ -6,7 +6,7 @@ import { api } from '@/lib/client-api';
 import { useAppStore } from '@/lib/store';
 import { cn } from '@/lib/utils';
 import type { DoubanItem } from '@/lib/types';
-import { filmCollections, type FilmCollection } from '@/lib/film-collections';
+import { filmCollections, koreanModernHistory, type FilmCollection } from '@/lib/film-collections';
 import { peopleCollections } from '@/lib/people-collections';
 import { filmPosterMetadata } from '@/lib/film-poster-metadata';
 import { FilmPosterGrid } from './film-poster-grid';
@@ -21,10 +21,11 @@ const WEEKDAYS = ['周一', '周二', '周三', '周四', '周五', '周六', '�
 const topicOptions = [
   { id: 'home', name: '首页推荐' },
   { id: 'korean', name: '韩国政治惊悚片' },
+  { id: koreanModernHistory.id, name: koreanModernHistory.name },
   { id: 'zhangyan', name: '张燕版韩国政治惊悚片' },
   ...filmCollections.map(({ id, name }) => ({ id, name })),
 ];
-const allCollections: FilmCollection[] = [...filmCollections, ...peopleCollections];
+const allCollections: FilmCollection[] = [koreanModernHistory, ...filmCollections, ...peopleCollections];
 const directories = {
   topics: topicOptions,
   directors: peopleCollections.filter(({ role }) => role !== 'actor').flatMap<FilmCollection>(person =>
@@ -98,7 +99,12 @@ function CollectionList({ collection, onPick }: { collection: FilmCollection; on
     <section aria-label={collection.name}>
       <h2 className="text-xl font-bold">{collection.name}</h2>
       {collection.intro && <p className="mt-1 text-sm text-muted">{collection.intro}</p>}
-      <p className="mb-4 mt-1 text-sm text-muted">共 {films.length} 部 · 选择影片搜索片源</p>
+      <p className="mb-4 mt-1 text-sm text-muted">
+        共 {films.length} 部 · 选择影片搜索片源
+        {collection.source && (
+          <> · <a href={collection.source.url} target="_blank" rel="noopener noreferrer" className="underline">{collection.source.name}</a></>
+        )}
+      </p>
       <FilmPosterGrid films={films} onPick={onPick} />
     </section>
   );
