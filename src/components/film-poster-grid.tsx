@@ -11,6 +11,7 @@ export interface PosterFilm {
   searchTitle?: string;
   year: string | number;
   poster?: string;
+  rating?: string;
   theme?: string;
   cast?: string;
   intro?: string;
@@ -20,7 +21,7 @@ export interface PosterFilm {
 export function FilmPosterGrid({ films, onPick }: { films: PosterFilm[]; onPick: (title: string) => void }) {
   return (
     <ol className="grid grid-cols-2 gap-x-3 gap-y-6 sm:grid-cols-3 lg:grid-cols-6">
-      {films.map(({ id, title, searchTitle = title, year, poster, theme, cast, intro, mediaType = 'movie' }, i) => (
+      {films.map(({ id, title, searchTitle = title, year, poster, rating, theme, cast, intro, mediaType = 'movie' }, i) => (
         <li key={id}>
           <button type="button" aria-label={`搜索《${searchTitle}》`} onClick={() => onPick(searchTitle)} className="group w-full text-left">
             <span className="relative block overflow-hidden rounded-lg bg-chip">
@@ -31,6 +32,7 @@ export function FilmPosterGrid({ films, onPick }: { films: PosterFilm[]; onPick:
             <strong className="mt-2 block group-hover:text-accent">{title}</strong>
           </button>
           <p className="mt-1 text-xs text-muted">{year}{theme && ` · ${theme}`}</p>
+          {rating && <p className="mt-1 text-xs font-medium text-rating">豆瓣评分 {rating}</p>}
           {cast && <p className="my-1 text-sm">主演：{cast}</p>}
           {intro && <p className="text-xs leading-relaxed text-muted">{intro}</p>}
         </li>
