@@ -18,7 +18,12 @@ export function FilmPosterGrid({ films, onPick }: { films: PosterFilm[]; onPick:
   return (
     <ol className="grid grid-cols-2 gap-x-3 gap-y-6 sm:grid-cols-3 lg:grid-cols-6">
       {films.map(({ id, title, searchTitle = title, year, mediaType = 'movie' }, i) => {
-        const { poster, rating, genre, cast, director, intro } = getFilmPosterMetadata(searchTitle, year) ?? {};
+        const { poster, rating, ratingSource = '豆瓣', doubanId, source, genre, cast, director, intro } = getFilmPosterMetadata(searchTitle, year) ?? {};
+        // Some metadata sources credit only the poster, so do not use those as rating links.
+        const ratingUrl = ratingSource === '豆瓣'
+          ? doubanId ? `https://movie.douban.com/subject/${doubanId}/`
+            : source?.startsWith('https://movie.douban.com/subject/') ? source : undefined
+          : ratingSource === 'IMDb' && source?.startsWith('https://www.imdb.com/title/') ? source : undefined;
         return (
           <li key={id}>
             <button type="button" aria-label={`搜索《${searchTitle}》`} onClick={() => onPick(searchTitle)} className="group w-full text-left">
@@ -30,7 +35,13 @@ export function FilmPosterGrid({ films, onPick }: { films: PosterFilm[]; onPick:
               <strong className="mt-2 block group-hover:text-accent">{title}</strong>
             </button>
             <p className="mt-1 text-xs text-muted">{year}{genre && ` · ${genre}`}</p>
-            {rating && <p className="mt-1 text-xs font-medium text-rating">豆瓣评分 {rating}</p>}
+            <p className={`mt-1 text-xs font-medium ${rating ? 'text-rating' : 'text-muted'}`}>
+              {rating ? (
+                ratingUrl ? <a href={ratingUrl} target="_blank" rel="noopener noreferrer" className="hover:underline">
+                  {ratingSource}评分 {rating}
+                </a> : <>{ratingSource}评分 {rating}</>
+              ) : '评分暂缺'}
+            </p>
             {cast && <p className="my-1 text-sm">主演：{cast}</p>}
             {director && <p className="my-1 text-sm">导演：{director}</p>}
             {intro && <p className="text-xs leading-relaxed text-muted">{intro}</p>}

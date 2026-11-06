@@ -7,6 +7,7 @@ import { useAppStore } from '@/lib/store';
 import { cn } from '@/lib/utils';
 import type { DoubanItem } from '@/lib/types';
 import { filmCollections, koreanModernHistory, type FilmCollection } from '@/lib/film-collections';
+import { chungmuroCollection } from '@/lib/chungmuro-collection';
 import { peopleCollections } from '@/lib/people-collections';
 import { FilmPosterGrid } from './film-poster-grid';
 import { KoreanThrillers } from './korean-thrillers';
@@ -20,11 +21,12 @@ const WEEKDAYS = ['周一', '周二', '周三', '周四', '周五', '周六', '�
 const topicOptions = [
   { id: 'home', name: '首页推荐' },
   { id: 'korean', name: '韩国政治惊悚片' },
+  { id: chungmuroCollection.id, name: chungmuroCollection.name },
   { id: koreanModernHistory.id, name: koreanModernHistory.name },
   { id: 'zhangyan', name: '张燕版韩国政治惊悚片' },
   ...filmCollections.map(({ id, name }) => ({ id, name })),
 ];
-const allCollections: FilmCollection[] = [koreanModernHistory, ...filmCollections, ...peopleCollections];
+const allCollections: FilmCollection[] = [chungmuroCollection, koreanModernHistory, ...filmCollections, ...peopleCollections];
 const directories = {
   topics: topicOptions,
   directors: peopleCollections.filter(({ role }) => role !== 'actor').flatMap<FilmCollection>(person =>
