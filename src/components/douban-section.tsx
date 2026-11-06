@@ -8,7 +8,6 @@ import { cn } from '@/lib/utils';
 import type { DoubanItem } from '@/lib/types';
 import { filmCollections, koreanModernHistory, type FilmCollection } from '@/lib/film-collections';
 import { peopleCollections } from '@/lib/people-collections';
-import { filmPosterMetadata } from '@/lib/film-poster-metadata';
 import { FilmPosterGrid } from './film-poster-grid';
 import { KoreanThrillers } from './korean-thrillers';
 import { Spinner } from './states';
@@ -90,11 +89,8 @@ export function RecommendSection({ visible, onPick }: { visible: boolean; onPick
 }
 
 function CollectionList({ collection, onPick }: { collection: FilmCollection; onPick: (title: string) => void }) {
-  const films = collection.sections.flatMap(({ label, films }) => films.map(([title, year]) => {
-    const id = title + '|' + year;
-    const metadata = filmPosterMetadata[id];
-    return { id, title, year, poster: metadata?.poster, cast: metadata?.cast, director: metadata?.director, rating: metadata?.rating, theme: metadata?.genre || label };
-  }));
+  const films = collection.sections.flatMap(({ films }) =>
+    films.map(([title, year]) => ({ id: `${title}|${year}`, title, year })));
   return (
     <section aria-label={collection.name}>
       <h2 className="text-xl font-bold">{collection.name}</h2>
@@ -173,6 +169,7 @@ function DoubanView({ onPick }: { onPick: (title: string) => void }) {
         <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2.5">
           {items.map((item) => (
             <DoubanCard key={item.id} item={item}
+              doubanId={type === 'movie' ? item.id : undefined}
               mediaType={type === 'movie' ? 'movie' : tag === '综艺' ? 'variety' : tag === '日本动画' ? 'animation' : tag === '纪录片' ? 'documentary' : 'tv'}
               onClick={() => onPick(item.title)} />
           ))}
@@ -264,6 +261,7 @@ function HotListView({ onPick }: { onPick: (title: string) => void }) {
         <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2.5">
           {items.map((item) => (
             <DoubanCard key={item.id} item={item}
+              doubanId={listId === 'douban_movie_weekly' ? item.id : undefined}
               mediaType={listId === 'douban_movie_weekly' ? 'movie' : listId.startsWith('douban_show_') ? 'variety' : 'tv'}
               onClick={() => onPick(item.title)} />
           ))}

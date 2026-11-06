@@ -10,6 +10,7 @@ import { SmartImage } from './smart-image';
 import { classifyMediaType, type MediaType } from '@/lib/media-type';
 import type { AggregatedGroup } from '@/lib/search-result-groups';
 import { MediaTypeLabel } from './media-type-label';
+import { getFilmPosterMetadataByDoubanId } from '@/lib/film-poster-metadata';
 
 export { aggregateResults } from '@/lib/search-result-groups';
 export type { AggregatedGroup } from '@/lib/search-result-groups';
@@ -229,15 +230,18 @@ export function VideoCard({ item, onClick }: { item: SearchResultItem; onClick: 
 }
 
 /** 豆瓣推荐卡片（无来源徽章，点击直接搜索） */
-export function DoubanCard({ item, mediaType, onClick }: {
+export function DoubanCard({ item, mediaType, doubanId, onClick }: {
   item: { title: string; cover: string; rating?: string; isTv?: boolean };
   mediaType?: MediaType;
+  doubanId?: string;
   onClick: () => void;
 }) {
   const imageProxyMode = useAppStore((s) => s.imageProxyMode);
   const customImageProxy = useAppStore((s) => s.customImageProxy);
   const [imgFailed, setImgFailed] = useState(false);
   useEffect(() => setImgFailed(false), [item.cover]);
+  const film = doubanId ? getFilmPosterMetadataByDoubanId(doubanId) : undefined;
+  const rating = item.rating ?? film?.metadata.rating;
 
   return (
     <div
@@ -276,14 +280,21 @@ export function DoubanCard({ item, mediaType, onClick }: {
         <div className="min-w-0 truncate text-xs font-medium text-content" title={item.title}>
           {item.title}
         </div>
-        {item.rating && (
+        {rating && (
           <span className="shrink-0 whitespace-nowrap text-xs font-medium text-rating">
             <span aria-hidden="true">★ </span>
             <span className="sr-only">豆瓣评分 </span>
-            {item.rating}
+            {rating}
           </span>
         )}
       </div>
+      {film && (
+        <div className="space-y-1 px-2 pb-2 text-xs text-muted">
+          <p>{film.year}{film.metadata.genre && ` · ${film.metadata.genre}`}</p>
+          {film.metadata.cast && <p>主演：{film.metadata.cast}</p>}
+          {film.metadata.director && <p>导演：{film.metadata.director}</p>}
+        </div>
+      )}
     </div>
   );
 }

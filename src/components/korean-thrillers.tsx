@@ -1,5 +1,4 @@
 import { koreanThrillers, zhangYanThrillers } from '@/lib/korean-thrillers';
-import { filmPosterMetadata } from '@/lib/film-poster-metadata';
 import { FilmPosterGrid } from './film-poster-grid';
 
 export function KoreanThrillers({ onPick, zhangYan }: { zhangYan: boolean; onPick: (title: string) => void }) {
@@ -12,11 +11,10 @@ export function KoreanThrillers({ onPick, zhangYan }: { zhangYan: boolean; onPic
         <p className="mb-4 mt-1 text-sm text-muted">共 {films.length} 部 · 按推荐观看顺序排列 · 选择影片搜索片源</p>
       </>
     )}
-    <FilmPosterGrid onPick={onPick} films={films.map(([id, title, year, theme, cast, intro]) => ({
+    <FilmPosterGrid onPick={onPick} films={films.map(([id, title, year]) => ({
       id, title: zhangYan && id === 'devil' ? '对外秘密：权力的诞生' : title,
       searchTitle: title,
-      year, theme, cast, intro, rating: filmPosterMetadata[title + '|' + year]?.rating,
-      poster: `/posters/korean/${id}.jpg`,
+      year,
     }))} />
   </section>;
 }
