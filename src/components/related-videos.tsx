@@ -18,7 +18,7 @@ export function RelatedVideos({ source, vodId, ready, section }: {
   const imageProxyMode = useAppStore((state) => state.imageProxyMode);
   const customImageProxy = useAppStore((state) => state.customImageProxy);
   const query = useQuery({
-    queryKey: ['related', source.key, source.url, source.name, Boolean(source.isAdult), vodId, filterAdult],
+    queryKey: ['related-v2', source.key, source.url, source.name, Boolean(source.isAdult), vodId, filterAdult],
     queryFn: ({ signal }) => api.related(vodId, source, filterAdult, signal),
     enabled: Boolean(vodId && ready),
     staleTime: 5 * 60_000,
@@ -66,7 +66,7 @@ export function RelatedVideos({ source, vodId, ready, section }: {
                 </Link>
               ))}
             </div>
-          ) : <p className="py-4 text-sm text-muted">{query.data?.unsupported ? '当前点播源暂不支持相关推荐' : '暂未找到相关影片'}</p>}
+          ) : <p className="py-4 text-sm text-muted">暂未找到相关影片</p>}
           {query.data?.partial && (
             <div className="flex items-center gap-2 mt-3 text-xs text-muted">
               部分推荐未能加载

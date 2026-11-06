@@ -49,7 +49,6 @@ export interface RelatedVideo extends SearchResultItem {
 
 export interface RelatedVideosResponse {
   items: RelatedVideo[];
-  unsupported?: boolean;
   partial?: boolean;
 }
 

@@ -4,6 +4,7 @@ import { cmsRequestHeaders } from '@/lib/cms-parser';
 import { fetchUpstream, getCache, setCache } from '@/lib/fetch-utils';
 import { checkUpstreamAllowed } from '@/lib/ssrf';
 import { siteAdapterFor } from '@/lib/site-adapters/site-adapters';
+import { relatedSite } from '@/lib/site-adapters/site-related';
 import { parseRelatedCandidates, rankRelatedVideos, seriesQuery } from '@/lib/related-videos';
 import type { RelatedVideosResponse, SourceConfig } from '@/lib/types';
 
@@ -21,23 +22,28 @@ export async function GET(req: Request) {
     const raw = JSON.parse(params.get('source') || 'null');
     if (!raw || typeof raw.key !== 'string' || typeof raw.name !== 'string'
       || typeof raw.url !== 'string' || raw.url.length > 2048 || !/^https?:\/\//.test(raw.url)
-      || !/^[\w-]{1,100}$/.test(id)) return respond({ error: '无效的影片或点播源' }, 400);
+      || !/^[\w-]{1,512}$/.test(id)) return respond({ error: '无效的影片或点播源' }, 400);
     source = { key: raw.key, name: raw.name, url: raw.url, isAdult: raw.isAdult === true };
   } catch {
     return respond({ error: '无效的影片或点播源' }, 400);
   }
   const filterAdult = params.get('filterAdult') !== 'false';
-  if (siteAdapterFor(source.url)) return respond({ items: [], unsupported: true });
+  const site = siteAdapterFor(source.url);
   if (filterAdult && source.isAdult) return respond({ items: [] });
 
   try {
     const verdict = await checkUpstreamAllowed(source.url);
     if (!verdict.ok) return respond({ error: verdict.reason }, 400);
     // Include source identity: cached cards must keep the caller's playable source key.
-    const cacheKey = `related:v1:${JSON.stringify([source, id, filterAdult])}`;
+    const cacheKey = `related:v2:${JSON.stringify([source, id, filterAdult])}`;
     const cached = getCache<RelatedVideosResponse>(cacheKey);
     if (cached) return respond(cached);
-    const signal = AbortSignal.any([req.signal, AbortSignal.timeout(10_000)]);
+    const signal = AbortSignal.any([req.signal, AbortSignal.timeout(site ? 20_000 : 10_000)]);
+    if (site) {
+      const payload = await relatedSite(source, id, filterAdult, signal);
+      if (!payload.partial) setCache(cacheKey, payload, 5 * 60_000);
+      return respond(payload);
+    }
     const load = async (query: Record<string, string>) => {
       const target = new URL(source.url);
       for (const key of ['ac', 'ids', 'wd', 't', 'pg']) target.searchParams.delete(key);

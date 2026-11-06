@@ -4,10 +4,12 @@ import { signSession, SESSION_COOKIE } from '@/lib/auth';
 import { fetchUpstream, getCache, setCache } from '@/lib/fetch-utils';
 import { checkUpstreamAllowed } from '@/lib/ssrf';
 import { siteAdapterFor } from '@/lib/site-adapters/site-adapters';
+import { relatedSite } from '@/lib/site-adapters/site-related';
 
 vi.mock('@/lib/fetch-utils', () => ({ fetchUpstream: vi.fn(), getCache: vi.fn(), setCache: vi.fn() }));
 vi.mock('@/lib/ssrf', () => ({ checkUpstreamAllowed: vi.fn() }));
 vi.mock('@/lib/site-adapters/site-adapters', () => ({ siteAdapterFor: vi.fn() }));
+vi.mock('@/lib/site-adapters/site-related', () => ({ relatedSite: vi.fn() }));
 
 const source = { key: 'custom_1', name: '测试源', url: 'https://media.example/api?token=public' };
 const seed = { vod_id: 1, vod_name: '流浪地球', type_id: 6, type_name: '科幻片', vod_year: '2019' };
@@ -40,10 +42,25 @@ describe('related API', () => {
     expect((await GET(request())).status).toBe(400);
     expect(fetchUpstream).not.toHaveBeenCalled();
   });
-  it('returns empty for unsupported adapters without requesting CMS endpoints', async () => {
-    vi.mocked(siteAdapterFor).mockReturnValue('mock-adapter' as ReturnType<typeof siteAdapterFor>);
-    expect(await (await GET(request())).json()).toEqual({ items: [], unsupported: true });
+  it('delegates website recommendations after URL validation, without CMS requests', async () => {
+    vi.mocked(siteAdapterFor).mockReturnValue('4kvm');
+    vi.mocked(relatedSite).mockResolvedValue({ items: [] });
+    expect(await (await GET(request())).json()).toEqual({ items: [] });
+    expect(relatedSite).toHaveBeenCalledWith({ ...source, isAdult: false }, '1', true, expect.any(AbortSignal));
     expect(fetchUpstream).not.toHaveBeenCalled();
+    expect(setCache).toHaveBeenCalled();
+    vi.mocked(checkUpstreamAllowed).mockResolvedValue({ ok: false, reason: '内网地址' });
+    vi.mocked(relatedSite).mockClear();
+    expect((await GET(request())).status).toBe(400);
+    expect(relatedSite).not.toHaveBeenCalled();
+  });
+  it('preserves website partial failures for retry and rejects total failures', async () => {
+    vi.mocked(siteAdapterFor).mockReturnValue('baipiaozhe');
+    vi.mocked(relatedSite).mockResolvedValue({ items: [], partial: true });
+    expect(await (await GET(request({ id: 'a'.repeat(120) }))).json()).toEqual({ items: [], partial: true });
+    expect(setCache).not.toHaveBeenCalled();
+    vi.mocked(relatedSite).mockRejectedValue(new Error('timeout'));
+    expect((await GET(request())).status).toBe(502);
   });
   it('returns ranked deduplicated cards, bounded requests, safe fetch and five minute cache', async () => {
     const response = await GET(request());

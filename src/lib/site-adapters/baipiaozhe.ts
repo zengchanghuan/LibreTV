@@ -2,10 +2,11 @@ import { createHash, createHmac, randomBytes } from 'node:crypto';
 import { fetchUpstream, getCache, setCache } from '@/lib/fetch-utils';
 import { checkUpstreamAllowed } from '@/lib/ssrf';
 import type { SearchResultItem, SourceConfig, VideoDetail } from '@/lib/types';
+import { rankRelatedVideos, seriesQuery, type RelatedCandidate } from '@/lib/related-videos';
 import { resultBase, siteEpisode, validSiteId, type SitePlayback } from './site-adapters';
 const ORIGIN = 'https://baipiaozhe.ai';
 type Episode = { id: string; token?: string };
-type Card = { id: string; title: string; poster_url?: string; year?: number; content_kind?: string; area?: string; remarks?: string; description?: string; actors?: string[]; directors?: string[]; episodes?: Episode[]; episode_pagination?: { has_more?: boolean; returned_count?: number }; availability?: { playable?: boolean; disabled?: boolean } };
+type Card = { id: string; title: string; poster_url?: string; year?: number; content_kind?: string; is_adult?: boolean; genres?: string[]; area?: string; remarks?: string; description?: string; actors?: string[]; directors?: string[]; episodes?: Episode[]; episode_pagination?: { has_more?: boolean; returned_count?: number }; availability?: { playable?: boolean; disabled?: boolean } };
 type Line = { url?: string; url_kind?: string; label?: string; resolve_mode?: string; resolve_required?: boolean; minimum_user_level?: number; required_tokens?: number };
 let session: { cookie: string; expires: number } | undefined;
 let sessionPending: Promise<void> | undefined;
@@ -68,11 +69,23 @@ async function ensureSession() {
   await sessionPending;
 }
 async function request<T>(path: string, signal?: AbortSignal): Promise<T> {
-  await ensureSession();
+  // Session bootstrapping is shared; cancelling one recommendation must stop its
+  // wait without cancelling another caller's login or leaving abort listeners behind.
+  const waitForSession = async () => {
+    signal?.throwIfAborted();
+    let onAbort: (() => void) | undefined;
+    try {
+      await Promise.race([ensureSession(), new Promise<never>((_, reject) => {
+        if (signal) { onAbort = () => reject(signal.reason); signal.addEventListener('abort', onAbort, { once: true }); }
+      })]);
+    } finally { if (signal && onAbort) signal.removeEventListener('abort', onAbort); }
+    signal?.throwIfAborted();
+  };
+  await waitForSession();
   try { return await (await rawRequest(path, undefined, signal)).json() as T; }
   catch (error) {
     if (!(error instanceof BPError) || error.status !== 401) throw error;
-    session = undefined; await ensureSession(); // Renew the SAME identity, never rotate to bypass limits.
+    session = undefined; await waitForSession(); // Renew the SAME identity, never rotate to bypass limits.
     return await (await rawRequest(path, undefined, signal)).json() as T;
   }
 }
@@ -86,6 +99,39 @@ export async function bpSearch(source: SourceConfig, keyword: string, signal?: A
   const data = await request<{ cards: Card[] }>(`/v1/browse/catalog?${params}`, signal);
   if (!Array.isArray(data.cards)) throw new Error('白嫖者搜索返回格式异常');
   return parseBPSearch(data.cards, source);
+}
+
+export function parseBPRelated(cards: Card[], source: SourceConfig): RelatedCandidate[] {
+  const kinds: Record<string, string> = { movie: '电影', series: '电视剧', short_drama: '短剧', anime: '动漫', variety: '综艺', documentary: '纪录片', sports: '体育' };
+  return cards.slice(0, 50).flatMap((card) => {
+    if (card.is_adult) return [];
+    const item = parseBPSearch([card], source)[0];
+    return item ? [{ ...item, typeName: kinds[card.content_kind || ''] || card.content_kind,
+      genres: card.genres?.join(' / '), actor: card.actors?.join(' / '), director: card.directors?.join(' / ') }] : [];
+  });
+}
+
+/** Reuse public catalog browse with the current film's genre and series title. */
+export async function bpRelated(source: SourceConfig, id: string, filterAdult: boolean, signal: AbortSignal) {
+  const card = await request<Card>(`/v1/catalog/${id}`, signal);
+  const seed = parseBPRelated([card], source)[0];
+  if (!seed) return { items: [] };
+  const queries: URLSearchParams[] = [];
+  const base = { intent: 'catalog_search', scenario: 'search_discovery', playable: 'true', page: '1', limit: '50' };
+  const genre = card.genres?.find((value) => value.trim() && value.length <= 80);
+  if (genre && card.content_kind) queries.push(new URLSearchParams({ ...base, kind: card.content_kind, genre }));
+  const keyword = seriesQuery(seed.name);
+  if (keyword) queries.push(new URLSearchParams({ ...base, q: keyword }));
+  if (!queries.length) return { items: [] };
+  const results = await Promise.allSettled(queries.map(async (params) => {
+    const data = await request<{ cards: Card[] }>(`/v1/browse/catalog?${params}`, signal);
+    if (!Array.isArray(data.cards)) throw new Error('白嫖者推荐返回格式异常');
+    return parseBPRelated(data.cards, source);
+  }));
+  const successful = results.filter((result) => result.status === 'fulfilled');
+  if (!successful.length) throw new Error('白嫖者推荐加载失败');
+  return { items: rankRelatedVideos(seed, successful.flatMap((result) => result.value), filterAdult),
+    partial: successful.length !== results.length };
 }
 export async function bpDetail(source: SourceConfig, id: string, signal?: AbortSignal): Promise<VideoDetail> {
   const data = await request<Card>(`/v1/catalog/${id}`, signal);

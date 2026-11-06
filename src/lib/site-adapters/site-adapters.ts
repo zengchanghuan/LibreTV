@@ -30,7 +30,7 @@ export function validSiteId(id: string): boolean { return /^[\w-]{1,512}$/.test(
 export function resultBase(source: SourceConfig) {
   return { sourceKey: source.key, sourceName: source.name, sourceUrl: source.url, isAdult: !!source.isAdult };
 }
-async function fourkHtml(path: string, signal?: AbortSignal) {
+export async function fourkHtml(path: string, signal?: AbortSignal) {
   const res = await fetchUpstream(FOURK + path, { signal, timeoutMs: 15000, headers: { 'User-Agent': UA } });
   if (!res.ok) throw new Error(`4K影视请求失败（${res.status}）`);
   const text = await res.text();
@@ -62,9 +62,15 @@ export function parseFourKDetail(html: string, source: SourceConfig): VideoDetai
     seen.add(id); episodes.push(siteEpisode('4kvm', id));
   });
   if (!episodes.length) throw new Error('4K影视未找到可播放剧集');
+  // The detail drawer has adjacent label/value cells; reading the exact label avoids
+  // picking metadata from recommendations elsewhere on the same page.
+  const field = (label: string) => $('div.col-span-1').filter((_, el) => $(el).text().trim() === label)
+    .first().next('div.col-span-2').text().trim() || undefined;
   return { episodes, videoInfo: { ...resultBase(source),
     title: ($('meta[property="og:title"]').attr('content') || $('h1').first().text()).replace(/\s*-\s*第\d+集\s*$/, '').trim(),
-    cover: $('meta[property="og:image"]').attr('content'), desc: $('meta[property="og:description"]').attr('content') } };
+    cover: $('meta[property="og:image"]').attr('content'), desc: $('meta[property="og:description"]').attr('content'),
+    director: field('导演'), actor: field('主演'), typeName: field('类型'),
+    year: field('上映')?.match(/\b(?:19|20)\d{2}\b/)?.[0], area: field('地区') } };
 }
 export async function searchSite(source: SourceConfig, keyword: string, signal?: AbortSignal) {
   if (siteAdapterFor(source.url) === 'baipiaozhe') return bpSearch(source, keyword, signal);
