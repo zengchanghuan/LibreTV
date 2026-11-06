@@ -85,6 +85,7 @@ export function PlayerShell({
   const resolveControllerRef = useRef<AbortController | null>(null);
   const [error, setError] = useState('');
   const [hint, setHint] = useState('');
+  const [progressTime, setProgressTime] = useState('00:00 / 00:00');
   // 起播前的品牌占位图（沿用旧版 nomedia 素材），实际开始播放后隐藏
   const [showPoster, setShowPoster] = useState(true);
   const hintTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -405,9 +406,25 @@ export function PlayerShell({
         },
       },
     });
+    art.template.$player.classList.add('hometv-vod-player');
     artRef.current = art;
     setPlayer(art);
+    const updateProgressTime = () => {
+      const video = art.video;
+      setProgressTime(`${formatTime(Number.isFinite(video.currentTime) ? video.currentTime : 0)} / ${formatTime(Number.isFinite(video.duration) ? video.duration : 0)}`);
+    };
+    const revealControls = () => { art.controls.show = true; };
+    // Do not leave the user without seek/pause controls while playback is waiting.
+    art.on('control', visible => {
+      if (!visible && (art.video.paused || art.video.seeking || art.video.readyState < HTMLMediaElement.HAVE_FUTURE_DATA)) revealControls();
+    });
+    art.on('video:waiting', revealControls);
+    art.on('video:stalled', revealControls);
+    art.on('video:seeking', revealControls);
+    art.on('video:durationchange', updateProgressTime);
+    art.on('video:emptied', updateProgressTime);
     art.on('video:loadedmetadata', async () => {
+      updateProgressTime();
       if (nativeRetryPosition.current > 0) {
         art.currentTime = nativeRetryPosition.current;
         nativeRetryPosition.current = 0;
@@ -483,6 +500,7 @@ export function PlayerShell({
       setError('视频播放失败，请尝试其他视频源');
     });
     art.on('video:timeupdate', () => {
+      updateProgressTime();
       const now = Date.now();
       if (!art.video.paused && !hasPlaybackHeadroom(art.video)) yieldPrefetch();
       if (now - lastSave > 5000) {
@@ -555,7 +573,7 @@ export function PlayerShell({
       // 松手后倍速永久卡在 3x；旧定时器句柄也会被覆盖成无法清除的幽灵触发
       if (isLongPress || longPressTimer) return;
       // 控制栏 / 设置面板上的长按不触发倍速（按住进度条拖动、长按倍速菜单项会误触）
-      if ((e.target as HTMLElement).closest?.('.art-controls, .art-settings, .playback-tools-panel')) return;
+      if ((e.target as HTMLElement).closest?.('.art-controls, .art-progress, .art-settings, .playback-tools-panel')) return;
       originalRate = art.video.playbackRate;
       longPressTimer = setTimeout(() => {
         if (art.video?.paused) return;
@@ -647,6 +665,7 @@ export function PlayerShell({
   return (
     <div className={`relative w-full h-full${showPoster && !error ? ' hometv-starting' : ''}`}>
       <div ref={containerRef} className="w-full h-full" style={{ WebkitTouchCallout: 'none' }} />
+      {player && createPortal(<span className="hometv-progress-time" aria-label="播放进度" aria-live="off">{progressTime}</span>, player.template.$player)}
       {player && createPortal(<PlaybackTools player={player} count={episodeCount} index={episodeIndex} onEpisode={onEpisode} onSleep={() => {
         sleeping.current = true;
         getVideoPrefetcher().stop(); getNextEpisodePrefetcher().stop();

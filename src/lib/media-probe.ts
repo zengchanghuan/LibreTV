@@ -1,22 +1,50 @@
 'use client';
 import { api } from './client-api';
 import type { SourceConfig } from './types';
-export interface MediaProbe { ok: boolean; ms: number; kbps?: number; episodes: number; error?: string }
+import { hasSubtitleCue, inspectHls, type MediaCapabilities, type SubtitleTrack } from './media-capabilities';
+export interface MediaProbe extends MediaCapabilities { ok: boolean; ms: number; kbps?: number; episodes: number; error?: string }
 /** Follow HLS master lists and the first media object, not merely the catalog response. */
 export function firstMediaReference(text: string): string | undefined {
   if (!text.trimStart().startsWith('#EXTM3U')) throw new Error('不是有效的视频列表');
   return text.split(/\r?\n/).map(s => s.trim()).find(s => s && !s.startsWith('#')) || text.match(/#EXT-X-MAP:[^\n]*URI="([^"]+)"/)?.[1];
 }
 async function fetchMedia(url: string, signal: AbortSignal, sample = false): Promise<Response> {
-  const options = { signal, headers: sample ? { Range: 'bytes=0-131071' } : undefined };
+  const options: RequestInit = { signal, cache: 'no-store', headers: sample ? { Range: 'bytes=0-131071' } : undefined };
+  // Proxy-rewritten playlist references already point to the same-origin endpoint.
+  const proxied = new URL(url, typeof window === 'undefined' ? 'http://localhost' : window.location.origin).pathname === '/api/proxy';
   try {
     const res = await fetch(url, options);
     if (res.ok) return res;
     await res.body?.cancel();
-  } catch (err) { if (signal.aborted) throw err; }
+    if (proxied) throw new Error(`媒体请求失败 ${res.status}`);
+  } catch (err) { if (signal.aborted || proxied) throw err; }
   const res = await fetch(`/api/proxy?url=${encodeURIComponent(url)}`, options);
   if (!res.ok) { await res.body?.cancel(); throw new Error(`媒体请求失败 ${res.status}`); }
   return res;
+}
+function referenceUrl(reference: string, response: Response, requested: string): string {
+  const origin = typeof window === 'undefined' ? 'http://localhost' : window.location.origin;
+  const url = new URL(reference, reference.startsWith('/api/proxy?') ? origin : response.url || new URL(requested, origin).href);
+  if (!/^https?:$/.test(url.protocol)) throw new Error('无效的媒体地址');
+  return url.href;
+}
+async function verifySubtitles(tracks: SubtitleTrack[], signal: AbortSignal): Promise<SubtitleTrack | undefined> {
+  const deadline = AbortSignal.any([signal, AbortSignal.timeout(2500)]);
+  for (const track of tracks.slice(0, 2)) {
+    try {
+      let url = track.uri;
+      for (let depth = 0; depth < 3; depth++) {
+        const response = await fetchMedia(url, deadline);
+        const text = await readPlaylist(response);
+        if (hasSubtitleCue(text)) return track;
+        if (!text.trimStart().startsWith('#EXTM3U') || /#EXT-X-KEY:METHOD=(?!NONE)/.test(text)) break;
+        const reference = firstMediaReference(text);
+        if (!reference) break;
+        url = referenceUrl(reference, response, url);
+      }
+    } catch { /* Subtitle failures never turn a playable video into a failed source. */ }
+    if (deadline.aborted) break;
+  }
 }
 async function readPlaylist(res: Response): Promise<string> {
   const reader = res.body?.getReader(); if (!reader) throw new Error('视频列表为空');
@@ -32,10 +60,13 @@ async function readPlaylist(res: Response): Promise<string> {
 const cache = new Map<string, { at: number; value: MediaProbe }>();
 export function clearMediaProbeCache() { cache.clear(); }
 export async function probeVideo(source: SourceConfig, id: string, index: number, parent: AbortSignal): Promise<MediaProbe> {
-  const key = `${source.url}|${id}|${index}`, cached = cache.get(key);
+  parent.throwIfAborted();
+  const key = JSON.stringify([source.url, source.detail, id, index]), cached = cache.get(key);
   if (cached && Date.now() - cached.at < 300000) return cached.value;
   const started = performance.now(), signal = AbortSignal.any([parent, AbortSignal.timeout(12000)]);
   let episodes = 0;
+  const capabilities: MediaCapabilities = { subtitles: 'unknown' };
+  let tracks: SubtitleTrack[] = [];
   try {
     const detail = await api.detail(id, source, signal); episodes = detail.episodes.length;
     let url = detail.episodes[index];
@@ -52,9 +83,18 @@ export async function probeVideo(source: SourceConfig, id: string, index: number
         const res = await fetchMedia(url, signal);
         if ((res.headers.get('content-type') || '').includes('video/mp4')) { await res.body?.cancel(); break; }
         const text = await readPlaylist(res);
-        const reference = firstMediaReference(text); if (!reference) throw new Error('视频列表没有媒体数据');
-        const base = res.url.includes('/api/proxy?') ? window.location.origin : res.url || url;
-        url = new URL(reference, base).href;
+        const manifest = inspectHls(text);
+        if (manifest.variant) {
+          capabilities.height = manifest.variant.height ?? capabilities.height;
+          capabilities.bandwidth = manifest.variant.bandwidth ?? capabilities.bandwidth;
+          tracks = manifest.tracks.flatMap(track => {
+            try { return [{ ...track, uri: referenceUrl(track.uri, res, url) }]; }
+            catch { return []; }
+          });
+          if (manifest.tracks.length || manifest.captions) capabilities.subtitles = 'declared';
+        }
+        const reference = manifest.variant?.uri || firstMediaReference(text); if (!reference) throw new Error('视频列表没有媒体数据');
+        url = referenceUrl(reference, res, url);
         if (!text.includes('#EXT-X-STREAM-INF')) break;
         if (depth === 2) throw new Error('视频列表嵌套过深');
       }
@@ -67,11 +107,14 @@ export async function probeVideo(source: SourceConfig, id: string, index: number
     try { while (bytes < 131072) { const r = await reader.read(); if (r.done) break; bytes += r.value.byteLength; } }
     finally { await reader.cancel().catch(() => {}); }
     if (!bytes) throw new Error('媒体数据为空');
-    const result = { ok: true, episodes, ms: Math.round(performance.now() - started), kbps: bytes >= 32768 ? Math.round(bytes * 8 / Math.max(1, performance.now() - sampleStart)) : undefined };
+    const result: MediaProbe = { ok: true, episodes, ms: Math.round(performance.now() - started), kbps: bytes >= 32768 ? Math.round(bytes * 8 / Math.max(1, performance.now() - sampleStart)) : undefined, ...capabilities };
+    const subtitle = await verifySubtitles(tracks, signal);
+    parent.throwIfAborted();
+    if (subtitle) { result.subtitles = 'verified'; result.subtitleLanguage = subtitle.language; }
     if (cache.size > 100) cache.clear(); cache.set(key, { at: Date.now(), value: result }); return result;
   } catch (error) {
     if (parent.aborted) throw error;
-    return { ok: false, episodes, ms: Math.round(performance.now() - started), error: error instanceof Error ? error.message : '测速失败' };
+    return { ok: false, episodes, ms: Math.round(performance.now() - started), ...capabilities, error: error instanceof Error ? error.message : '测速失败' };
   }
 }
 export async function probePool<T>(items: T[], run: (item: T) => Promise<void>, signal: AbortSignal) {

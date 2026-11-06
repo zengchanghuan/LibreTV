@@ -1,6 +1,5 @@
 'use client';
 import { useRankedSources } from './use-ranked-sources';
-import { qualityLabel } from '@/lib/playback-quality';
 
 import { useEffect, useMemo, useState } from 'react';
 import type { SearchResultItem } from '@/lib/types';
@@ -125,16 +124,18 @@ export function AggregatedCard({
       {multi && expanded && (
         <div className="border-t border-line p-2.5 animate-fade-in">
           <div className="flex items-center justify-between gap-2 mb-2">
-            <p className="text-[10px] text-faint">{quality.testing ? '正在测试媒体速度…' : '按起播和流畅度排序'}</p>
+            <p className="text-xs text-faint">{quality.testing ? '正在检测清晰度、字幕和速度…' : '优先高清有字幕、速度足够的来源'}</p>
+            <button className="btn-ghost btn-sm shrink-0" disabled={quality.testing} onClick={quality.retest}>重新检测</button>
             <button className="btn-primary btn-sm" disabled={!quality.best}
               onClick={() => quality.best && onOpen(quality.best)}>智能优选</button>
           </div>
-          <div className="flex flex-wrap gap-1.5">
+          <p className="text-xs text-faint mb-2">字幕未确认不代表没有字幕；画面内嵌字幕可能无法识别。速度为当前网络抽样。</p>
+          <div className="flex flex-col gap-1.5">
             {quality.ranked.map((item) => (
               <button
                 key={`${item.sourceKey}_${item.vodId}`}
                 className={cn(
-                  'group inline-flex items-center gap-1.5 max-w-full rounded-lg border px-2.5 py-1.5',
+                  'group flex items-center justify-between gap-1.5 w-full rounded-lg border px-2.5 py-2 text-left',
                   'text-xs transition-all cursor-pointer',
                   'border-line bg-chip hover:border-accent hover:bg-accent/10',
                   item.isAdult && 'border-pink-500/30'
@@ -145,8 +146,10 @@ export function AggregatedCard({
                 }}
                 aria-label={`使用 ${item.sourceName} 播放`}
               >
-                <span className="font-medium text-content truncate max-w-[9em]">{item.sourceName}{quality.best === item ? ' · 推荐' : ''}</span>
-                <span className="text-faint truncate max-w-[7em]">{qualityLabel(quality.entries[quality.keyOf(item)])}</span>
+                <span className="min-w-0">
+                  <span className="block font-medium text-content break-words">{item.sourceName}{quality.best === item ? ' · 推荐' : ''}</span>
+                  <span className="mt-1 block text-faint leading-5">{quality.labelOf(item)}</span>
+                </span>
                 <svg
                   className="w-3.5 h-3.5 text-accent shrink-0 transition-transform group-hover:scale-110"
                   fill="currentColor"

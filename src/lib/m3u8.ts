@@ -46,7 +46,7 @@ export function rewriteM3u8(
   if (depth > 5) return content;
   const lines = content.split('\n');
   const out = lines.map((line) => {
-    if (line.startsWith('#EXT-X-KEY') || line.startsWith('#EXT-X-MAP')) {
+    if (line.startsWith('#EXT-X-KEY:') || line.startsWith('#EXT-X-MAP:') || line.startsWith('#EXT-X-MEDIA:')) {
       return line.replace(/(URI=")([^"]+)(")/g, (m, p1: string, uri: string, p2: string) => {
         if (isProxiedUri(uri)) return m;
         return p1 + prefix + encodeURIComponent(makeAbsolute(uri, baseUrl)) + p2;

@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useRankedSources } from './use-ranked-sources';
-import { qualityLabel } from '@/lib/playback-quality';
 import { api } from '@/lib/client-api';
 import type { SourceConfig, SearchResultItem } from '@/lib/types';
 import { buildWatchUrl, cn } from '@/lib/utils';
@@ -130,7 +129,7 @@ export function SwitchSourceModal({
 
   const sorted = quality.ranked.map(item => {
     const candidate = candidates.find(c => c.result === item)!;
-    const probe = quality.probes[`${item.sourceKey}:${item.vodId}`];
+    const probe = quality.probeOf(item);
     return { ...candidate, ...probe };
   });
   const recommended = sorted.find(c => c.ok && !(c.source.key === currentSourceKey && c.result.vodId === currentVodId));
@@ -180,7 +179,7 @@ export function SwitchSourceModal({
               {phase === 'searching'
                 ? '正在搜索各资源...'
                 : quality.testing
-                  ? '正在测试视频列表和媒体速度…'
+                  ? '正在检测清晰度、字幕和速度…'
                   : `共 ${sorted.length} 个来源 · ${sorted.filter((c) => c.ok).length} 个可用`}
             </p>
           </div>
@@ -192,8 +191,8 @@ export function SwitchSourceModal({
         </div>
 
         {phase === 'done' && <div className="mb-3 flex items-center justify-between gap-3">
-          <p className="text-xs text-faint">优先推荐当前网络下起播快、卡顿少的来源；Wi-Fi 与移动网络表现可能不同。</p>
-          <button className="btn-ghost btn-sm shrink-0" disabled={quality.testing} onClick={quality.retest}>重新测速</button>
+          <p className="text-xs text-faint">优先高清有字幕、速度足够的来源。字幕未确认不代表没有；速度为当前网络抽样。</p>
+          <button className="btn-ghost btn-sm shrink-0" disabled={quality.testing} onClick={quality.retest}>重新检测</button>
           <button className="btn-primary btn-sm shrink-0" disabled={!recommended}
             onClick={() => recommended && switchTo(recommended)}>切换推荐源</button>
         </div>}
@@ -246,7 +245,7 @@ export function SwitchSourceModal({
                     <div className="text-xs font-medium text-content truncate" title={c.source.name}>
                       {c.source.name}{recommended === c ? ' · 推荐' : ''}
                     </div>
-                    <div className="text-xs text-faint mt-0.5">{qualityLabel(quality.entries[c.source.url])}</div>
+                    <div className="text-xs text-faint mt-0.5 leading-5">{quality.labelOf(c.result)}</div>
                     <div className="text-xs text-faint">{c.episodes ? `${c.episodes} 集` : '待获取剧集'}</div>
                   </div>
                 </button>
