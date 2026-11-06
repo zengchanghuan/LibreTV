@@ -271,16 +271,18 @@ export function DoubanCard({ item, mediaType, onClick }: {
           </div>
         )}
         <MediaTypeLabel type={mediaType ?? (item.isTv === true ? 'tv' : item.isTv === false ? 'movie' : 'unknown')} overlay />
-        {item.rating && (
-          <span className="absolute top-1.5 left-1.5 tag bg-black/70 text-rating font-medium">
-            ★ {item.rating}
-          </span>
-        )}
       </div>
-      <div className="p-2">
-        <div className="text-xs font-medium text-content truncate" title={item.title}>
+      <div className="flex items-center justify-between gap-1.5 p-2">
+        <div className="min-w-0 truncate text-xs font-medium text-content" title={item.title}>
           {item.title}
         </div>
+        {item.rating && (
+          <span className="shrink-0 whitespace-nowrap text-xs font-medium text-rating">
+            <span aria-hidden="true">★ </span>
+            <span className="sr-only">豆瓣评分 </span>
+            {item.rating}
+          </span>
+        )}
       </div>
     </div>
   );
