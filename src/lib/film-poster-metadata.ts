@@ -3,6 +3,7 @@ import data from './film-poster-data.json';
 export interface FilmPosterMetadata {
   poster?: string;
   cast?: string;
+  director?: string;
   genre?: string;
   rating?: string;
 }

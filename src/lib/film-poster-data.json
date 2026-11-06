@@ -8645,5 +8645,72 @@
     "poster": "/posters/korean/discloser.jpg",
     "genre": "军购黑幕",
     "cast": "金相庆、金玉彬、崔武成"
+  },
+  "自由夫人|1956": {
+    "poster": "/posters/collections/korean-history-madame-freedom.jpg",
+    "source": "https://media.vogue.com.tw/photos/67287d4dc39075bea9fcdc61/master/w_640,c_limit/1487004328",
+    "genre": "剧情",
+    "cast": "金贞林、朴庵、卢耕姬"
+  },
+  "误发弹|1961": {
+    "poster": "/posters/collections/korean-history-aimless-bullet.jpg",
+    "source": "https://media.vogue.com.tw/photos/6728a16dcf14a85d17c3e380/master/w_640,c_limit/64ef91ffec3ca.jpg",
+    "genre": "剧情",
+    "cast": "金振奎、崔戊龙、文贞淑"
+  },
+  "最后的证人|1980": {
+    "poster": "/posters/collections/korean-history-last-witness.jpg",
+    "source": "https://media.vogue.com.tw/photos/67299d77036c3f42901c9bb6/master/w_640,c_limit/2c958082926f94b60192996e65230097.png",
+    "genre": "剧情 / 悬疑 / 犯罪",
+    "cast": "河明中、郑允姬、崔佛岩"
+  },
+  "成功时代|1988": {
+    "poster": "/posters/collections/korean-history-age-of-success.jpg",
+    "source": "https://media.vogue.com.tw/photos/67299840610449a44a9e200d/master/w_640,c_limit/1728900833904gl9urWGhID.png",
+    "genre": "剧情 / 讽刺",
+    "cast": "安圣基、李慧英、崔奉"
+  },
+  "苍白战争|1992": {
+    "poster": "/posters/collections/korean-history-white-badge.jpg",
+    "source": "https://media.vogue.com.tw/photos/67299e2645f4a6591693a94d/master/w_640,c_limit/2c958082926f94b601929967ddef0093.png",
+    "genre": "剧情 / 战争",
+    "cast": "安圣基、李璟荣、沈惠珍"
+  },
+  "西便制|1993": {
+    "poster": "/posters/collections/korean-history-sopyonje.jpg",
+    "source": "https://media.vogue.com.tw/photos/67288247a3daee25b865a3f8/4:3/w_640,c_limit/%E3%80%8A%E8%A5%BF%E4%BE%BF%E5%88%B6%E3%80%8B%E4%BB%A5%E5%82%B3%E7%B5%B1%E6%9B%B2%E8%97%9D%E3%80%8C%E7%9B%A4%E7%B4%A2%E9%87%8C%E3%80%8D%E7%82%BA%E4%B8%BB%E9%A1%8C%E8%83%8C%E6%99%AF%E3%80%82%EF%BC%88%E5%9C%96%E7%89%87%E4%BE%86%E6%BA%90%EF%BC%9A%E9%9F%93%E5%9C%8B%E6%98%A0%E5%83%8F%E8%B3%87%E6%96%99%E9%99%A2%20Korean%20Film%20Archive%EF%BC%89.jpg",
+    "genre": "剧情 / 音乐",
+    "cast": "金明坤、吴贞海、金圭哲"
+  },
+  "美丽青年全泰壹|1995": {
+    "poster": "/posters/collections/korean-history-single-spark.jpg",
+    "source": "https://media.vogue.com.tw/photos/672884ff4755dbc5c36893ac/master/w_640,c_limit/%E7%9C%9F%E4%BA%BA%E7%9C%9F%E4%BA%8B%E7%9A%84%E5%82%B3%E8%A8%98%E9%9B%BB%E5%BD%B1%E3%80%8A%E7%BE%8E%E9%BA%97%E9%9D%92%E5%B9%B4%E5%85%A8%E6%B3%B0%E5%A3%B9%E3%80%8B%E7%B4%80%E9%8C%84%E5%8B%9E%E9%81%8B%E8%8B%B1%E9%9B%84%E5%85%A8%E6%B3%B0%E5%A3%B9%E7%9A%84%E5%8F%8D%E6%8A%97%E7%B2%BE%E7%A5%9E%E3%80%82%EF%BC%88%E5%9C%96%E7%89%87%E4%BE%86%E6%BA%90%EF%BC%9A%E9%9F%93%E5%9C%8B%E6%98%A0%E5%83%8F%E8%B3%87%E6%96%99%E9%99%A2%20Korean%20Film%20Archive%EF%BC%89.jpg",
+    "genre": "剧情 / 传记",
+    "cast": "洪京仁、文成根"
+  },
+  "我的韩国电影|2002": {
+    "poster": "/posters/collections/korean-history-my-korean-cinema.jpg",
+    "source": "https://media.vogue.com.tw/photos/67299eb34254b36893dac398/master/w_640,c_limit/2c958082926f94b60192994bd0ba0086.png",
+    "genre": "纪录片",
+    "director": "金弘准"
+  },
+  "欢迎来到东莫村|2005": {
+    "poster": "/posters/collections/korean-history-welcome-to-dongmakgol.jpg",
+    "source": "https://media.vogue.com.tw/photos/6728a4cbbd20170878f12f6f/master/w_640,c_limit/MV5BZjQ2ZGM3OTItYTE0Zi00NmI2LWI5N2YtNjJjOTZkNGQ5MjZlXkEyXkFqcGc@._V1_FMjpg_UX820_.jpeg",
+    "genre": "剧情 / 喜剧 / 战争",
+    "cast": "申河均、郑在泳、姜惠贞"
+  },
+  "初恋三重奏|2015": {
+    "poster": "/posters/collections/korean-history-cest-si-bon.jpg",
+    "source": "https://www.themoviedb.org/movie/348613/images/posters?language=ko-KR",
+    "genre": "喜剧 / 爱情",
+    "cast": "金伦奭、正宇、韩孝周、金喜爱",
+    "rating": "7.3"
+  },
+  "摇摆男孩|2018": {
+    "poster": "/posters/collections/korean-history-swing-kids.jpg",
+    "source": "https://media.vogue.com.tw/photos/67289f58070ef72877c5b293/master/w_640,c_limit/%E3%80%8A%E6%90%96%E6%93%BA%E7%94%B7%E5%AD%A9%E3%80%8B%E4%B8%AD%E9%83%BD%E6%95%AC%E7%A7%80%E5%9C%A8%E5%8C%97%E6%9C%9D%E9%AE%AE%E6%88%B0%E4%BF%98%E7%87%9F%E8%A3%A1%E7%9A%84%E8%B8%A2%E8%B8%8F%E8%88%9E%E6%BC%94%E5%87%BA%EF%BC%8C%E7%AA%BA%E8%A6%8B%E9%9F%93%E6%88%B0%E7%88%86%E7%99%BC%E5%BE%8C%E5%B8%B6%E4%BE%86%E7%9A%84%E8%A5%BF%E5%8C%96%E5%BD%B1%E9%9F%BF%E3%80%82%EF%BC%88%E8%BB%8A%E5%BA%AB%E5%A8%9B%E6%A8%82%E6%8F%90%E4%BE%9B%EF%BC%89.jpg",
+    "genre": "剧情 / 歌舞 / 战争",
+    "cast": "都敬秀、贾里德·格里姆斯、朴慧秀、吴正世"
   }
 }

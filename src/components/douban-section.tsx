@@ -93,7 +93,7 @@ function CollectionList({ collection, onPick }: { collection: FilmCollection; on
   const films = collection.sections.flatMap(({ label, films }) => films.map(([title, year]) => {
     const id = title + '|' + year;
     const metadata = filmPosterMetadata[id];
-    return { id, title, year, poster: metadata?.poster, cast: metadata?.cast, rating: metadata?.rating, theme: metadata?.genre || label };
+    return { id, title, year, poster: metadata?.poster, cast: metadata?.cast, director: metadata?.director, rating: metadata?.rating, theme: metadata?.genre || label };
   }));
   return (
     <section aria-label={collection.name}>
