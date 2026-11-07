@@ -125,4 +125,26 @@ describe('progress dragging', () => {
     events.get('video:error')!();
     expect(preview).toHaveBeenLastCalledWith(null);
   });
+  it.each([false, true])('commits a physical click when capture is lost before pointerup (buffering: %s)', buffering => {
+    if (buffering) {
+      delayed = true;
+      bar.dispatchEvent(pointer('pointerdown', 400)); doc.dispatchEvent(pointer('pointerup', 400));
+    }
+    // Recorded Chrome mouse sequence: down → preview → lostcapture → up → click.
+    // Losing capture does not cancel the physical gesture; document still gets up.
+    bar.dispatchEvent(pointer('pointerdown', 900));
+    vi.advanceTimersByTime(16);
+    expect(preview).toHaveBeenLastCalledWith(80);
+    Object.assign(bar, { hasPointerCapture: () => false });
+    bar.dispatchEvent(pointer('lostpointercapture', 900));
+    expect(preview).toHaveBeenLastCalledWith(80);
+    doc.dispatchEvent(pointer('pointerup', 900));
+    expect(seeks).toEqual(buffering ? [30, 80] : [80]);
+    expect(preview).toHaveBeenLastCalledWith(80);
+    const click = Object.assign(new Event('click', { cancelable: true }), { detail: 1 });
+    bar.dispatchEvent(click);
+    expect(click.defaultPrevented).toBe(true);
+    doc.dispatchEvent(pointer('pointerup', 900));
+    expect(seeks).toHaveLength(buffering ? 2 : 1);
+  });
 });

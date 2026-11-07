@@ -110,7 +110,8 @@ export function bindProgressSeek(art: Artplayer, preview: (time: number | null) 
   doc.addEventListener('pointermove', move, true);
   doc.addEventListener('pointerup', up, true);
   doc.addEventListener('pointercancel', cancelPointer, true);
-  bar.addEventListener('lostpointercapture', cancelPointer);
+  // Capture can be lost just before a physical mouse release. Keep the gesture
+  // until document's pointerup; only pointercancel/blur mean it was abandoned.
   doc.defaultView?.addEventListener('blur', cancel);
   art.on('video:timeupdate', render);
   art.on('video:progress', render);
@@ -130,7 +131,6 @@ export function bindProgressSeek(art: Artplayer, preview: (time: number | null) 
     doc.removeEventListener('pointermove', move, true);
     doc.removeEventListener('pointerup', up, true);
     doc.removeEventListener('pointercancel', cancelPointer, true);
-    bar.removeEventListener('lostpointercapture', cancelPointer);
     doc.defaultView?.removeEventListener('blur', cancel);
     art.off('video:timeupdate', render);
     art.off('video:progress', render);
