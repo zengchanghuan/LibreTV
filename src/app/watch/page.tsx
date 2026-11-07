@@ -373,6 +373,7 @@ function WatchContent() {
         <RelatedVideos
           source={source}
           vodId={vodId}
+          info={detailQuery.data?.videoInfo || { title: videoTitle, sourceKey: source.key, sourceName: source.name }}
           ready={detailQuery.isSuccess || detailQuery.isError}
           section={searchParams.get('section') === 'hd' ? 'hd' : undefined}
         />

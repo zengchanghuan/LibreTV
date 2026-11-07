@@ -4,7 +4,7 @@ import { parseRelatedCandidates, rankRelatedVideos, relatedTitle, seriesQuery, t
 const source = { key: 'test', name: '测试源', url: 'https://media.example/api' };
 const movie = (vodId: string, name: string, extra: Partial<RelatedCandidate> = {}): RelatedCandidate => ({
   sourceKey: source.key, sourceName: source.name, sourceUrl: source.url,
-  vodId, name, typeName: '科幻片', year: '2020', area: '中国大陆', ...extra,
+  vodId, name, typeName: '科幻片', genres: '冒险', year: '2020', area: '中国大陆', ...extra,
 });
 const seed = movie('1', '流浪地球', { director: '郭帆', actor: '吴京,屈楚萧' });
 

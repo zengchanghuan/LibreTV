@@ -5500,6 +5500,8 @@
     "rating": "9.0"
   },
   "我要复仇|2002": {
+    "mediaType": "movie",
+    "director": "朴赞郁 / Park Chan-wook",
     "poster": "/posters/collections/cc6905c3c7190981.jpg",
     "genre": "剧情 / 动作 / 惊悚",
     "cast": "宋康昊、申河均、裴斗娜、林志恩",
@@ -5607,6 +5609,8 @@
     "rating": "7.5"
   },
   "老男孩|2003": {
+    "mediaType": "movie",
+    "director": "朴赞郁 / Park Chan-wook",
     "poster": "/posters/collections/c26dee00dd70989f.jpg",
     "genre": "剧情 / 动作 / 悬疑",
     "cast": "崔岷植、刘智泰、姜惠贞、金秉玉",
@@ -8198,6 +8202,8 @@
     "source": "https://www.originalfilmart.com/products/bang-the-drum-slowly-half"
   },
   "亲切的金子|2005": {
+    "mediaType": "movie",
+    "director": "朴赞郁 / Park Chan-wook",
     "poster": "/posters/collections/7b76468df91a9caa.jpg",
     "genre": "剧情 / 惊悚 / 犯罪",
     "cast": "李英爱、崔岷植、金时厚、南一祐",

@@ -54,9 +54,9 @@ describe('website recommendations', () => {
     });
     const result = await relatedSite(source, 'seed', true, new AbortController().signal);
     expect(result.partial).toBe(true);
-    expect(result.items).toHaveLength(7);
+    expect(result.items).toHaveLength(11);
     expect(maxActive).toBeLessThanOrEqual(3);
-    expect(fetchUpstream).toHaveBeenCalledTimes(10);
+    expect(fetchUpstream).toHaveBeenCalledTimes(14);
   });
   it('does not turn failed metadata requests into an empty success', async () => {
     vi.mocked(fetchUpstream).mockImplementation(async url => {
@@ -64,6 +64,18 @@ describe('website recommendations', () => {
       throw new Error('timeout');
     });
     await expect(relatedSite(source, 'seed', true, new AbortController().signal)).rejects.toThrow();
+  });
+  it('does not let fuzzy title search results crowd out a same-director native candidate', async () => {
+    vi.mocked(fetchUpstream).mockImplementation(async url => {
+      const path = new URL(url).pathname;
+      if (path === '/search') return new Response(Array.from({ length: 20 }, (_, i) => card(`weak${i}`, `流浪地球旁白${i}`)).join(''));
+      if (path === '/play/seed') return new Response(detail('seed', '流浪地球', '科幻', card('strong', '同导演电影')));
+      if (path === '/play/strong') return new Response(detail('strong', '同导演电影'));
+      throw new Error('Unexpected weak candidate');
+    });
+    const result = await relatedSite(source, 'seed', true, new AbortController().signal);
+    expect(result.items.map(i => i.vodId)).toEqual(['strong']);
+    expect(fetchUpstream).toHaveBeenCalledTimes(3);
   });
   it('maps BP content kinds and retains genres/people while excluding inaccessible content', () => {
     const items = parseBPRelated([

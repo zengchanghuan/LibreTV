@@ -37,7 +37,7 @@ export function parseSearchList(
       name: String(vod.vod_name ?? ''),
       pic: typeof vod.vod_pic === 'string' ? vod.vod_pic : undefined,
       typeName: typeof vod.type_name === 'string' ? vod.type_name : undefined,
-      year: typeof vod.vod_year === 'string' ? vod.vod_year : undefined,
+      year: yearString(vod.vod_year),
       area: typeof vod.vod_area === 'string' ? vod.vod_area : undefined,
       remarks: typeof vod.vod_remarks === 'string' ? vod.vod_remarks : undefined,
       sourceUrl: source.url,
@@ -97,7 +97,7 @@ export function parseDetail(
       cover: str(vod.vod_pic),
       desc: str(vod.vod_content),
       typeName: str(vod.type_name),
-      year: str(vod.vod_year),
+      year: yearString(vod.vod_year),
       area: str(vod.vod_area),
       director: str(vod.vod_director),
       actor: str(vod.vod_actor),
@@ -112,6 +112,11 @@ export function parseDetail(
 function str(v: unknown): string | undefined {
   const s = typeof v === 'string' ? v.trim() : '';
   return s || undefined;
+}
+
+function yearString(value: unknown): string | undefined {
+  if (typeof value === 'number') return /^(18|19|20)\d{2}$/.test(String(value)) ? String(value) : undefined;
+  return str(value);
 }
 
 /**

@@ -37,6 +37,19 @@ describe('parseSearchList', () => {
     expect(items[0].name).toBe('');
   });
 
+  it('保留数字年份，让跨源匹配与字符串年份一致', () => {
+    for (const year of [2003, '2003']) {
+      const data = { list: [{ vod_id: 1, vod_name: '老男孩', vod_year: year }] };
+      expect(parseSearchList(data, source)[0].year).toBe('2003');
+      expect(parseDetail(data, source).videoInfo.year).toBe('2003');
+    }
+    for (const year of [0, 2003.5, null]) {
+      const data = { list: [{ vod_year: year }] };
+      expect(parseSearchList(data, source)[0].year).toBeUndefined();
+      expect(parseDetail(data, source).videoInfo.year).toBeUndefined();
+    }
+  });
+
   it('拒绝无效响应；list 缺失或 null 视为空结果', () => {
     expect(() => parseSearchList(null, source)).toThrow();
     expect(() => parseSearchList({ list: 'nope' }, source)).toThrow();

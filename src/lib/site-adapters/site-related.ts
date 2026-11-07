@@ -31,11 +31,15 @@ async function fourkRelated(source: SourceConfig, id: string, filterAdult: boole
     return [];
   }) : [];
   const seen = new Set<string>();
-  const candidates = [...series, ...nativeCandidates].filter((item) => {
+  const verifiedSeries = series.filter(item => {
+    const stem = seriesQuery(item.name);
+    return keyword && stem && relatedTitle(stem) === relatedTitle(keyword);
+  });
+  const candidates = [...verifiedSeries, ...nativeCandidates].filter((item) => {
     if (!validSiteId(item.vodId) || item.vodId === id || relatedTitle(item.name) === relatedTitle(seed.name) || seen.has(item.vodId)) return false;
     seen.add(item.vodId);
     return true;
-  }).slice(0, 8);
+  }).slice(0, 12);
   if (!candidates.length) return { items: [], partial };
 
   const enriched: RelatedCandidate[] = [];

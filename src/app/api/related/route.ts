@@ -35,7 +35,7 @@ export async function GET(req: Request) {
     const verdict = await checkUpstreamAllowed(source.url);
     if (!verdict.ok) return respond({ error: verdict.reason }, 400);
     // Include source identity: cached cards must keep the caller's playable source key.
-    const cacheKey = `related:v2:${JSON.stringify([source, id, filterAdult])}`;
+    const cacheKey = `related:v3:${JSON.stringify([source, id, filterAdult])}`;
     const cached = getCache<RelatedVideosResponse>(cacheKey);
     if (cached) return respond(cached);
     const signal = AbortSignal.any([req.signal, AbortSignal.timeout(site ? 20_000 : 10_000)]);

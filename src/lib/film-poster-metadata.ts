@@ -11,10 +11,12 @@ export interface FilmPosterMetadata {
   ratingSource?: string;
   doubanId?: string;
   source?: string;
+  /** Optional explicit work type; an unknown format must not be guessed from a genre. */
+  mediaType?: 'movie' | 'tv';
 }
 
 // Covers are stored locally after matching each title and release year.
-const filmPosterMetadata: Readonly<Partial<Record<string, FilmPosterMetadata>>> = data;
+const filmPosterMetadata = data as Readonly<Partial<Record<string, FilmPosterMetadata>>>;
 
 export function getFilmPosterMetadata(title: string, year: number) {
   return filmPosterMetadata[`${title}|${year}`];

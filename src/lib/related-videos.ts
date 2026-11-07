@@ -1,5 +1,6 @@
 import { isAdultContent, normalizeTitle, parseSearchList } from './cms-parser';
 import type { RelatedVideo, SearchResultItem, SourceConfig } from './types';
+import { contentGenres, genreSimilarity, personTokens as tokens } from './content-similarity';
 
 export interface RelatedCandidate extends SearchResultItem {
   typeId?: string;
@@ -41,15 +42,8 @@ export function seriesQuery(title: string): string | undefined {
   return normalizeTitle(stem).length >= 3 && stem.length <= 40 ? stem : undefined;
 }
 
-function tokens(value: string | undefined): string[] {
-  return [...new Set((value ?? '').replace(/\bN\/A\b/gi, '').split(/[,，、/|;；\n]+/).map((part) => part.trim())
-    .filter((part) => part && !/^(未知|不详|暂无|无|其他|其它|null|none|n\/a|unknown|待定|\s*[-—]+)$/i.test(part)))];
-}
-
 function genres(item: RelatedCandidate): string[] {
-  return tokens(`${item.genres || ''},${item.typeName || ''}`)
-    .map((part) => part.replace(/电影|片$/g, ''))
-    .filter((part) => part && !/^(电影|电视|电视剧|剧集|视频)$/.test(part));
+  return contentGenres(`${item.genres || ''},${item.typeName || ''}`);
 }
 
 function medium(item: RelatedCandidate): string {
@@ -101,10 +95,12 @@ export function rankRelatedVideos(
       score += Math.min(30, actors.length * 15);
       reasons.push(`共同主演 · ${actors[0]}`);
     }
-    const sharedGenres = common(genres(seed), genres(item));
-    if (sharedGenres.length) {
-      score += 25;
-      reasons.push(`同类型 · ${sharedGenres[0]}`);
+    const similarity = genreSimilarity(genres(seed), genres(item));
+    const series = reasons.includes('相近系列片名');
+    if (!series && !directors.length && !(actors.length && (similarity.specific.length || actors.length >= 2)) && similarity.specific.length < 2) continue;
+    if (similarity.specific.length) {
+      score += similarity.score;
+      reasons.push(`相近题材 · ${similarity.specific.slice(0, 2).join(' / ')}`);
     }
     if (!reasons.length) continue;
     if (common(tokens(seed.area), tokens(item.area)).length) score += 5;

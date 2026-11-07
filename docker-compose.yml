@@ -17,6 +17,9 @@ services:
       - LIBRETV_DATA_DIR=/app/data
       # 必填：访问密码（在 .env 中设置，缺失时 compose 启动即报错提醒）
       - PASSWORD=${PASSWORD:?请在 .env 中设置 PASSWORD}
+      # 可选：DeepSeek 生成相关影片候选；不配置时仍可使用本地推荐。
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
+      - DEEPSEEK_RECOMMEND_MODEL=${DEEPSEEK_RECOMMEND_MODEL:-deepseek-flash}
       # 可选：会话/代理签名密钥（多实例部署建议显式设置：openssl rand -hex 32）
       # - PROXY_SECRET=your-secret
       # 可选：Cookie Secure 策略覆盖（true=强制开启 / false=强制关闭；不设置时按请求协议自动推导，HTTP 部署无需配置）

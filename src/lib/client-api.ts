@@ -2,6 +2,8 @@
 
 import type { HDResourceCatalog, HDResourceDetail } from './hd-resource-sites';
 import type { RelatedVideosResponse } from './types';
+import type { RecommendedWork, RecommendationResponse, WorkResourcesResponse } from './recommendations';
+import type { VideoInfo } from './types';
 import type { SearchResponse, SearchStreamEvent, SourceSearchOutcome, VideoDetail, DoubanResponse, BangumiCalendarResponse, AuthStatusResponse, SourceConfig, SearchResultItem, LivePlaylistResponse, LiveEpgResponse, SourceListPayload } from './types';
 
 /**
@@ -157,6 +159,14 @@ export const api = {
     const sp = new URLSearchParams({ id, source: JSON.stringify(source), filterAdult: String(filterAdult) });
     return request<RelatedVideosResponse>(`/api/related?${sp}`, { signal });
   },
+
+  recommendations: (seed: VideoInfo, filterAdult: boolean, signal?: AbortSignal, mode: 'local' | 'auto' = 'auto') =>
+    request<RecommendationResponse>('/api/recommendations', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ seed: { title: seed.title, year: seed.year, typeName: seed.typeName, director: seed.director, actor: seed.actor }, filterAdult, mode }), signal }),
+
+  workResources: (work: RecommendedWork, sources: SourceConfig[], filterAdult: boolean, signal?: AbortSignal) =>
+    request<WorkResourcesResponse>('/api/recommendations/resources', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ work, sources, filterAdult }), signal }),
 
   douban: (type: 'movie' | 'tv', tag: string, pageStart: number, pageSize: number, signal?: AbortSignal) => {
     const sp = new URLSearchParams({ type, tag, pageStart: String(pageStart), pageSize: String(pageSize) });

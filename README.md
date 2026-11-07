@@ -92,6 +92,8 @@ PASSWORD=your-password npm start   # 监听 8080
 | 变量 | 必填 | 说明 |
 | --- | --- | --- |
 | `PASSWORD` | 是 | 访问密码；未设置时站点会提示管理员配置 |
+| `DEEPSEEK_API_KEY` | 否 | 播放页关联影片推荐使用的 DeepSeek 官方 API Key，仅服务端使用。不配置时使用本地影片资料与片源推荐降级；成功 AI 推荐缓存 24 小时 |
+| `DEEPSEEK_RECOMMEND_MODEL` | 否 | 关联影片推荐模型，默认 `deepseek-flash`；仅发送当前影片文字资料，不发送资源库地址、观看历史或图片 |
 | `PROXY_SECRET` | 否 | 会话/代理签名密钥；不设置时从 PASSWORD 派生（多实例部署建议显式设置） |
 | `DEFAULT_SOURCES` | 否 | 预置采集站（JSON 数组），用户端自动出现且默认勾选，详见[配置文档](https://github.com/bestZwei/LibreTV-Next/wiki/Configuration) |
 | `REQUEST_TIMEOUT` | 否 | 代理上游请求超时（毫秒），默认 8000 |
