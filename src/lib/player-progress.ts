@@ -1,4 +1,5 @@
 import type Artplayer from 'artplayer';
+import { formatTime } from './utils';
 
 /** Preview a drag locally; only the final position should start a media request. */
 export function bindProgressSeek(art: Artplayer, preview: (time: number | null) => void): () => void {
@@ -6,25 +7,38 @@ export function bindProgressSeek(art: Artplayer, preview: (time: number | null) 
   const doc = bar.ownerDocument;
   let pointer: number | undefined;
   let target = 0;
+  let pending: number | undefined;
+  let bounds: { left: number; width: number };
   let frame: number | undefined;
   let suppressClick = false;
   const oldTouchAction = bar.style.touchAction;
   bar.style.touchAction = 'none';
 
+  const display = (time: number | null) => {
+    const value = time ?? art.currentTime;
+    art.emit('setBar', 'played', art.duration > 0 ? value / art.duration : 0);
+    // ArtPlayer normally updates this label on timeupdate/progress, which can
+    // arrive much later than seeking when a remote MP4 is still buffering.
+    const label = art.template.$player.querySelector('.art-control-time');
+    if (label) label.textContent = `${formatTime(value)} / ${formatTime(art.duration)}`;
+    preview(time);
+  };
+
   const render = () => {
-    frame = undefined;
-    if (pointer === undefined) return;
+    const time = pointer !== undefined ? target : pending;
+    if (time === undefined) return;
     // The persistent time label previews the target. Hide ArtPlayer's stale
     // mouse-hover tooltip while its continuous-seek handlers are suspended.
     art.template.$player.classList.remove('art-progress-hover');
-    art.emit('setBar', 'played', target / art.duration);
-    preview(target);
+    display(time);
   };
   const schedule = () => {
-    if (pointer !== undefined && frame === undefined) frame = requestAnimationFrame(render);
+    if (pointer !== undefined && frame === undefined) frame = requestAnimationFrame(() => { frame = undefined; render(); });
   };
   const position = (event: PointerEvent) => {
-    const rect = bar.getBoundingClientRect();
+    // Revealing the full controls changes the mini bar's width. A single
+    // gesture must retain the geometry on which the user pressed.
+    const rect = bounds;
     if (rect.width > 0) target = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width)) * art.duration;
   };
   const stop = (event: Event) => {
@@ -35,6 +49,7 @@ export function bindProgressSeek(art: Artplayer, preview: (time: number | null) 
     if (!event.isPrimary || event.button !== 0 || pointer !== undefined || !Number.isFinite(art.duration) || art.duration <= 0) return;
     stop(event);
     pointer = event.pointerId;
+    bounds = bar.getBoundingClientRect();
     suppressClick = true;
     position(event);
     bar.setPointerCapture(event.pointerId);
@@ -54,9 +69,12 @@ export function bindProgressSeek(art: Artplayer, preview: (time: number | null) 
     if (frame !== undefined) cancelAnimationFrame(frame);
     frame = undefined;
     if (bar.hasPointerCapture(id)) bar.releasePointerCapture(id);
-    if (commit) art.seek = target;
-    art.emit('setBar', 'played', art.duration > 0 ? art.currentTime / art.duration : 0);
-    preview(null);
+    if (commit) {
+      pending = target;
+      art.seek = target;
+      art.notice.show = `${formatTime(target)} / ${formatTime(art.duration)}`;
+    }
+    display(pending ?? null);
   };
   const up = (event: PointerEvent) => {
     if (event.pointerId !== pointer) return;
@@ -65,6 +83,14 @@ export function bindProgressSeek(art: Artplayer, preview: (time: number | null) 
     finish(true);
   };
   const cancel = () => finish(false);
+  const settled = () => {
+    pending = undefined;
+    if (pointer === undefined) display(null);
+  };
+  const reset = () => { pending = undefined; cancel(); display(null); };
+  const otherSeek = (_current: number, requested: number) => {
+    if (pending !== undefined && requested !== pending) settled();
+  };
   const cancelPointer = (event: PointerEvent) => {
     if (event.pointerId === pointer) cancel();
   };
@@ -86,11 +112,15 @@ export function bindProgressSeek(art: Artplayer, preview: (time: number | null) 
   doc.addEventListener('pointercancel', cancelPointer, true);
   bar.addEventListener('lostpointercapture', cancelPointer);
   doc.defaultView?.addEventListener('blur', cancel);
-  art.on('video:timeupdate', schedule);
-  art.on('video:emptied', cancel);
+  art.on('video:timeupdate', render);
+  art.on('video:progress', render);
+  art.on('video:seeked', settled);
+  art.on('video:emptied', reset);
+  art.on('video:error', reset);
+  art.on('seek', otherSeek);
   art.on('control', keepControls);
   return () => {
-    cancel();
+    reset();
     if (frame !== undefined) cancelAnimationFrame(frame);
     bar.style.touchAction = oldTouchAction;
     bar.removeEventListener('pointerdown', down, true);
@@ -102,8 +132,12 @@ export function bindProgressSeek(art: Artplayer, preview: (time: number | null) 
     doc.removeEventListener('pointercancel', cancelPointer, true);
     bar.removeEventListener('lostpointercapture', cancelPointer);
     doc.defaultView?.removeEventListener('blur', cancel);
-    art.off('video:timeupdate', schedule);
-    art.off('video:emptied', cancel);
+    art.off('video:timeupdate', render);
+    art.off('video:progress', render);
+    art.off('video:seeked', settled);
+    art.off('video:emptied', reset);
+    art.off('video:error', reset);
+    art.off('seek', otherSeek);
     art.off('control', keepControls);
   };
 }

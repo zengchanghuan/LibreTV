@@ -9,6 +9,9 @@ describe('progress dragging', () => {
   let cleanup: () => void;
   let seeks: number[];
   let time: number;
+  let delayed: boolean;
+  let bounds: { left: number; width: number };
+  let label: { textContent: string };
   let events: Map<string, () => void>;
   let preview: ReturnType<typeof vi.fn>;
   const pointer = (type: string, x: number, id = 1) => Object.assign(new Event(type, { cancelable: true }), {
@@ -18,18 +21,20 @@ describe('progress dragging', () => {
     vi.useFakeTimers();
     vi.stubGlobal('requestAnimationFrame', (fn: () => void) => setTimeout(fn, 16));
     vi.stubGlobal('cancelAnimationFrame', clearTimeout);
-    seeks = []; time = 10; events = new Map(); preview = vi.fn();
+    seeks = []; time = 10; delayed = false; events = new Map(); preview = vi.fn();
+    bounds = { left: 100, width: 1000 }; label = { textContent: '' };
     win = new EventTarget();
     doc = Object.assign(new EventTarget(), { defaultView: win });
     bar = Object.assign(new EventTarget(), {
       ownerDocument: doc, style: { touchAction: '' },
-      getBoundingClientRect: () => ({ left: 100, width: 1000 }),
+      getBoundingClientRect: () => ({ ...bounds }),
       setPointerCapture: vi.fn(), hasPointerCapture: () => true, releasePointerCapture: vi.fn(),
     });
     const art = {
-      template: { $progress: bar, $player: { classList: { remove: vi.fn() } } }, duration: 100, controls: { show: false },
+      template: { $progress: bar, $player: { classList: { remove: vi.fn() }, querySelector: () => label } }, duration: 100, controls: { show: false },
       get currentTime() { return time; },
-      set seek(value: number) { seeks.push(value); time = value; },
+      notice: { show: '' },
+      set seek(value: number) { seeks.push(value); if (!delayed) time = value; },
       emit: vi.fn(),
       on: (name: string, fn: () => void) => events.set(name, fn),
       off: (name: string) => events.delete(name),
@@ -49,6 +54,7 @@ describe('progress dragging', () => {
     expect(preview).toHaveBeenLastCalledWith(70);
     doc.dispatchEvent(pointer('pointerup', 900));
     expect(seeks).toEqual([80]);
+    events.get('video:seeked')!();
     expect(preview).toHaveBeenLastCalledWith(null);
     const click = Object.assign(new Event('click', { cancelable: true }), { detail: 1 });
     bar.dispatchEvent(click);
@@ -60,6 +66,7 @@ describe('progress dragging', () => {
     bar.dispatchEvent(pointer('pointerdown', 600)); doc.dispatchEvent(pointer('pointerup', -100));
     bar.dispatchEvent(pointer('pointerdown', 600)); doc.dispatchEvent(pointer('pointerup', 2000));
     expect(seeks).toEqual([50, 0, 100]);
+    events.get('video:seeked')!();
     vi.runAllTimers(); expect(preview).toHaveBeenLastCalledWith(null);
   });
   it.each(['pointercancel', 'blur', 'emptied', 'cleanup'])('abandons a drag on %s without changing playback', kind => {
@@ -81,5 +88,41 @@ describe('progress dragging', () => {
       expect(event.defaultPrevented).toBe(true);
     }
     doc.dispatchEvent(pointer('pointerup', 700)); expect(seeks).toEqual([60]);
+  });
+  it('keeps the requested time through stale buffering updates until the seek completes', () => {
+    delayed = true;
+    bar.dispatchEvent(pointer('pointerdown', 600)); doc.dispatchEvent(pointer('pointerup', 600));
+    expect(time).toBe(10);
+    expect(preview).toHaveBeenLastCalledWith(50);
+    expect(label.textContent).toBe('00:50 / 01:40');
+    for (const event of ['video:timeupdate', 'video:progress']) {
+      label.textContent = '0:10 / 1:40';
+      events.get(event)!();
+      expect(preview).toHaveBeenLastCalledWith(50);
+      expect(label.textContent).toBe('00:50 / 01:40');
+    }
+    time = 50; events.get('video:seeked')!();
+    expect(preview).toHaveBeenLastCalledWith(null);
+    expect(seeks).toEqual([50]);
+  });
+  it('keeps the original click position when revealing the controls changes the bar width', () => {
+    bar.dispatchEvent(pointer('pointerdown', 600));
+    bounds = { left: 98, width: 1004 };
+    doc.dispatchEvent(pointer('pointerup', 600));
+    expect(seeks).toEqual([50]);
+  });
+  it('uses the latest click while buffering and clears it on a source change or error', () => {
+    delayed = true;
+    for (const x of [600, 900]) {
+      bar.dispatchEvent(pointer('pointerdown', x)); doc.dispatchEvent(pointer('pointerup', x));
+    }
+    events.get('video:timeupdate')!();
+    expect(preview).toHaveBeenLastCalledWith(80);
+    expect(seeks).toEqual([50, 80]);
+    events.get('video:emptied')!();
+    expect(preview).toHaveBeenLastCalledWith(null);
+    bar.dispatchEvent(pointer('pointerdown', 600)); doc.dispatchEvent(pointer('pointerup', 600));
+    events.get('video:error')!();
+    expect(preview).toHaveBeenLastCalledWith(null);
   });
 });
