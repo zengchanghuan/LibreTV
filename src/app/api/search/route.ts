@@ -1,7 +1,7 @@
 import { siteAdapterFor, searchSite } from '@/lib/site-adapters/site-adapters';
 import { NextResponse } from 'next/server';
 import { guardRequest } from '@/lib/api-guard';
-import { cmsRequestHeaders, filterAdultResults, filterRelevantResults, normalizeTitle, parseSearchList } from '@/lib/cms-parser';
+import { cmsRequestHeaders, prepareSearchResults, searchUpstreamTerm, parseSearchList } from '@/lib/cms-parser';
 import { fetchUpstream, getCache, setCache } from '@/lib/fetch-utils';
 import { checkUpstreamAllowed } from '@/lib/ssrf';
 import type { SearchResponse, SearchStreamEvent, SourceConfig, SourceSearchOutcome } from '@/lib/types';
@@ -92,8 +92,9 @@ async function searchSource(source: SourceConfig, wd: string): Promise<SourceSea
   });
 
   const base = source.url.replace(/\/+$/, '');
+  const term = searchUpstreamTerm(wd);
   const fetchPage = async (page: number) => {
-    const api = `${base}?ac=videolist&wd=${encodeURIComponent(wd)}&pg=${page}`;
+    const api = `${base}?ac=videolist&wd=${encodeURIComponent(term)}&pg=${page}`;
     const res = await fetchUpstream(api, {
       timeoutMs: 8000,
       headers: cmsRequestHeaders(),
@@ -104,7 +105,7 @@ async function searchSource(source: SourceConfig, wd: string): Promise<SourceSea
   };
 
   const run = async (): Promise<SourceSearchOutcome> => {
-    if (siteAdapterFor(source.url)) return { sourceKey: source.key, ok: true, list: await searchSite(source, wd, controller.signal) };
+    if (siteAdapterFor(source.url)) return { sourceKey: source.key, ok: true, list: await searchSite(source, term, controller.signal) };
     const first = await fetchPage(1);
     const list = parseSearchList(first, source);
     // 源站真实总页数与配置上限取较小者；pagecount 缺失或非法时视为 1 页
@@ -128,7 +129,7 @@ async function searchSource(source: SourceConfig, wd: string): Promise<SourceSea
   try {
     // 死线先到时 run 仍会在后台被 abort 并 reject，必须先挂 catch 防未处理 rejection
     const runPromise = run()
-      .then(finish)
+      .then(outcome => finish({ ...outcome, list: prepareSearchResults(outcome.list, wd, false) }))
       .catch((err: unknown): SourceSearchOutcome =>
         finish({
           sourceKey: source.key,
@@ -154,28 +155,7 @@ async function searchSource(source: SourceConfig, wd: string): Promise<SourceSea
 
 /** 合并 + 去重 + 过滤 + 排序，stream 与非 stream 两种模式共用 */
 function aggregateOutcomes(outcomes: SourceSearchOutcome[], wd: string, filterAdult: boolean): SearchResponse {
-  const seen = new Set<string>();
-  let list = outcomes.flatMap((o) => o.list).filter((item) => {
-    const key = `${item.sourceKey}_${item.vodId}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
-
-  list = filterAdultResults(list, filterAdult);
-  // 部分源站做分词/OR 模糊搜索（搜「摔跤吧！爸爸」返回一堆「爸爸XXX」），按关键词过滤
-  list = filterRelevantResults(list, wd);
-
-  // 精确命中（忽略标点差异）排在最前，其余按名称（与旧版一致），名称相同按源名
-  const exact = normalizeTitle(wd);
-  list.sort((a, b) => {
-    const aExact = normalizeTitle(a.name || '') === exact ? 0 : 1;
-    const bExact = normalizeTitle(b.name || '') === exact ? 0 : 1;
-    if (aExact !== bExact) return aExact - bExact;
-    const nameCompare = (a.name || '').localeCompare(b.name || '', 'zh-Hans-CN');
-    if (nameCompare !== 0) return nameCompare;
-    return (a.sourceName || '').localeCompare(b.sourceName || '', 'zh-Hans-CN');
-  });
+  const list = prepareSearchResults(outcomes.flatMap((o) => o.list), wd, filterAdult);
 
   const failures = outcomes
     .filter((o) => !o.ok)

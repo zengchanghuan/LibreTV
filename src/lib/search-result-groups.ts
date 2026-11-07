@@ -1,4 +1,5 @@
 import { classifyMediaType, type MediaType } from './media-type';
+import { searchTitleKey } from './cms-parser';
 import type { SearchResultItem } from './types';
 
 export interface AggregatedGroup {
@@ -26,17 +27,19 @@ function buildGroup(name: string, year: string | undefined, mediaType: MediaType
   };
 }
 
-/** 同名结果按内容类型和年份聚合，同名的电影与电视剧分别展示。 */
+/** 同名/同季异写按内容类型和年份聚合，同名的电影与电视剧分别展示。 */
 export function aggregateResults(list: SearchResultItem[]): AggregatedGroup[] {
   const byName = new Map<string, SearchResultItem[]>();
   for (const item of list) {
     const name = (item.name || '').trim();
     if (!name) continue;
-    if (!byName.has(name)) byName.set(name, []);
-    byName.get(name)!.push(item);
+    const identity = searchTitleKey(name);
+    if (!byName.has(identity)) byName.set(identity, []);
+    byName.get(identity)!.push(item);
   }
   const groups: AggregatedGroup[] = [];
-  for (const [name, items] of byName) {
+  for (const items of byName.values()) {
+    const name = items[0].name.trim();
     const years = [...new Set(items.map((i) => i.year).filter(Boolean))] as string[];
     const byYear: [string | undefined, SearchResultItem[]][] = years.length > 1
       ? [...years, undefined].map((year) => [year, items.filter((i) => year ? i.year === year : !i.year)])

@@ -9,6 +9,7 @@ import { DetailModal } from '@/components/detail-modal';
 import { AggregatedCard, aggregateResults } from '@/components/video-card';
 import { useAppStore, resolveSource, isInDisabledSubscription, isSourceDisabled } from '@/lib/store';
 import { api } from '@/lib/client-api';
+import { prepareSearchResults } from '@/lib/cms-parser';
 import type { SearchResultItem, SourceSearchOutcome } from '@/lib/types';
 import { SearchHistoryDropdown, useSearchHistory } from '@/components/search-history';
 import { cn, formatDisableTtl, validateSourceUrl } from '@/lib/utils';
@@ -145,8 +146,8 @@ function HomeContent() {
   const isSearching = Boolean(urlQuery) && searchQuery.isFetching && !searchQuery.data;
   // 聚合数据未就绪时，用已结算源的结果增量渲染（健康源不再等坏源超时）
   const streamedList = useMemo(
-    () => streamedOutcomes.flatMap((o) => o.list),
-    [streamedOutcomes]
+    () => prepareSearchResults(streamedOutcomes.flatMap((o) => o.list), urlQuery.slice(0, 100), yellowFilter),
+    [streamedOutcomes, urlQuery, yellowFilter]
   );
   const list = useMemo(
     () => searchQuery.data?.list ?? (isSearching ? streamedList : []),

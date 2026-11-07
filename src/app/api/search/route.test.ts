@@ -61,6 +61,29 @@ afterEach(() => {
 });
 
 describe('POST /api/search', () => {
+  it.each([false, true])('季数查询以系列名召回，分页和流式结果均排除错误季数（stream=%s）', async stream => {
+    const fetchSpy = vi.fn(async (input: RequestInfo | URL) => {
+      const url = new URL(String(input));
+      expect(url.searchParams.get('wd')).toBe('鱿鱼游戏');
+      return new Response(cmsList(url.searchParams.get('pg') === '1' ? [
+        { vod_id: 11, vod_name: '鱿鱼游戏第一季' },
+        { vod_id: 12, vod_name: '鱿鱼游戏第二季' },
+        { vod_id: 13, vod_name: '鱿鱼和鲸' },
+      ] : [{ vod_id: 14, vod_name: '鱿鱼游戏 第2季' }], 2));
+    });
+    vi.stubGlobal('fetch', fetchSpy);
+    const res = await POST(makeRequest({ wd: stream ? '鱿鱼游戏第二季' : '鱿鱼游戏2', sources: [SOURCES[0]] }, stream));
+    if (stream) {
+      const events = (await res.text()).trim().split('\n').map(line => JSON.parse(line));
+      expect(events.map(e => e.type)).toEqual(['source', 'done']);
+      for (const event of events) expect(event.list.map((i: { vodId: string }) => i.vodId).sort()).toEqual(['12', '14']);
+    } else {
+      const data = await res.json();
+      expect(data.list.map((i: { vodId: string }) => i.vodId).sort()).toEqual(['12', '14']);
+    }
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+  });
+
   it('聚合多源结果：同源去重、成人内容过滤、失败源进 failures', async () => {
     mockUpstream();
     const res = await POST(makeRequest({ wd: '测试剧', sources: SOURCES, filterAdult: true }));

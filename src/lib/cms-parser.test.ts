@@ -179,9 +179,9 @@ describe('isRelevant', () => {
     expect(isRelevant('钢铁侠 Iron Man 2008', '钢铁侠 2008')).toBe(true);
   });
 
-  it('空关键词或空标题不参与过滤', () => {
+  it('空关键词不参与过滤，空标题不能命中有效查询', () => {
     expect(isRelevant('任意标题', '')).toBe(true);
-    expect(isRelevant('', '任意')).toBe(true);
+    expect(isRelevant('', '任意')).toBe(false);
   });
 });
 
@@ -199,8 +199,8 @@ describe('filterRelevantResults', () => {
     expect(out.map((i) => i.name)).toEqual(['摔跤吧！爸爸', '摔跤吧!爸爸【影视解说】']);
   });
 
-  it('全部不相关时回退为原列表', () => {
+  it('全部不相关时显示空结果，不回退到无关列表', () => {
     const junk = [{ name: '爸爸当家' }, { name: '爸爸别走' }];
-    expect(filterRelevantResults(junk, wd)).toEqual(junk);
+    expect(filterRelevantResults(junk, wd)).toEqual([]);
   });
 });

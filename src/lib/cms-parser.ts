@@ -172,7 +172,43 @@ export function filterAdultResults<T extends { typeName?: string }>(items: T[], 
  * 用于跨标点差异匹配（源站存「摔跤吧!爸爸」而用户搜「摔跤吧！爸爸」）。
  */
 export function normalizeTitle(s: string): string {
-  return s.toLowerCase().replace(/[\s\p{P}\p{S}]+/gu, '');
+  return s.normalize('NFKC').toLowerCase().replace(/[\s\p{P}\p{S}]+/gu, '');
+}
+
+function seriesNumber(value: string): number {
+  if (/^\d+$/.test(value)) return Number(value);
+  const digits = '零一二三四五六七八九';
+  value = value.replace(/两/g, '二').replace(/〇/g, '零');
+  if (/^[一二三四五六七八九]?十[一二三四五六七八九]?$/.test(value)) {
+    const [tens, units] = value.split('十');
+    return (tens ? digits.indexOf(tens) : 1) * 10 + (units ? digits.indexOf(units) : 0);
+  }
+  return value.length === 1 ? digits.indexOf(value) : NaN;
+}
+
+/** Interpret season/sequel suffixes without treating years or numeric titles as seasons. */
+function seriesTitle(title: string) {
+  const value = title.normalize('NFKC').trim();
+  const match = value.match(/^(.*?)(?:第\s*([\d零〇一二两三四五六七八九十]{1,3})\s*([季部])|\b(?:season\s*|s)(\d{1,2})(?!\d)|(\d{1,2})(?!\d))(.*)$/i);
+  if (!match) return undefined;
+  const [, rawBase, chinese, unit, english, numeric, suffix] = match;
+  const base = rawBase.replace(/[\s:：\-–—]+$/, '').trim();
+  if (normalizeTitle(base).length < 2 || (numeric && (/\d$/.test(base) || (suffix && !/^[\s:：[(（【]/.test(suffix))))) return undefined;
+  const number = seriesNumber(chinese || english || numeric);
+  if (!Number.isInteger(number) || number < 1 || number > 99) return undefined;
+  return { base, number, kind: unit === '部' ? 'part' : chinese || english ? 'season' : 'number', suffix };
+}
+
+/** Ask sources for the series title once, then enforce the requested season locally. */
+export function searchUpstreamTerm(query: string): string {
+  const series = seriesTitle(query);
+  return series && !normalizeTitle(series.suffix) ? series.base : query;
+}
+
+/** Same-season spelling variants share a card; edition/commentary suffixes remain distinct. */
+export function searchTitleKey(title: string): string {
+  const series = seriesTitle(title);
+  return series ? `${normalizeTitle(series.base)}#${series.number}#${normalizeTitle(series.suffix)}` : normalizeTitle(title);
 }
 
 /**
@@ -180,13 +216,23 @@ export function normalizeTitle(s: string): string {
  * 部分采集站会做分词/OR 模糊搜索（搜「摔跤吧！爸爸」返回一堆「爸爸XXX」），
  * 逐条校验后只保留真正相关的结果。
  *
- * 规则：归一化后的标题包含归一化后的完整关键词；
+ * 带季/部编号时要求系列名和编号一致，兼容中文数字、阿拉伯数字及 S02；
+ * 普通查询要求归一化后的标题包含完整关键词；
  * 多词查询（空格分隔）时放宽为「每个词都命中」即可（如「钢铁侠 2008」）。
  */
 export function isRelevant(name: string, wd: string): boolean {
   const nName = normalizeTitle(name);
   const nWd = normalizeTitle(wd);
-  if (!nName || !nWd) return true; // 空关键词不参与过滤
+  if (!nWd) return true;
+  if (!nName) return false;
+  const query = seriesTitle(wd);
+  if (query) {
+    const candidate = seriesTitle(name);
+    return !!candidate && normalizeTitle(candidate.base) === normalizeTitle(query.base)
+      && candidate.number === query.number
+      && normalizeTitle(candidate.suffix).includes(normalizeTitle(query.suffix))
+      && (candidate.kind === 'number' || query.kind === 'number' || candidate.kind === query.kind);
+  }
   if (nName.includes(nWd)) return true;
   const tokens = wd.trim().split(/\s+/);
   if (tokens.length > 1) {
@@ -200,9 +246,28 @@ export function isRelevant(name: string, wd: string): boolean {
 
 /**
  * 结果相关性过滤：丢弃与关键词无关的条目。
- * 过滤后为空时回退到原列表——宁可多展示也不把源站唯一可用的结果清空。
+ * 无匹配时返回空列表，不能把源站热门推荐或分词噪声当作搜索结果。
  */
 export function filterRelevantResults<T extends { name?: string }>(items: T[], wd: string): T[] {
-  const filtered = items.filter((item) => isRelevant(item.name || '', wd));
-  return filtered.length > 0 ? filtered : items;
+  return items.filter((item) => isRelevant(item.name || '', wd));
+}
+
+/** Shared by incremental browser results and the final server response. */
+export function prepareSearchResults(items: SearchResultItem[], wd: string, filterAdult = true): SearchResultItem[] {
+  const seen = new Set<string>();
+  const list = filterRelevantResults(filterAdultResults(items, filterAdult), wd).filter(item => {
+    const key = JSON.stringify([item.sourceKey, item.vodId]);
+    if (seen.has(key)) return false;
+    seen.add(key); return true;
+  });
+  const exact = searchTitleKey(wd);
+  const derivative = /解说|解說|预告|預告|花絮|幕后|幕後/;
+  const score = (item: SearchResultItem) => {
+    const title = searchTitleKey(item.name);
+    const relevance = title === exact ? 0 : title.startsWith(exact) ? 1 : 2;
+    return relevance + (!derivative.test(wd) && derivative.test(item.name + (item.typeName || '')) ? 10 : 0);
+  };
+  return list.sort((a, b) => score(a) - score(b)
+    || a.name.localeCompare(b.name, 'zh-Hans-CN')
+    || a.sourceName.localeCompare(b.sourceName, 'zh-Hans-CN'));
 }
