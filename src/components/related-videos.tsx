@@ -17,8 +17,12 @@ export function RelatedVideos({ source, vodId, ready, section, info }: {
   const store = useAppStore();
   const filterAdult = store.yellowFilter;
   const [selected, setSelected] = useState<RecommendedWork | null>(null);
+  const [selectedTab, setSelectedTab] = useState<'details' | 'sources'>('details');
   const queryClient = useQueryClient();
   const close = useCallback(() => setSelected(null), []);
+  const pick = useCallback((work: RecommendedWork, tab: 'details' | 'sources') => {
+    setSelectedTab(tab); setSelected(work);
+  }, []);
   const sources = useMemo(() => {
     const urls = new Set<string>();
     return sourcesForSection(store.selectedKeys.map(key => resolveSource(store, key)).filter((s): s is SourceConfig => {
@@ -61,15 +65,15 @@ export function RelatedVideos({ source, vodId, ready, section, info }: {
   const partial = ai.data?.partial || fallback.data?.partial || ai.isError;
   return <section className="mt-8 border-t border-line pt-5" aria-labelledby="related-videos-heading" aria-busy={loading}>
     <h2 id="related-videos-heading" className="text-base font-semibold text-content">相关推荐</h2>
-    <p className="mt-1 mb-4 text-xs text-faint">按影片关联推荐，点击后在已启用的资源中选择播放来源</p>
-    {!items.length && loading ? <div role="status" aria-label="正在加载相关推荐" className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3">
+    <p className="mt-1 mb-4 text-xs text-faint">点击海报查看影片资料，也可直接查找播放来源</p>
+    {!items.length && loading ? <div role="status" aria-label="正在加载相关推荐" className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-x-3 gap-y-6">
       {Array.from({ length: 6 }, (_, i) => <div key={i} className="aspect-[2/3] bg-chip rounded-lg animate-pulse" />)}
     </div> : failed ? <div className="py-4 text-sm text-muted" role="status">相关推荐暂时加载失败 <button className="btn-ghost btn-sm" onClick={() => { void query.refetch(); void fallback.refetch(); }}>重试</button></div>
-      : items.length ? <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3">{items.map(item => <RecommendedWorkCard
+      : items.length ? <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-x-3 gap-y-6">{items.map(item => <RecommendedWorkCard
         key={`${item.id}:${sourceKey}:${filterAdult}:${store.imageProxyMode}:${store.customImageProxy}`}
         work={item} sources={sources} filterAdult={filterAdult} enabled={!selected}
-        imageMode={store.imageProxyMode} customProxy={store.customImageProxy} onPick={setSelected} />)}</div> : <p className="py-4 text-sm text-muted">暂未找到关联足够强的影片</p>}
+        imageMode={store.imageProxyMode} customProxy={store.customImageProxy} onPick={pick} />)}</div> : <p className="py-4 text-sm text-muted">暂未找到关联足够强的影片</p>}
     {partial && <p className="mt-3 text-xs text-muted">部分推荐暂未加载，已显示现有结果。<button className="btn-ghost btn-sm" disabled={loading || ai.isFetching} onClick={() => { if (query.data?.aiAvailable) void ai.refetch(); else void fallback.refetch(); }}>重试</button></p>}
-    {selected && <RecommendedWorkSources key={`${selected.id}:${sourceKey}`} work={selected} sources={sources} section={section} onClose={close} />}
+    {selected && <RecommendedWorkSources key={`${selected.id}:${sourceKey}`} work={selected} sources={sources} section={section} initialTab={selectedTab} onClose={close} />}
   </section>;
 }
