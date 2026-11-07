@@ -22,6 +22,7 @@ import {
 import { loadCacheSettings } from '@/lib/video-cache';
 import { formatTime } from '@/lib/utils';
 import { bindAutoMini } from '@/lib/player-auto-mini';
+import { bindProgressSeek } from '@/lib/player-progress';
 
 /**
  * 播放器外壳：ArtPlayer + hls.js（旧版 player.js 的 React 化）。
@@ -411,10 +412,12 @@ export function PlayerShell({
     artRef.current = art;
     const unbindAutoMini = bindAutoMini(art);
     setPlayer(art);
+    let previewTime: number | null = null;
     const updateProgressTime = () => {
       const video = art.video;
-      setProgressTime(`${formatTime(Number.isFinite(video.currentTime) ? video.currentTime : 0)} / ${formatTime(Number.isFinite(video.duration) ? video.duration : 0)}`);
+      setProgressTime(`${formatTime(previewTime ?? (Number.isFinite(video.currentTime) ? video.currentTime : 0))} / ${formatTime(Number.isFinite(video.duration) ? video.duration : 0)}`);
     };
+    const unbindProgressSeek = bindProgressSeek(art, time => { previewTime = time; updateProgressTime(); });
     const revealControls = () => { art.controls.show = true; };
     // Do not leave the user without seek/pause controls while playback is waiting.
     art.on('control', visible => {
@@ -616,6 +619,7 @@ export function PlayerShell({
     document.addEventListener('visibilitychange', saveOnHide);
 
     return () => {
+      unbindProgressSeek();
       unbindAutoMini();
       clearInterval(qualityTimer); flushQuality(); qualityRef.current = null;
       // 卸载前刷一次最终进度，避免丢失最后几秒。
