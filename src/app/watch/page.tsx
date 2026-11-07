@@ -33,6 +33,7 @@ import {
 } from '@/lib/db';
 import { cn } from '@/lib/utils';
 import { RelatedVideos } from '@/components/related-videos';
+import { VideoInfoPanel } from '@/components/video-info-panel';
 
 /**
  * 播放页（唯一入口，替代旧版 watch.html → player.html 跳转链）。
@@ -324,7 +325,7 @@ function WatchContent() {
           </div>
 
           {/* 剧集侧栏 */}
-          <aside className="bg-surface-raised rounded-lg p-3 h-fit">
+          <aside className="min-w-0 bg-surface-raised rounded-lg p-3 h-fit">
             <div className="flex items-center justify-between gap-2 mb-2.5">
               <h2 className="text-sm font-semibold text-content">
                 剧集列表{episodes.length > 0 && `（${episodes.length}）`}
@@ -363,6 +364,7 @@ function WatchContent() {
                 ))}
               </div>
             )}
+            <VideoInfoPanel info={detailQuery.data?.videoInfo} />
             <p className="hidden md:block text-[10px] text-faint mt-3 leading-relaxed">
               快捷键：空格 播放/暂停 · ←/→ 快退/快进 5s · ↑/↓ 音量 · F 全屏 · Alt+←/→ 切换集数
             </p>
