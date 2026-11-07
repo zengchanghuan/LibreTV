@@ -1,4 +1,5 @@
 > 个人部署分支说明、默认影视源及开发方式见 [PERSONALIZATION.md](./PERSONALIZATION.md)。
+> 当前阿里云部署入口与免密配置见 [本机部署说明](./docs/deployment-aliyun.md)。
 
 # HomeTV
 
