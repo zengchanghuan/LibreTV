@@ -30,6 +30,7 @@ export const recommendationCatalog: RecommendedWork[] = Object.entries(metadata)
   const people = credits.get(key);
   const identity = metadataIdentity(key, meta);
   return { id: `local:${identity}`, title, year, aliases: (aliases.get(identity) || []).filter(name => name !== title), mediaType: meta.mediaType || (/themoviedb\.org\/tv\//.test(meta.source || '') ? 'tv' : /themoviedb\.org\/movie\//.test(meta.source || '') ? 'movie' : 'unknown'),
+    metadata: { ...meta, director: meta.director || people?.directors.join(' / '), cast: meta.cast || people?.cast.join(' / ') },
     poster: meta.poster, genres: contentGenres(meta.genre), directors: [...new Set([...personTokens(meta.director), ...people?.directors || []])],
     cast: [...new Set([...personTokens(meta.cast), ...people?.cast || []])].slice(0, 5), score: 0, reasons: [], origin: 'catalog' };
 });

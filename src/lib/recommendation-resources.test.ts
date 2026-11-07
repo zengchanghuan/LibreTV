@@ -107,4 +107,30 @@ describe('cross-source work matching', () => {
     await expect(matchWorkSources(work, list, true, controller.signal)).rejects.toThrow();
     expect(searchSource).not.toHaveBeenCalled();
   });
+  it('keeps verified detail posters and sanitized credits/introduction instead of discarding them', async () => {
+    vi.mocked(searchSource).mockResolvedValue({ sourceKey: 'a', ok: true, list: [result({ year: undefined, pic: '/old.jpg' })] });
+    vi.mocked(detailSite).mockResolvedValue({ episodes: [], videoInfo: { title: '老男孩', year: '2003', typeName: '剧情 / 惊悚', cover: '/cover.jpg',
+      director: '<b>朴赞郁</b>', actor: '崔岷植 / 刘智泰', area: '韩国', desc: '<p>第一段<br>第二段</p><script>bad()</script>', sourceKey: 'a', sourceName: 'A' } });
+    const data = await matchWorkSources(work, [source], true, signal());
+    expect(data.items[0]).toMatchObject({ pic: 'https://a.example/old.jpg', metadata: { poster: 'https://a.example/cover.jpg', director: '朴赞郁',
+      cast: '崔岷植 / 刘智泰', area: '韩国', intro: '第一段 第二段' } });
+  });
+  it('uses at most one optional metadata lookup per source while retaining other confirmed editions', async () => {
+    vi.mocked(searchSource).mockResolvedValue({ sourceKey: 'a', ok: true, list: [result(), result({ vodId: 'other-edition' })] });
+    vi.mocked(detailSite).mockResolvedValue({ episodes: [], videoInfo: { title: '老男孩', year: '2003', cover: 'https://images.example/a.jpg', sourceKey: 'a', sourceName: 'A' } });
+    const data = await matchWorkSources(work, [source], true, signal(), true);
+    expect(data.items).toHaveLength(2); expect(detailSite).toHaveBeenCalledTimes(1);
+    expect(data.items[0].metadata?.poster).toBe('https://images.example/a.jpg');
+  });
+  it('retains a known search match when optional enrichment fails, without caching incomplete metadata', async () => {
+    vi.mocked(detailSite).mockRejectedValue(new Error('timeout'));
+    const data = await matchWorkSources(work, [source], true, signal(), true);
+    expect(data.items).toHaveLength(1); expect(data.failures).toHaveLength(1); expect(setCache).not.toHaveBeenCalled();
+  });
+  it('rejects a wrong remake or adult detail before borrowing its metadata', async () => {
+    for (const details of [{ year: '2013' }, { typeName: '韩剧' }, { typeName: '情色' }]) {
+      vi.mocked(detailSite).mockResolvedValue({ episodes: [], videoInfo: { title: '老男孩', year: '2003', cover: 'https://wrong.example/a.jpg', ...details, sourceKey: 'a', sourceName: 'A' } });
+      expect((await matchWorkSources(work, [source], true, signal(), true)).items).toEqual([]);
+    }
+  });
 });

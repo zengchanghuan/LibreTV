@@ -164,9 +164,9 @@ export const api = {
     request<RecommendationResponse>('/api/recommendations', { method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ seed: { title: seed.title, year: seed.year, typeName: seed.typeName, director: seed.director, actor: seed.actor }, filterAdult, mode }), signal }),
 
-  workResources: (work: RecommendedWork, sources: SourceConfig[], filterAdult: boolean, signal?: AbortSignal) =>
+  workResources: (work: RecommendedWork, sources: SourceConfig[], filterAdult: boolean, signal?: AbortSignal, includeMetadata = false) =>
     request<WorkResourcesResponse>('/api/recommendations/resources', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ work, sources, filterAdult }), signal }),
+      body: JSON.stringify({ work: { id: work.id, title: work.title, year: work.year, mediaType: work.mediaType, aliases: work.aliases }, sources, filterAdult, includeMetadata }), signal }),
 
   douban: (type: 'movie' | 'tv', tag: string, pageStart: number, pageSize: number, signal?: AbortSignal) => {
     const sp = new URLSearchParams({ type, tag, pageStart: String(pageStart), pageSize: String(pageSize) });

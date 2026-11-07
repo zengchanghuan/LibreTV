@@ -19,9 +19,13 @@ describe('DeepSeek recommendation boundary', () => {
     expect(result).toHaveLength(1);
     expect(result[0]).toMatchObject({ title: '老男孩', origin: 'ai', aliases: [], aiReason: item.reason });
     expect(result[0].directors).not.toContain('模型虚构导演');
-    const unknown = parseDeepSeekWorks(body([{ ...item, title: '数据库之外的测试片', aliases: ['老男孩'], directors: ['模型虚构导演'], cast: ['虚构主演'], genres: ['犯罪'] }]), seed, true)[0];
+    expect(result[0].metadata?.rating).toBeTruthy();
+    expect(result[0].metadata?.cast).toBeTruthy();
+    const unknown = parseDeepSeekWorks(body([{ ...item, title: '数据库之外的测试片', aliases: ['老男孩'], directors: ['模型虚构导演'], cast: ['虚构主演'], genres: ['犯罪'],
+      poster: 'https://fake.example/cover.jpg', metadata: { rating: '9.9', intro: '虚构简介' } }]), seed, true)[0];
     expect(unknown.title).toBe('数据库之外的测试片');
     expect(unknown.directors).toEqual([]); expect(unknown.cast).toEqual([]); expect(unknown.genres).toEqual([]);
+    expect(unknown.metadata).toBeUndefined(); expect(unknown.poster).toBeUndefined();
   });
   it('does not call an external service without a credential', async () => {
     vi.stubEnv('DEEPSEEK_API_KEY', '');

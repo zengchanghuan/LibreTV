@@ -6,6 +6,7 @@ export interface FilmPosterMetadata {
   director?: string;
   intro?: string;
   genre?: string;
+  area?: string;
   rating?: string;
   /** Missing values retain the existing Douban rating convention. */
   ratingSource?: string;

@@ -10,13 +10,14 @@ export async function POST(req: Request) {
   const guarded = guardRequest(req); if (guarded) return guarded;
   let work: ReturnType<typeof readWork>;
   const sources: SourceConfig[] = [];
-  let filterAdult = true;
+  let filterAdult = true, includeMetadata = false;
   try {
     const raw = await req.text();
     if (raw.length > 32000) return respond({ error: '查询参数过长' }, 400);
     const body = JSON.parse(raw);
     work = readWork(body?.work);
     filterAdult = body?.filterAdult !== false;
+    includeMetadata = body?.includeMetadata === true;
     if (!work || !Array.isArray(body.sources) || !body.sources.length || body.sources.length > 6) return respond({ error: '影片或源列表无效' }, 400);
     const seen = new Set<string>(), keys = new Set<string>();
     for (const value of body.sources) {
@@ -34,7 +35,7 @@ export async function POST(req: Request) {
     return respond({ error: '查询参数无效' }, 400);
   }
   try {
-    const result = await matchWorkSources(work, sources, filterAdult, AbortSignal.any([req.signal, AbortSignal.timeout(25000)]));
+    const result = await matchWorkSources(work, sources, filterAdult, AbortSignal.any([req.signal, AbortSignal.timeout(25000)]), includeMetadata);
     return respond(result);
   } catch {
     return respond({ error: '资源查询未完成，请重试' }, 502);

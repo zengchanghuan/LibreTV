@@ -49,7 +49,7 @@ export async function deepSeekRecommendations(seed: RecommendedWork, filterAdult
   const model = process.env.DEEPSEEK_RECOMMEND_MODEL?.trim() || 'deepseek-flash';
   const input = { title: seed.title, year: seed.year, mediaType: seed.mediaType,
     genres: seed.genres, directors: seed.directors, cast: seed.cast, excludeAdult: filterAdult };
-  const key = `deepseek-recommend:v1:${model}:${JSON.stringify(input)}`;
+  const key = `deepseek-recommend:v2:${model}:${JSON.stringify(input)}`;
   const cached = getCache<RecommendedWork[]>(key);
   if (cached) return cached;
   let task = pending.get(key);

@@ -1,12 +1,39 @@
+import { load } from 'cheerio';
+import { availableFilmText, filmPosterUrl, mergeFilmMetadata } from './film-card-metadata';
 import { cmsRequestHeaders, isAdultContent, parseDetail } from './cms-parser';
 import { fetchUpstream, getCache, setCache } from './fetch-utils';
 import { classifyMediaType } from './media-type';
 import { searchSource } from './search-source';
 import { detailSite, siteAdapterFor } from './site-adapters/site-adapters';
 import { resourceMatch, type RecommendedWork, type ResourceMatch, type WorkResourcesResponse } from './recommendations';
-import type { SourceConfig } from './types';
+import type { SourceConfig, VideoInfo } from './types';
 
-export async function matchWorkSources(work: RecommendedWork, sources: SourceConfig[], filterAdult: boolean, signal: AbortSignal): Promise<WorkResourcesResponse> {
+function plainText(value?: string) {
+  if (!value) return undefined;
+  const $ = load(value.slice(0, 12000));
+  $('script,style,noscript,iframe').remove();
+  $('br').replaceWith(' ');
+  return availableFilmText($.root().text().replace(/\s+/g, ' ').trim().slice(0, 1200));
+}
+
+function withDetails(item: ResourceMatch, info: VideoInfo, source: SourceConfig): ResourceMatch {
+  const poster = filmPosterUrl(info.cover, source.url) || filmPosterUrl(item.pic, source.url);
+  return { ...item, name: info.title || item.name, year: info.year || item.year, typeName: info.typeName || item.typeName,
+    pic: filmPosterUrl(item.pic, source.url) || poster, metadata: mergeFilmMetadata({ poster, director: plainText(info.director), cast: plainText(info.actor),
+      intro: plainText(info.desc), genre: plainText(info.typeName), area: plainText(info.area) }, item.metadata) };
+}
+
+async function readDetails(source: SourceConfig, id: string, signal: AbortSignal) {
+  if (siteAdapterFor(source.url)) return (await detailSite(source, id, signal)).videoInfo;
+  const target = new URL(source.url);
+  for (const name of ['ac', 'ids', 'wd', 'pg', 't']) target.searchParams.delete(name);
+  target.searchParams.set('ac', 'videolist'); target.searchParams.set('ids', id);
+  const response = await fetchUpstream(target.href, { headers: cmsRequestHeaders(), signal, timeoutMs: 5000 });
+  if (!response.ok) throw new Error('资源资料读取失败');
+  return parseDetail(await response.json(), source).videoInfo;
+}
+
+export async function matchWorkSources(work: RecommendedWork, sources: SourceConfig[], filterAdult: boolean, signal: AbortSignal, includeMetadata = false): Promise<WorkResourcesResponse> {
   const results: WorkResourcesResponse[] = new Array(sources.length);
   let next = 0;
   await Promise.all(Array.from({ length: Math.min(3, sources.length) }, async () => {
@@ -16,7 +43,7 @@ export async function matchWorkSources(work: RecommendedWork, sources: SourceCon
       const result: WorkResourcesResponse = { items: [], checked: 1, failures: [] };
       results[index] = result;
       if (filterAdult && source.isAdult) continue;
-      const key = `work-resources:v1:${JSON.stringify([work.title, work.aliases, work.year, work.mediaType, source, filterAdult])}`;
+      const key = `work-resources:v2:${JSON.stringify([work.title, work.aliases, work.year, work.mediaType, source, filterAdult, includeMetadata])}`;
       const cached = getCache<ResourceMatch[]>(key);
       if (cached) { result.items = cached; continue; }
       // Six sources in a three-worker batch fit inside the route's 25 second budget.
@@ -31,30 +58,24 @@ export async function matchWorkSources(work: RecommendedWork, sources: SourceCon
           const needsDetail = (item: ResourceMatch) => resourceMatch(work, item) === 'detail' || classifyMediaType(item.typeName) === 'unknown';
           const candidates = outcome.list.filter(item => resourceMatch(work, item) !== 'reject')
             .sort((a, b) => Number(needsDetail(a)) - Number(needsDetail(b)));
-          let detailLookups = 0;
+          let detailLookups = 0, metadataLookups = 0;
           for (const item of candidates) {
             if (filterAdult && (item.isAdult || isAdultContent(item.typeName) || /情色/.test(item.typeName || ''))) continue;
-            let resolved = item;
-            if (needsDetail(item)) {
-              if (detailLookups >= 3) continue;
-              detailLookups++;
+            let resolved: ResourceMatch = { ...item, pic: filmPosterUrl(item.pic, source.url),
+              metadata: { genre: plainText(item.typeName), area: plainText(item.area) } };
+            const required = needsDetail(item);
+            // One optional detail per source fills card metadata without probing media streams.
+            if (required || (includeMetadata && metadataLookups < 1)) {
+              if (required && detailLookups >= 3) continue;
+              if (required) detailLookups++;
+              metadataLookups++;
               try {
-                let detail;
-                if (siteAdapterFor(source.url)) detail = await detailSite(source, item.vodId, sourceSignal);
-                else {
-                  const target = new URL(source.url);
-                  for (const name of ['ac', 'ids', 'wd', 'pg', 't']) target.searchParams.delete(name);
-                  target.searchParams.set('ac', 'videolist'); target.searchParams.set('ids', item.vodId);
-                  const response = await fetchUpstream(target.href, { headers: cmsRequestHeaders(), signal: sourceSignal, timeoutMs: 5000 });
-                  if (!response.ok) throw new Error('资源资料读取失败');
-                  detail = parseDetail(await response.json(), source);
-                }
-                const info = detail.videoInfo;
-                resolved = { ...item, name: info.title || item.name, year: info.year || item.year, typeName: info.typeName || item.typeName };
+                resolved = withDetails(resolved, await readDetails(source, item.vodId, sourceSignal), source);
               } catch {
-                sourceSignal.throwIfAborted();
+                signal.throwIfAborted();
                 incomplete = true;
-                continue;
+                if (required) { sourceSignal.throwIfAborted(); continue; }
+                // A failed optional enrichment must not hide an already confirmed search hit.
               }
             }
             if (filterAdult && (isAdultContent(resolved.typeName) || /情色/.test(resolved.typeName || ''))) continue;

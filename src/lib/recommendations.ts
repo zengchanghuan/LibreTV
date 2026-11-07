@@ -4,6 +4,7 @@ export { contentGenres, personTokens } from './content-similarity';
 import { classifyMediaType, type MediaType } from './media-type';
 import { relatedTitle, seriesQuery } from './related-videos';
 import type { SearchResultItem, VideoInfo } from './types';
+import type { FilmPosterMetadata } from './film-poster-metadata';
 
 /** A work has no playback source or vodId. Those belong to a separately resolved resource. */
 export interface RecommendedWork {
@@ -13,6 +14,7 @@ export interface RecommendedWork {
   year: string;
   mediaType: MediaType;
   poster?: string;
+  metadata?: FilmPosterMetadata;
   genres: string[];
   directors: string[];
   cast: string[];
@@ -28,6 +30,7 @@ export interface RecommendationResponse {
   partial?: boolean;
 }
 export interface ResourceMatch extends SearchResultItem {
+  metadata?: FilmPosterMetadata;
   /** Missing classification stays visible rather than being invented from a genre. */
   typeUnconfirmed?: boolean;
 }
