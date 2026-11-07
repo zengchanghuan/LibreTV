@@ -268,7 +268,8 @@ body {
   50% { opacity: 1; transform: scale(1); }
 }
 /* 起播占位已有 logo 时，隐藏播放器内部同一图标，避免重叠。 */
-.hometv-starting .art-video-player .art-loading {
+.hometv-starting .art-video-player .art-loading,
+.art-video-player.hometv-starting .art-loading {
   visibility: hidden;
 }
 .art-video-player .art-loading .hometv-loading-logo {

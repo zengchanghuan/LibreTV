@@ -23,6 +23,7 @@ import { loadCacheSettings } from '@/lib/video-cache';
 import { formatTime } from '@/lib/utils';
 import { bindAutoMini } from '@/lib/player-auto-mini';
 import { bindProgressSeek } from '@/lib/player-progress';
+import { bindEarlyFullscreen } from '@/lib/player-fullscreen';
 
 /**
  * 播放器外壳：ArtPlayer + hls.js（旧版 player.js 的 React 化）。
@@ -410,6 +411,7 @@ export function PlayerShell({
     });
     art.template.$player.classList.add('hometv-vod-player');
     artRef.current = art;
+    const unbindEarlyFullscreen = bindEarlyFullscreen(art);
     const unbindAutoMini = bindAutoMini(art);
     setPlayer(art);
     let previewTime: number | null = null;
@@ -558,7 +560,8 @@ export function PlayerShell({
           current.toggle(); showHint('播放/暂停'); e.preventDefault();
           break;
         case 'f': case 'F':
-          if (isAppleMobile()) current.fullscreenWeb = !current.fullscreenWeb;
+          if (current.fullscreenWeb) current.fullscreenWeb = false;
+          else if (isAppleMobile()) current.fullscreenWeb = true;
           else current.fullscreen = !current.fullscreen;
           e.preventDefault();
           break;
@@ -621,6 +624,7 @@ export function PlayerShell({
     return () => {
       unbindProgressSeek();
       unbindAutoMini();
+      unbindEarlyFullscreen();
       clearInterval(qualityTimer); flushQuality(); qualityRef.current = null;
       // 卸载前刷一次最终进度，避免丢失最后几秒。
       // 已自然播完的集数不回写，避免覆盖 onEnded 里清除的「已看完」记录
@@ -658,6 +662,11 @@ export function PlayerShell({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [url]);
 
+  // Web fullscreen can move the player into document.body, outside this shell.
+  useEffect(() => {
+    player?.template.$player.classList.toggle('hometv-starting', showPoster && !error);
+  }, [player, showPoster, error]);
+
   // —— 广告过滤开关变化：重建 HLS loader（无需重建整个播放器） ——
   const firstAdFilterRef = useRef(true);
   useEffect(() => {
@@ -678,7 +687,10 @@ export function PlayerShell({
         getVideoPrefetcher().stop(); getNextEpisodePrefetcher().stop();
         onSleep?.();
       }} />, player.template.$player)}
-      {showPoster && !error && <PlayerLoadingState />}
+      {showPoster && !error && (player ? createPortal(
+        <div className="absolute inset-0 z-[55] pointer-events-none"><PlayerLoadingState /></div>,
+        player.template.$player,
+      ) : <PlayerLoadingState />)}
       {error && (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/80">
           <p className="text-danger text-sm">{error}</p>
