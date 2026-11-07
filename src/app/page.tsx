@@ -119,7 +119,7 @@ function HomeContent() {
     staleTime: 300_000,
   });
 
-  // 最近搜索改为搜索框下拉（聚焦展开、按输入过滤），不再常驻首屏
+  // 聚焦展示最近搜索，继续输入时按关键词过滤。
   const searchHistory = useSearchHistory(input);
 
   const runSearch = (q: string) => {
@@ -133,6 +133,7 @@ function HomeContent() {
       toast('请先在设置中添加并勾选点播源', 'warning');
       return;
     }
+    searchHistory.close();
     router.push(searchPageUrl(section, query), { scroll: false });
     searchHistory.record(query);
   };
@@ -223,11 +224,13 @@ function HomeContent() {
                   placeholder="输入影片名称..."
                   value={input}
                   maxLength={100}
+                  autoComplete="off"
                   onChange={(e) => {
                     setInput(e.target.value);
-                    searchHistory.resetActive();
+                    searchHistory.onInputChange();
                   }}
                   onFocus={searchHistory.onFocus}
+                  onClick={searchHistory.onFocus}
                   onKeyDown={(e) => searchHistory.onKeyDown(e, pickHistory)}
                   role="combobox"
                   aria-label="搜索影片"
@@ -246,7 +249,7 @@ function HomeContent() {
                     className="shrink-0 self-center mr-1 p-1.5 rounded-full text-faint hover:text-content hover:bg-hover transition-colors"
                     onClick={() => {
                       setInput('');
-                      searchHistory.resetActive();
+                      searchHistory.onFocus();
                       inputRef.current?.focus();
                     }}
                     aria-label="清空"
@@ -254,6 +257,17 @@ function HomeContent() {
                     <Icon name="close" className="w-4 h-4" />
                   </button>
                 )}
+                <button
+                  type="button"
+                  className="shrink-0 self-center mr-1 p-2 rounded-md text-faint hover:text-content hover:bg-hover"
+                  aria-label="搜索历史"
+                  title="搜索历史"
+                  aria-expanded={searchHistory.visible}
+                  aria-controls="home-search-history"
+                  onClick={searchHistory.toggle}
+                >
+                  <Icon name="clock" className="w-4 h-4" />
+                </button>
                 {/* 主操作按钮：贴合搜索框右端——右侧圆角跟随容器、左侧直角，展开时右下角
                     跟着容器一起改直角；按压改用亮度反馈（缩放会让贴合边缘露出缝隙） */}
                 <button
@@ -279,6 +293,8 @@ function HomeContent() {
                 onPick={pickHistory}
                 onRemove={searchHistory.remove}
                 onClearAll={searchHistory.clearAll}
+                hasHistory={searchHistory.hasHistory}
+                emptyText={searchHistory.emptyText}
               />
             )}
           </div>

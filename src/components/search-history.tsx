@@ -2,13 +2,10 @@
 
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { addSearchHistory, clearSearchHistory, db, removeSearchHistory, restoreSearchHistory } from '@/lib/db';
+import { addSearchHistory, clearSearchHistory, db, MAX_SEARCH_HISTORY, removeSearchHistory, restoreSearchHistory } from '@/lib/db';
 import { cn } from '@/lib/utils';
 import { useToast } from './toast';
 import { Icon } from './icon';
-
-/** 下拉最多展示条数，与 db 层 MAX_SEARCH_HISTORY 保持一致 */
-const HISTORY_LIMIT = 10;
 
 /**
  * 「最近搜索」下拉的交互逻辑：聚焦展开、输入时按关键字过滤（浏览器地址栏式交互）。
@@ -17,23 +14,26 @@ const HISTORY_LIMIT = 10;
 export function useSearchHistory(input: string) {
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
+  const [filterInput, setFilterInput] = useState(false);
   /** 键盘高亮项下标，-1 表示未选中 */
   const [activeIndex, setActiveIndex] = useState(-1);
   const containerRef = useRef<HTMLDivElement>(null);
 
   const history = useQuery({
     queryKey: ['searchHistory'],
-    queryFn: () => db.searchHistory.orderBy('timestamp').reverse().limit(HISTORY_LIMIT).toArray(),
+    queryFn: () => db.searchHistory.orderBy('timestamp').reverse().limit(MAX_SEARCH_HISTORY).toArray(),
   });
 
   const matches = useMemo(() => {
     const all = history.data ?? [];
-    const keyword = input.trim().toLowerCase();
+    const keyword = filterInput ? input.trim().toLowerCase() : '';
     return keyword ? all.filter((h) => h.text.toLowerCase().includes(keyword)) : all;
-  }, [history.data, input]);
+  }, [history.data, input, filterInput]);
 
-  // 唯一命中项与输入内容完全一致时不展开：否则会盖住用户刚敲进去的内容
-  const visible = open && matches.length > 0 && !(matches.length === 1 && matches[0].text === input.trim());
+  const visible = open;
+  const hasHistory = (history.data?.length ?? 0) > 0;
+  const emptyText = history.isError ? '搜索记录暂时无法读取' : history.isPending
+    ? '正在读取搜索记录…' : hasHistory ? '没有匹配的搜索记录' : '暂无搜索记录，搜索后会自动保存';
 
   // 点按下拉之外的任意位置收起
   useEffect(() => {
@@ -81,22 +81,30 @@ export function useSearchHistory(input: string) {
 
   const onFocus = () => {
     setOpen(true);
+    setFilterInput(false);
+    setActiveIndex(-1);
     history.refetch();
   };
 
   const onKeyDown = (e: KeyboardEvent<HTMLInputElement>, onPick: (text: string) => void) => {
+    if (e.nativeEvent.isComposing || e.keyCode === 229) return;
     if (e.key === 'Escape') {
       close();
       return;
     }
-    if (!visible) return;
+    if (!visible && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+      e.preventDefault();
+      onFocus();
+      return;
+    }
+    if (!visible || matches.length === 0) return;
     if (e.key === 'ArrowDown') {
       e.preventDefault();
       setActiveIndex((i) => (i + 1) % matches.length);
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
       setActiveIndex((i) => (i <= 0 ? matches.length - 1 : i - 1));
-    } else if (e.key === 'Enter' && activeIndex >= 0) {
+    } else if (e.key === 'Enter' && activeIndex >= 0 && matches[activeIndex]) {
       // 有高亮项时 Enter 采用该条历史，不再提交输入框原文
       e.preventDefault();
       onPick(matches[activeIndex].text);
@@ -105,6 +113,8 @@ export function useSearchHistory(input: string) {
 
   return {
     visible,
+    hasHistory,
+    emptyText,
     matches,
     activeIndex,
     containerRef,
@@ -114,8 +124,12 @@ export function useSearchHistory(input: string) {
     clearAll,
     onFocus,
     onKeyDown,
-    /** 输入变化时清掉键盘高亮，避免指向已过滤掉的项 */
-    resetActive: () => setActiveIndex(-1),
+    onInputChange: () => {
+      setOpen(true);
+      setFilterInput(true);
+      setActiveIndex(-1);
+    },
+    toggle: () => visible ? close() : onFocus(),
   };
 }
 
@@ -134,6 +148,8 @@ export function SearchHistoryDropdown({
   onPick,
   onRemove,
   onClearAll,
+  hasHistory,
+  emptyText,
 }: {
   /** 同时作为 listbox 的 id 前缀：外部输入框用 aria-controls 指向它 */
   id: string;
@@ -142,6 +158,8 @@ export function SearchHistoryDropdown({
   onPick: (text: string) => void;
   onRemove: (text: string) => void;
   onClearAll: () => void;
+  hasHistory: boolean;
+  emptyText: string;
 }) {
   return (
     <div
@@ -157,7 +175,8 @@ export function SearchHistoryDropdown({
         </span>
         <button
           type="button"
-          className="px-2 py-1 rounded-md text-xs text-faint hover:text-danger hover:bg-hover transition-colors"
+          disabled={!hasHistory}
+          className="px-2 py-1 rounded-md text-xs text-faint hover:text-danger hover:bg-hover transition-colors disabled:opacity-40 disabled:pointer-events-none"
           onClick={onClearAll}
         >
           清空
@@ -195,6 +214,7 @@ export function SearchHistoryDropdown({
           </li>
         ))}
       </ul>
+      {matches.length === 0 && <p role="status" className="px-4 py-3 text-sm text-faint">{emptyText}</p>}
     </div>
   );
 }

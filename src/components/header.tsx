@@ -61,7 +61,7 @@ export function Header({ showSearch = false }: { showSearch?: boolean }) {
               <div ref={searchHistory.containerRef} className="relative">
                 <input
                   className={cn(
-                    'input w-full h-9',
+                    'input w-full h-9 pr-10',
                     // 展开时：上圆角与外框沿用聚焦样式，底边改为内部分隔线，与下拉拼成同一面板
                     searchHistory.visible &&
                       'rounded-b-none border-accent border-b-line bg-surface-raised focus-visible:ring-0'
@@ -70,11 +70,13 @@ export function Header({ showSearch = false }: { showSearch?: boolean }) {
                   placeholder="搜索影片..."
                   value={query}
                   maxLength={100}
+                  autoComplete="off"
                   onChange={(e) => {
                     setQuery(e.target.value);
-                    searchHistory.resetActive();
+                    searchHistory.onInputChange();
                   }}
                   onFocus={searchHistory.onFocus}
+                  onClick={searchHistory.onFocus}
                   onKeyDown={(e) => searchHistory.onKeyDown(e, pickHistory)}
                   role="combobox"
                   aria-expanded={searchHistory.visible}
@@ -86,6 +88,17 @@ export function Header({ showSearch = false }: { showSearch?: boolean }) {
                       : undefined
                   }
                 />
+                <button
+                  type="button"
+                  className="absolute right-1 top-0.5 p-2 rounded-md text-faint hover:text-content hover:bg-hover"
+                  aria-label="搜索历史"
+                  title="搜索历史"
+                  aria-expanded={searchHistory.visible}
+                  aria-controls="header-search-history"
+                  onClick={searchHistory.toggle}
+                >
+                  <Icon name="clock" className="w-4 h-4" />
+                </button>
                 {searchHistory.visible && (
                   <SearchHistoryDropdown
                     id="header-search-history"
@@ -94,6 +107,8 @@ export function Header({ showSearch = false }: { showSearch?: boolean }) {
                     onPick={pickHistory}
                     onRemove={searchHistory.remove}
                     onClearAll={searchHistory.clearAll}
+                    hasHistory={searchHistory.hasHistory}
+                    emptyText={searchHistory.emptyText}
                   />
                 )}
               </div>

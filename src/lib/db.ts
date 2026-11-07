@@ -257,7 +257,7 @@ export async function clearProgress(sourceKey: string, vodId: string, episodeInd
 }
 
 export async function addSearchHistory(text: string): Promise<void> {
-  const t = text.trim().slice(0, 50);
+  const t = text.trim().slice(0, 100);
   if (!t) return;
   await db.searchHistory.put({ text: t, timestamp: Date.now() });
   const count = await db.searchHistory.count();
