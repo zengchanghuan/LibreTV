@@ -90,7 +90,7 @@ export function rankWorks(seed: RecommendedWork, candidates: RecommendedWork[], 
       && !(cast.length && (specific.length || cast.length >= 2)) && specific.length < 2) continue;
     score += genreScore;
     if (specific.length >= 2) reasons.push(`相近题材 · ${specific.slice(0, 2).join(' / ')}`);
-    if (item.aiReason) reasons.push(`AI 推荐 · ${item.aiReason}`);
+    if (item.aiReason) reasons.push(item.aiReason);
     if (!reasons.length) continue;
     const value = { ...item, score, reasons: reasons.slice(0, 2) };
     const key = item.id.startsWith('local:') ? item.id : workKey(item), previous = dedup.get(key);

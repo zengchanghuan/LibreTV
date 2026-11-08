@@ -35,6 +35,7 @@ import { cn } from '@/lib/utils';
 import { RelatedVideos } from '@/components/related-videos';
 import { VideoInfoPanel } from '@/components/video-info-panel';
 import { PwaUpdateBanner } from '@/components/pwa';
+import { WatchTelemetry } from '@/components/watch-telemetry';
 
 /**
  * 播放页（唯一入口，替代旧版 watch.html → player.html 跳转链）。
@@ -213,6 +214,7 @@ function WatchContent() {
 
   return (
     <div className="min-h-screen flex flex-col">
+      <WatchTelemetry sourceKey={source.key} vodId={vodId} episode={currentIndex} enabled={verified && historyReady} />
       <header className="sticky top-0 z-40 bg-surface/90 backdrop-blur border-b border-line">
         <PwaUpdateBanner />
         <div className="max-w-7xl mx-auto px-4 min-h-14 py-2 flex flex-wrap sm:flex-nowrap items-center gap-3">

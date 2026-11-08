@@ -32,7 +32,7 @@ export function verifiedHomeAI(items: RecommendedWork[], filterAdult: boolean) {
     const known = catalogIdentity({ ...item, aliases: [] });
     if (!known || !eligibleHomeWork(known, filterAdult) || !item.aiReason) return [];
     return [{ ...known, origin: 'ai' as const, aiReason: item.aiReason,
-      reasons: [`AI 推荐 · ${item.aiReason}`] }];
+      reasons: [item.aiReason] }];
   });
 }
 

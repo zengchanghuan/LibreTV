@@ -82,7 +82,7 @@ export function RecommendedWorkSources({ work, sources, section, initialTab = 's
         <FilmCardDetails metadata={metadata} year={work.year} spacious />
         {work.reasons.length > 0 && <div className="mt-5 rounded-xl bg-chip/60 p-4">
           <h3 className="mb-2 text-sm font-medium text-content">推荐理由</h3>
-          <ul className="space-y-2 text-sm leading-6 text-muted">{work.reasons.map((reason, index) => <li key={index}>{reason}</li>)}</ul>
+          <ul className="space-y-2 text-sm leading-6 text-muted">{work.reasons.map((reason, index) => <li key={index}>{reason.replace(/^(?:AI 推荐|DeepSeek 推荐)\s*[·：:]?\s*/i, '')}</li>)}</ul>
         </div>}
         <button type="button" className="btn-primary mt-5 w-full" onClick={() => setTab('sources')}>查看播放来源</button>
       </section> : <section aria-label="播放来源">

@@ -47,8 +47,9 @@ export function RecommendedWorkCard({ work, sources, filterAdult, enabled, image
   const onExhausted = useCallback(() => {
     if (poster) setFailedPosters(previous => new Set([...previous, poster]));
   }, [poster]);
-  const pick = (tab: 'details' | 'sources') => onPick({ ...work, poster: poster || work.poster, metadata }, tab);
+  const pick = (tab: 'details' | 'sources') => onPick({ ...work, reasons, poster: poster || work.poster, metadata }, tab);
   const loading = primary.isFetching || fallback.isFetching;
+  const reasons = work.reasons.map(reason => reason.replace(/^(?:AI 推荐|DeepSeek 推荐)\s*[·：:]?\s*/i, ''));
   const summary = [work.year, metadata.area, metadata.genre].filter(Boolean).join(' · ');
   return <article ref={root} className="group min-w-0" aria-label={`推荐影片：${work.title}`}>
     <button type="button" onClick={() => pick('details')} className="block w-full rounded-xl text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 focus-visible:ring-offset-4 focus-visible:ring-offset-page" aria-label={`查看《${work.title}》的影片详情`}>
@@ -67,7 +68,7 @@ export function RecommendedWorkCard({ work, sources, filterAdult, enabled, image
     </button>
     <div className="pt-1">
       <p className="h-4 truncate text-xs leading-4 text-faint" title={summary}>{summary}</p>
-      <p className="mt-2 h-10 line-clamp-2 text-xs leading-5 text-muted" title={work.reasons.join('；')}>{work.reasons[0]}</p>
+      <p className="mt-2 h-10 line-clamp-2 text-xs leading-5 text-muted" title={reasons.join('；')}>{reasons[0]}</p>
       <div className="mt-1 flex h-8 items-center justify-between gap-2 text-xs">
         <button type="button" onClick={() => pick('details')} className="py-1 text-muted hover:text-content" aria-label={`查看《${work.title}》的完整资料`}>详情</button>
         <button type="button" onClick={() => pick('sources')} className="truncate py-1 text-accent hover:underline" aria-label={`查找《${work.title}》的播放资源`}>
