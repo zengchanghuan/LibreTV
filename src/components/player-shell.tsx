@@ -12,6 +12,7 @@ import { PlaybackRecovery, describeHlsError } from '@/lib/playback-recovery';
 import { playbackLoaders, type PlaybackFragmentObserver } from '@/lib/hls-loader';
 import { ForegroundPrefetcher } from '@/lib/foreground-prefetch';
 import { PlaybackFragmentCache } from '@/lib/playback-fragment-cache';
+import { recordDirectRequest } from '@/lib/direct-connection';
 import { hasPlaybackHeadroom, hlsEngine, isAppleMobile } from '@/lib/media-support';
 import { PlayerLoadingState } from './states';
 import { PlaybackTools } from './playback-tools';
@@ -330,6 +331,7 @@ export function PlayerShell({
       }
       if (controller.signal.aborted) return;
       changingMedia.current = false;
+      recordDirectRequest(mediaUrl);
       mediaTypeRef.current = type;
       nativeMode.current = type === 'mp4';
       currentMediaUrlRef.current = mediaUrl;

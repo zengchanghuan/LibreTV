@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { buildImageCandidates } from '@/lib/utils';
+import { recordDirectRequest } from '@/lib/direct-connection';
 
 interface SmartImageProps {
   /** 原始图片地址（未经代理加工，降级链由本组件按加载方式生成） */
@@ -41,6 +42,7 @@ export function SmartImage({
   }, [idx, candidates.length, onExhausted]);
 
   const src = candidates[idx];
+  useEffect(() => { if (src) recordDirectRequest(src); }, [src]);
   if (!src) return null;
   return (
     // eslint-disable-next-line @next/next/no-img-element

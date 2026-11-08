@@ -9,11 +9,13 @@ import { GlobalDownloadManager } from './download-manager';
 import { useAppStore, hydrateLiveProbeResults } from '@/lib/store';
 import { api, STATUS_QUERY_KEY } from '@/lib/client-api';
 import { applyEnvPresets } from '@/lib/subscription-sync';
+import { observeDirectRequests } from '@/lib/direct-connection';
 import { PwaProvider } from './pwa';
 import { FamilyProvider } from './family';
 import { NativePlaybackSync } from './native-player';
 
 export function Providers({ children }: { children: ReactNode }) {
+  useEffect(() => observeDirectRequests(), []);
   const [queryClient] = useState(
     () =>
       new QueryClient({

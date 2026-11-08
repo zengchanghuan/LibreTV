@@ -7,6 +7,7 @@ import Artplayer from 'artplayer';
 import { PLAYER_LOADING_ICON } from '@/lib/brand';
 import Hls, { type HlsConfig } from 'hls.js';
 import { Spinner, PlayerLoadingState } from './states';
+import { recordDirectRequest } from '@/lib/direct-connection';
 import { hlsEngine, isAppleMobile } from '@/lib/media-support';
 
 /**
@@ -92,6 +93,7 @@ export function LivePlayer({ url, title, onPrevChannel, onNextChannel }: LivePla
 
   useEffect(() => {
     if (!containerRef.current || !url) return;
+    recordDirectRequest(url);
     setError('');
     setLoading(true);
     setShowPoster(true);
@@ -155,6 +157,12 @@ export function LivePlayer({ url, title, onPrevChannel, onNextChannel }: LivePla
       let liveNetRetryCount = 0;
       let mediaRecoverCount = 0;
       const hlsConfig: Partial<HlsConfig> = {
+        xhrSetup: (xhr, requestUrl) => {
+          recordDirectRequest(requestUrl);
+          xhr.addEventListener('loadend', () => {
+            if (xhr.responseURL) recordDirectRequest(xhr.responseURL);
+          }, { once: true });
+        },
         debug: false,
         enableWorker: true,
         liveSyncDurationCount: 3,

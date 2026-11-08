@@ -4,6 +4,7 @@ import type { LoaderContext, LoaderResponse, LoaderStats } from 'hls.js';
 import { stripAdGroups } from './m3u8';
 import { buildSegmentCacheKey, readCachedSegment, touchMeta } from './video-cache';
 import type { ForegroundPrefetcher } from './foreground-prefetch';
+import { recordDirectRequest } from './direct-connection';
 
 /**
  * hls.js loader 工厂：在同一个 loader 里组合「广告过滤」与「片段缓存命中」。
@@ -23,6 +24,8 @@ export type PlaybackFragmentObserver = (response: LoaderResponse, stats: LoaderS
 
 interface LoaderOptions {
   blockAd?: boolean;
+  /** Default-loader requests (keys, certificates, etc.) must bypass the fragment cache. */
+  cacheFragments?: boolean;
   networkLoader?: HlsLoaderCtor;
   foreground?: ForegroundPrefetcher;
   onFragment?: PlaybackFragmentObserver;
@@ -37,7 +40,7 @@ export function createHlsLoader(
   HlsCtor: typeof HlsType,
   options: LoaderOptions = {}
 ): HlsLoaderCtor {
-  const { blockAd = false, onProbe, networkLoader, foreground, onFragment } = options;
+  const { blockAd = false, cacheFragments = true, onProbe, networkLoader, foreground, onFragment } = options;
 
   return class CacheFirstHlsLoader extends (networkLoader ?? HlsCtor.DefaultConfig.loader as HlsLoaderCtor) {
     private destroyed = false;
@@ -49,6 +52,13 @@ export function createHlsLoader(
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       this.load = (context: any, config: any, callbacks: any) => {
+        recordDirectRequest(context.url);
+        const originalOnSuccess = callbacks.onSuccess;
+        // Redirect destinations are visible here even when Resource Timing omits them.
+        callbacks.onSuccess = (response: LoaderResponse, stats: LoaderStats, ctx: LoaderContext, networkDetails: unknown) => {
+          if (response.url) recordDirectRequest(response.url);
+          originalOnSuccess(response, stats, ctx, networkDetails);
+        };
         const isPlaylist = context.type === 'manifest' || context.type === 'level';
 
         // —— 播放列表：网络加载 + 可选广告过滤 ——
@@ -69,8 +79,9 @@ export function createHlsLoader(
           return;
         }
 
-        // —— BYTERANGE 分片：整文件切片，无法独立缓存，直接回源 ——
-        if (context.rangeStart || context.rangeEnd) {
+        // Keys bypass the segment cache and fragment observers; hls.js manages their reuse.
+        // BYTERANGE 分片：整文件切片，无法独立缓存，直接回源。
+        if (!cacheFragments || context.type === 'key' || context.rangeStart || context.rangeEnd) {
           load(context, config, callbacks);
           return;
         }
@@ -133,6 +144,8 @@ export function playbackLoaders(HlsCtor: typeof HlsType, blockAd: boolean, foreg
   if (!canStream) return { loader: createHlsLoader(HlsCtor, { blockAd, onFragment }) };
   return {
     progressive: false,
+    // AES key requests use loader even when pLoader/fLoader are configured.
+    loader: createHlsLoader(HlsCtor, { cacheFragments: false }),
     pLoader: createHlsLoader(HlsCtor, { blockAd }),
     fLoader: createHlsLoader(HlsCtor, { networkLoader: FetchLoader, foreground, onFragment }),
     fetchSetup(context, initParams) {

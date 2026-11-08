@@ -5,6 +5,7 @@ import { Drawer } from './drawer';
 import { ConfirmDialog } from './confirm-dialog';
 import { Icon, type IconName } from './icon';
 import { LiveSourceManager } from './live-source-manager';
+import { DirectConnectionPanel } from './direct-connection-panel';
 import {
   HealthBadge,
   SearchInput,
@@ -40,7 +41,7 @@ import { describeParseStats } from '@/lib/tvbox-parser';
  */
 
 type PrimaryTab = 'sources' | 'prefs' | 'data';
-type SecondaryTab = 'vod' | 'live' | 'subs' | 'playback' | 'image' | 'home' | 'io';
+type SecondaryTab = 'vod' | 'live' | 'subs' | 'playback' | 'image' | 'home' | 'network' | 'io';
 
 const PRIMARY_TABS: { id: PrimaryTab; label: string; icon: IconName }[] = [
   { id: 'sources', label: '源管理', icon: 'link' },
@@ -58,6 +59,7 @@ const SECONDARY_TABS: Record<PrimaryTab, { id: SecondaryTab; label: string }[]> 
     { id: 'playback', label: '播放与过滤' },
     { id: 'image', label: '封面图加载' },
     { id: 'home', label: '首页与内容' },
+    { id: 'network', label: '代理工具直连' },
   ],
   data: [{ id: 'io', label: '配置导入导出' }],
 };
@@ -136,6 +138,7 @@ export function SourceManagerDrawer({ open, onClose }: { open: boolean; onClose:
       {current === 'playback' && <PlaybackPanel />}
       {current === 'image' && <ImagePanel />}
       {current === 'home' && <HomePanel />}
+      {current === 'network' && <DirectConnectionPanel />}
       {current === 'subs' && <SourceSubscriptions />}
       {current === 'io' && <ConfigIoPanel />}
     </Drawer>
@@ -164,7 +167,11 @@ function TabRow<T extends string>({
     <div
       role="tablist"
       aria-label={ariaLabel}
-      className={cn('flex w-full gap-1', variant === 'primary' && 'p-0.5 bg-chip rounded-lg')}
+      className={cn(
+        'w-full gap-1',
+        variant === 'primary' && 'p-0.5 bg-chip rounded-lg',
+        variant === 'secondary' && tabs.length > 3 ? 'grid grid-cols-2' : 'flex'
+      )}
       onKeyDown={(e) => {
         if (e.key === 'ArrowRight') {
           e.preventDefault();
