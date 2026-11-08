@@ -18,6 +18,7 @@ export interface AppSettings {
   yellowFilter: boolean;
   adFilter: boolean;
   doubanEnabled: boolean;
+  homeLayout: 'curated' | 'lists';
   /** 首页推荐数据源：豆瓣热门 / Bangumi 每日放送（免 key）/ 影视热榜（60s API） */
   recommendSource: 'douban' | 'bangumi' | 'hot-list';
   /** 用户是否在设置中主动选择过推荐数据源；为 false 时部署者的 DEFAULT_RECOMMEND_SOURCE 默认值可生效 */
@@ -294,6 +295,7 @@ export const useAppStore = create<AppState>()(
       yellowFilter: true,
       adFilter: true,
       doubanEnabled: true,
+      homeLayout: 'curated',
       recommendSource: 'hot-list',
       recommendSourceTouched: false,
       autoplayNext: true,
@@ -793,6 +795,7 @@ export const useAppStore = create<AppState>()(
         yellowFilter: s.yellowFilter,
         adFilter: s.adFilter,
         doubanEnabled: s.doubanEnabled,
+        homeLayout: s.homeLayout,
         recommendSource: s.recommendSource,
         recommendSourceTouched: s.recommendSourceTouched,
         autoplayNext: s.autoplayNext,

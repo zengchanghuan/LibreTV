@@ -188,7 +188,8 @@ function HomeContent() {
         <section className={cn('flex flex-col items-center', urlQuery ? 'mb-6' : 'mt-8 mb-8')}>
           {!urlQuery && (
             <header className="text-center mb-6">
-              <h1 className="text-4xl sm:text-5xl font-bold brand-gradient">{section === 'hd' ? '高清专区' : 'HomeTV'}</h1>
+              {section !== 'hd' && <p className="mb-3 text-xs tracking-widest text-muted">自己的家庭影院</p>}
+              <h1 className="text-3xl sm:text-4xl font-semibold">{section === 'hd' ? '高清专区' : '今晚，想看点什么？'}</h1>
               {section === 'hd' && <p className="text-sm text-muted mt-3">精选高清播放源 · 实际画质以片源为准</p>}
             </header>
           )}
@@ -395,7 +396,7 @@ function HomeContent() {
         )}
 
         {/* 首页推荐（有搜索时隐藏） */}
-        <RecommendSection visible={!urlQuery}
+        <RecommendSection visible={!urlQuery} sources={selectedSources} section={section === 'hd' ? 'hd' : undefined}
           onPick={(title) => {
             setInput(title);
             runSearch(title);

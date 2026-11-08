@@ -5,6 +5,8 @@ import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/client-api';
 import { useAppStore } from '@/lib/store';
 import { cn } from '@/lib/utils';
+import { HomeDiscovery } from './home-discovery';
+import type { SourceConfig } from '@/lib/types';
 import type { DoubanItem } from '@/lib/types';
 import { filmCollections, koreanModernHistory, type FilmCollection } from '@/lib/film-collections';
 import { chungmuroCollection } from '@/lib/chungmuro-collection';
@@ -39,9 +41,11 @@ const directoryLabels = [
   ['topics', '主题片单'], ['directors', '按导演'], ['actors', '按演员'],
 ] as const;
 
-export function RecommendSection({ visible, onPick }: { visible: boolean; onPick: (title: string) => void }) {
+export function RecommendSection({ visible, onPick, sources = [], section }: { visible: boolean; onPick: (title: string) => void; sources?: SourceConfig[]; section?: 'hd' }) {
   const doubanEnabled = useAppStore((s) => s.doubanEnabled);
   const recommendSource = useAppStore((s) => s.recommendSource);
+  const homeLayout = useAppStore(s => s.homeLayout);
+  const [discovery, setDiscovery] = useState(true);
 
   const [collection, setCollection] = useState('home');
   const [directory, setDirectory] = useState<keyof typeof directories>('topics');
@@ -51,15 +55,19 @@ export function RecommendSection({ visible, onPick }: { visible: boolean; onPick
   const options = directories[directory];
   const matches = directory === 'topics' ? options : options.filter(option =>
     (option.name + ('fullName' in option ? option.fullName : '')).includes(filter.trim()));
+  const showDiscovery = homeLayout === 'curated' && discovery;
+  const charts = recommendSource === 'bangumi' ? <BangumiView onPick={onPick} /> : recommendSource === 'douban' ? <DoubanView onPick={onPick} /> : <HotListView onPick={onPick} />;
   return <>
     <nav aria-label="必看片单" className="mb-5">
-      <div className="mb-2 flex items-baseline gap-2">
+      {!showDiscovery && <div className="mb-2 flex items-baseline gap-2">
         <h2 className="text-lg font-bold">必看片单</h2>
         <span className="text-xs text-muted">{topicOptions.length - 1 + peopleCollections.length} 份片单</span>
-      </div>
+      </div>}
       <div className="mb-2 flex flex-wrap items-center gap-1">
+        {homeLayout === 'curated' && <TypeButton active={showDiscovery} onClick={() => setDiscovery(true)}>为你精选</TypeButton>}
         {directoryLabels.map(([key, label]) => (
-          <TypeButton key={key} active={directory === key} onClick={() => {
+          <TypeButton key={key} active={!showDiscovery && directory === key} onClick={() => {
+            setDiscovery(false);
             if (directory === key) return;
             setDirectory(key);
             setFilter('');
@@ -67,6 +75,7 @@ export function RecommendSection({ visible, onPick }: { visible: boolean; onPick
           }}>{label}</TypeButton>
         ))}
       </div>
+      {!showDiscovery && <>
       <select aria-label="选择片单" value={collection} onChange={(event) => setCollection(event.target.value)}
         className="w-full rounded-lg bg-chip px-3 py-2 text-sm text-content sm:hidden">
         {options.map(({ id, name }) => <option key={id} value={id}>{name}</option>)}
@@ -82,8 +91,13 @@ export function RecommendSection({ visible, onPick }: { visible: boolean; onPick
         ))}
         {!matches.length && <p className="p-2 text-sm text-muted">没有匹配的人物</p>}
       </div>
+      </>}
     </nav>
-    {selected ? <CollectionList collection={selected} onPick={onPick} /> :
+    {showDiscovery ? <HomeDiscovery sources={sources} section={section} charts={charts} onCollection={id => {
+      const person = peopleCollections.find(p => p.id === id);
+      setDirectory(person ? person.role === 'actor' ? 'actors' : 'directors' : 'topics');
+      setFilter(''); setCollection(id === 'topics' ? 'home' : id); setDiscovery(false);
+    }} /> : selected ? <CollectionList collection={selected} onPick={onPick} /> :
       collection === 'korean' || collection === 'zhangyan' ? <KoreanThrillers onPick={onPick} zhangYan={collection === 'zhangyan'} /> :
       recommendSource === 'bangumi' ? <BangumiView onPick={onPick} /> :
       recommendSource === 'hot-list' ? <HotListView onPick={onPick} /> : <DoubanView onPick={onPick} />}
@@ -241,12 +255,14 @@ function HotListView({ onPick }: { onPick: (title: string) => void }) {
   const query = useQuery({
     queryKey: ['hot-list', listId],
     queryFn: ({ signal }) => api.hotList(listId, signal),
+    staleTime: 60_000,
   });
 
   const items = query.data?.items ?? [];
 
   return (
     <section aria-label="影视榜单推荐">
+      {query.data?.stale && <p className="mb-3 text-xs text-muted" role="status">榜单暂未更新，显示上次结果{query.data.updatedAt ? `（北京时间 ${new Date(query.data.updatedAt).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}）` : ''}。</p>}
       <div className="flex flex-wrap gap-1.5 mb-4">
         {HOT_LISTS.map((l) => (
           <ChipButton key={l.id} active={listId === l.id} onClick={() => setListId(l.id)}>

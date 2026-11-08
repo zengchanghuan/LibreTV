@@ -1,4 +1,4 @@
-import type { DoubanItem } from './types';
+import type { DoubanItem, DoubanResponse } from './types';
 import { fetchUpstream, getCache, setCache } from './fetch-utils';
 
 /**
@@ -140,4 +140,27 @@ export async function fetchHotList(id: HotListId): Promise<DoubanItem[]> {
 
   setCache(cacheKey, items, CACHE_TTL);
   return items;
+}
+
+const lastGood = new Map<HotListId, { data: DoubanResponse; refreshed: number; retryAt: number }>();
+const requests = new Map<HotListId, Promise<DoubanResponse>>();
+/** Keep the last successful list for up to seven days, clearly dated if an upstream fails. */
+export async function fetchHotListResult(id: HotListId): Promise<DoubanResponse> {
+  const previous = lastGood.get(id), now = Date.now();
+  if (previous && now - previous.refreshed < CACHE_TTL) return previous.data;
+  if (previous && now < previous.retryAt) return { ...previous.data, stale: true };
+  const running = requests.get(id); if (running) return running;
+  const job = (async () => {
+    try {
+      const data = { items: await fetchHotList(id), updatedAt: new Date().toISOString(), stale: false };
+      lastGood.set(id, { data, refreshed: Date.now(), retryAt: 0 });
+      return data;
+    } catch (error) {
+      if (!previous || now - previous.refreshed > 7 * 86400000) throw error;
+      previous.retryAt = Date.now() + 60_000;
+      return { ...previous.data, stale: true };
+    }
+  })().finally(() => requests.delete(id));
+  requests.set(id, job);
+  return job;
 }

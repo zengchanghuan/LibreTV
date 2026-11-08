@@ -12,9 +12,10 @@ import { SmartImage } from './smart-image';
 
 const enrichCard = createTaskPool(2);
 
-export function RecommendedWorkCard({ work, sources, filterAdult, enabled, imageMode, customProxy, onPick }: {
+export function RecommendedWorkCard({ work, sources, filterAdult, enabled, imageMode, customProxy, onPick, hideUnknownType = false }: {
   work: RecommendedWork; sources: SourceConfig[]; filterAdult: boolean; enabled: boolean;
   imageMode: 'direct' | 'proxy' | 'custom'; customProxy: string; onPick: (work: RecommendedWork, tab: 'details' | 'sources') => void;
+  hideUnknownType?: boolean;
 }) {
   const root = useRef<HTMLElement>(null);
   const [visible, setVisible] = useState(false);
@@ -57,7 +58,7 @@ export function RecommendedWorkCard({ work, sources, filterAdult, enabled, image
           : <div className="flex h-full flex-col items-center justify-center gap-2 p-4 text-center text-xs text-faint">
             <span className="text-sm font-medium text-muted">{work.title}</span><span>{loading ? '正在补齐封面…' : '暂无可用封面'}</span>
           </div>}
-        <MediaTypeLabel type={work.mediaType} overlay />
+        {(!hideUnknownType || work.mediaType !== 'unknown') && <MediaTypeLabel type={work.mediaType} overlay />}
         {metadata.rating && <span className="absolute left-2 top-2 flex items-baseline gap-1 rounded-md bg-black/75 px-1.5 py-1 text-amber-300 backdrop-blur-sm" aria-label={`${metadata.ratingSource || '豆瓣'}评分 ${metadata.rating}`}>
           <span className="text-[10px]">{metadata.ratingSource || '豆瓣'}</span><span className="text-xs font-semibold tabular-nums">{metadata.rating}</span>
         </span>}

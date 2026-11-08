@@ -1,5 +1,6 @@
 'use client';
 
+import type { HomeRecommendations } from './home-discovery-types';
 import type { HDResourceCatalog, HDResourceDetail } from './hd-resource-sites';
 import type { RelatedVideosResponse } from './types';
 import type { RecommendedWork, RecommendationResponse, WorkResourcesResponse } from './recommendations';
@@ -110,6 +111,8 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
+  homeRecommendations: (filterAdult: boolean, signal?: AbortSignal) =>
+    request<HomeRecommendations>(`/api/home/recommendations?filterAdult=${filterAdult}`, { signal }),
   hdCatalog: (site: string, url: string, signal?: AbortSignal) =>
     request<HDResourceCatalog>(`/api/hd-resources?${new URLSearchParams({ site, url })}`, { signal }),
   hdResourceDetail: (site: string, url: string, signal?: AbortSignal) =>

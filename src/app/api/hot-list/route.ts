@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { guardRequest } from '@/lib/api-guard';
-import { fetchHotList, isHotListId } from '@/lib/douban-weekly';
+import { fetchHotListResult, isHotListId } from '@/lib/douban-weekly';
 
 export const runtime = 'nodejs';
 
@@ -15,8 +15,7 @@ export async function GET(req: Request) {
   }
 
   try {
-    const items = await fetchHotList(id);
-    return NextResponse.json({ items });
+    return NextResponse.json(await fetchHotListResult(id), { headers: { 'Cache-Control': 'private, no-store' } });
   } catch (err) {
     return NextResponse.json(
       { error: err instanceof Error ? err.message : '榜单获取失败' },

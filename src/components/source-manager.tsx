@@ -711,6 +711,15 @@ function HomePanel() {
           onChange={(v) => store.updateSettings({ doubanEnabled: v })}
         />
         <SelectRow
+          label="首页布局"
+          value={store.homeLayout}
+          onChange={v => store.updateSettings({ homeLayout: v as 'curated' | 'lists' })}
+          options={[
+            { value: 'curated', label: '精选首页', hint: '续看、每日精选、每周专题与热榜' },
+            { value: 'lists', label: '原榜单首页', hint: '直接浏览榜单与片单' },
+          ]}
+        />
+        <SelectRow
           label="推荐数据源"
           value={store.recommendSource}
           onChange={(v) => store.updateSettings({ recommendSource: v as 'douban' | 'bangumi' | 'hot-list' })}
