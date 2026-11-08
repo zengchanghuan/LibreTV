@@ -1,0 +1,272 @@
+[
+  {
+    "id": "local:douban:1300741:1999",
+    "title": "枪火",
+    "year": "1999",
+    "aliases": [],
+    "mediaType": "movie",
+    "poster": "/posters/collections/f6e7a1f1de309bbc.jpg",
+    "metadata": {
+      "poster": "/posters/collections/f6e7a1f1de309bbc.jpg",
+      "genre": "剧情 / 动作 / 犯罪",
+      "cast": "吴镇宇、任达华、黄秋生、吕颂贤",
+      "source": "https://movie.douban.com/subject/1300741/",
+      "rating": "8.8",
+      "director": "杜琪峰"
+    },
+    "genres": [
+      "剧情",
+      "动作",
+      "犯罪"
+    ],
+    "directors": [
+      "杜琪峰"
+    ],
+    "cast": [
+      "吴镇宇、任达华、黄秋生、吕颂贤"
+    ],
+    "score": 0,
+    "reasons": [
+      "精选片单 · 随时可以开始"
+    ],
+    "origin": "catalog"
+  },
+  {
+    "id": "local:douban:1292450:1998",
+    "title": "暗花",
+    "year": "1998",
+    "aliases": [],
+    "mediaType": "movie",
+    "poster": "/posters/collections/094dde1e4eef4191.jpg",
+    "metadata": {
+      "poster": "/posters/collections/094dde1e4eef4191.jpg",
+      "genre": "剧情 / 动作 / 悬疑",
+      "cast": "刘青云、梁朝伟、邵美琪、王天林",
+      "source": "https://movie.douban.com/subject/1292450/",
+      "rating": "8.4"
+    },
+    "genres": [
+      "剧情",
+      "动作",
+      "悬疑"
+    ],
+    "directors": [],
+    "cast": [
+      "刘青云、梁朝伟、邵美琪、王天林"
+    ],
+    "score": 0,
+    "reasons": [
+      "精选片单 · 随时可以开始"
+    ],
+    "origin": "catalog"
+  },
+  {
+    "id": "local:douban:1298898:1999",
+    "title": "暗战",
+    "year": "1999",
+    "aliases": [],
+    "mediaType": "movie",
+    "poster": "/posters/collections/6abf7f18e1636df8.jpg",
+    "metadata": {
+      "poster": "/posters/collections/6abf7f18e1636df8.jpg",
+      "genre": "剧情 / 动作 / 犯罪",
+      "cast": "刘德华、刘青云、蒙嘉慧、李子雄",
+      "source": "https://movie.douban.com/subject/1298898/",
+      "rating": "8.6",
+      "director": "杜琪峰"
+    },
+    "genres": [
+      "剧情",
+      "动作",
+      "犯罪"
+    ],
+    "directors": [
+      "杜琪峰"
+    ],
+    "cast": [
+      "刘德华、刘青云、蒙嘉慧、李子雄"
+    ],
+    "score": 0,
+    "reasons": [
+      "精选片单 · 随时可以开始"
+    ],
+    "origin": "catalog"
+  },
+  {
+    "id": "local:douban:2976123:2008",
+    "title": "文雀",
+    "year": "2008",
+    "aliases": [],
+    "mediaType": "movie",
+    "poster": "/posters/collections/4722bde7d05dfaba.jpg",
+    "metadata": {
+      "poster": "/posters/collections/4722bde7d05dfaba.jpg",
+      "genre": "剧情 / 爱情",
+      "cast": "任达华、林熙蕾、林家栋、卢海鹏",
+      "source": "https://movie.douban.com/subject/2976123/",
+      "rating": "6.9",
+      "director": "杜琪峰"
+    },
+    "genres": [
+      "剧情",
+      "爱情"
+    ],
+    "directors": [
+      "杜琪峰"
+    ],
+    "cast": [
+      "任达华、林熙蕾、林家栋、卢海鹏"
+    ],
+    "score": 0,
+    "reasons": [
+      "精选片单 · 随时可以开始"
+    ],
+    "origin": "catalog"
+  },
+  {
+    "id": "local:douban:26303622:2015",
+    "title": "大空头",
+    "year": "2015",
+    "aliases": [],
+    "mediaType": "movie",
+    "poster": "/posters/collections/d5a48de961950709.jpg",
+    "metadata": {
+      "poster": "/posters/collections/d5a48de961950709.jpg",
+      "genre": "剧情 / 传记",
+      "cast": "克里斯蒂安·贝尔、史蒂夫·卡瑞尔、瑞恩·高斯林、布拉德·皮特",
+      "source": "https://movie.douban.com/subject/26303622/",
+      "rating": "8.5"
+    },
+    "genres": [
+      "剧情",
+      "传记"
+    ],
+    "directors": [],
+    "cast": [
+      "克里斯蒂安·贝尔、史蒂夫·卡瑞尔、瑞恩·高斯林、布拉德·皮特"
+    ],
+    "score": 0,
+    "reasons": [
+      "精选片单 · 随时可以开始"
+    ],
+    "origin": "catalog"
+  },
+  {
+    "id": "local:douban:4888853:2011",
+    "title": "商海通牒",
+    "year": "2011",
+    "aliases": [],
+    "mediaType": "movie",
+    "poster": "/posters/collections/d3a4f2968b48c165.jpg",
+    "metadata": {
+      "poster": "/posters/collections/d3a4f2968b48c165.jpg",
+      "genre": "剧情",
+      "cast": "凯文·史派西、保罗·贝坦尼、斯坦利·图齐、扎克瑞·昆图",
+      "source": "https://movie.douban.com/subject/4888853/",
+      "rating": "7.9"
+    },
+    "genres": [
+      "剧情"
+    ],
+    "directors": [],
+    "cast": [
+      "凯文·史派西、保罗·贝坦尼、斯坦利·图齐、扎克瑞·昆图"
+    ],
+    "score": 0,
+    "reasons": [
+      "精选片单 · 随时可以开始"
+    ],
+    "origin": "catalog"
+  },
+  {
+    "id": "local:douban:1292287:1992",
+    "title": "新龙门客栈",
+    "year": "1992",
+    "aliases": [],
+    "mediaType": "movie",
+    "poster": "/posters/collections/b0bbd0a6981843bf.jpg",
+    "metadata": {
+      "poster": "/posters/collections/b0bbd0a6981843bf.jpg",
+      "genre": "动作 / 爱情 / 武侠",
+      "cast": "张曼玉、林青霞、梁家辉、甄子丹",
+      "source": "https://movie.douban.com/subject/1292287/",
+      "rating": "8.7"
+    },
+    "genres": [
+      "动作",
+      "爱情",
+      "武侠"
+    ],
+    "directors": [],
+    "cast": [
+      "张曼玉、林青霞、梁家辉、甄子丹"
+    ],
+    "score": 0,
+    "reasons": [
+      "精选片单 · 随时可以开始"
+    ],
+    "origin": "catalog"
+  },
+  {
+    "id": "local:douban:1298443:1991",
+    "title": "黄飞鸿",
+    "year": "1991",
+    "aliases": [],
+    "mediaType": "movie",
+    "poster": "/posters/collections/4f7a6432a1ae47d4.jpg",
+    "metadata": {
+      "poster": "/posters/collections/4f7a6432a1ae47d4.jpg",
+      "genre": "剧情 / 动作 / 武侠",
+      "cast": "李连杰、元彪、关之琳、张学友",
+      "source": "https://movie.douban.com/subject/1298443/",
+      "rating": "8.4",
+      "director": "徐克",
+      "intro": "黄飞鸿面对外来势力与本地恶霸的冲突，在保护亲友和百姓的过程中思考习武与救国。"
+    },
+    "genres": [
+      "剧情",
+      "动作",
+      "武侠"
+    ],
+    "directors": [
+      "徐克"
+    ],
+    "cast": [
+      "李连杰、元彪、关之琳、张学友"
+    ],
+    "score": 0,
+    "reasons": [
+      "精选片单 · 随时可以开始"
+    ],
+    "origin": "catalog"
+  },
+  {
+    "id": "local:douban:3813779:2010",
+    "title": "剑雨",
+    "year": "2010",
+    "aliases": [],
+    "mediaType": "movie",
+    "poster": "/posters/collections/d14a3073c56e92cd.jpg",
+    "metadata": {
+      "poster": "/posters/collections/d14a3073c56e92cd.jpg",
+      "genre": "动作 / 爱情 / 武侠",
+      "cast": "杨紫琼、郑雨盛、王学圻、徐熙媛",
+      "source": "https://movie.douban.com/subject/3813779/",
+      "rating": "7.7"
+    },
+    "genres": [
+      "动作",
+      "爱情",
+      "武侠"
+    ],
+    "directors": [],
+    "cast": [
+      "杨紫琼、郑雨盛、王学圻、徐熙媛"
+    ],
+    "score": 0,
+    "reasons": [
+      "精选片单 · 随时可以开始"
+    ],
+    "origin": "catalog"
+  }
+]
