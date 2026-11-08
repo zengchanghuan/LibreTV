@@ -74,7 +74,8 @@ body {
 body { padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
 body > div { min-width: 0; }
 header.sticky { top: env(safe-area-inset-top, 0px); }
-.pwa-update { position: fixed; z-index: 60; bottom: max(16px, env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%); width: min(92vw, 480px); display: flex; gap: 12px; align-items: center; padding: 12px; border: 1px solid rgb(var(--c-line)); border-radius: 12px; background: rgb(var(--c-surface)); font-size: 13px; }
+.pwa-update { display: flex; gap: 12px; align-items: center; justify-content: center; padding: 10px 16px; border-bottom: 1px solid rgb(var(--c-line)); background: rgb(var(--c-surface)); font-size: 13px; }
+.pwa-update > span { min-width: 0; }
 .playback-tools-button { background: transparent; color: white; border: 0; padding: 4px; font-size: 12px; white-space: nowrap; cursor: pointer; }
 .playback-speed-menu-button { border: 0; padding: 0; background: transparent; color: inherit; font: inherit; cursor: pointer; }
 .art-has-playback-tools { container-type: inline-size; }

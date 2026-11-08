@@ -11,7 +11,7 @@ import { requestShowDownloadManager } from './download-manager';
 import { Icon } from './icon';
 import { SearchHistoryDropdown, useSearchHistory } from './search-history';
 import { cn } from '@/lib/utils';
-import { InstallBanner, InstallButton } from './pwa';
+import { InstallBanner, InstallButton, PwaUpdateBanner } from './pwa';
 import { FamilyButton } from './family';
 import { useNativeApp } from './native-player';
 
@@ -44,6 +44,7 @@ export function Header({ showSearch = false }: { showSearch?: boolean }) {
   return (
     <>
       <header className="sticky top-0 z-40 bg-surface/90 backdrop-blur border-b border-line">
+        <PwaUpdateBanner />
         <div className="max-w-6xl mx-auto px-4 h-14 flex items-center gap-3">
           <Link href="/" aria-label="HomeTV 首页" className="flex items-center shrink-0">
             {/* eslint-disable-next-line @next/next/no-img-element */}

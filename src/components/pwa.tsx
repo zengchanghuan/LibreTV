@@ -8,7 +8,12 @@ interface InstallPrompt extends Event {
   prompt(): Promise<void>;
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
 }
-const InstallContext = createContext({ installed: false, show: () => {} });
+const InstallContext = createContext<{ installed: boolean; show: () => void; update: ReactNode }>({ installed: false, show: () => {}, update: null });
+
+/** Render inside the sticky header so the notice pushes navigation down instead of covering it. */
+export function PwaUpdateBanner() {
+  return useContext(InstallContext).update;
+}
 
 export function InstallButton() {
   const { installed, show } = useContext(InstallContext);
@@ -90,12 +95,13 @@ export function PwaProvider({ children }: { children: ReactNode }) {
     waiting?.postMessage({ type: 'ACTIVATE_UPDATE' });
   };
 
-  return <InstallContext.Provider value={{ installed, show: () => setOpen(true) }}>
-    {children}
-    {waiting && <div className="pwa-update" role="status">
+  const update = waiting ? <div className="pwa-update" role="status">
       <span>{notice || '新版已就绪，更新会重新打开当前页面。'}</span>
       <button className="btn-primary shrink-0" onClick={activate}>更新</button>
-    </div>}
+    </div> : null;
+
+  return <InstallContext.Provider value={{ installed, show: () => setOpen(true), update }}>
+    {children}
     <Drawer open={open} onClose={() => setOpen(false)} title="安装 HomeTV">
       <div className="space-y-5 text-sm leading-7">
         <p>放到主屏幕，下次点图标即可打开。各设备登录同一服务并选择同一家庭成员，即可同步观看记录。</p>
