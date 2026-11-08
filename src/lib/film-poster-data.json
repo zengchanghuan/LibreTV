@@ -5648,7 +5648,13 @@
     "genre": "剧情 / 犯罪",
     "cast": "李政宰、崔岷植、黄政民、宋智孝",
     "source": "https://movie.douban.com/subject/10437779/",
-    "rating": "8.9"
+    "rating": "8.9",
+    "director": "朴勋政",
+    "area": "韩国",
+    "ratingSource": "豆瓣",
+    "doubanId": "10437779",
+    "mediaType": "movie",
+    "intro": "潜伏黑帮多年的警察在组织首领身亡后，被卷入接班人之争，也被迫重新选择自己的身份。"
   },
   "鸣梁海战|2014": {
     "poster": "/posters/collections/1217053fa2adc608.jpg",
@@ -6547,14 +6553,26 @@
     "genre": "动作 / 犯罪",
     "cast": "金允石、李政宰、金惠秀、全智贤",
     "source": "https://movie.douban.com/subject/5502697/",
-    "rating": "7.3"
+    "rating": "7.3",
+    "director": "崔东勋",
+    "area": "韩国",
+    "ratingSource": "豆瓣",
+    "doubanId": "5502697",
+    "mediaType": "movie",
+    "intro": "一群各怀心思的窃贼联手前往澳门盗取钻石，合作计划逐渐变成充满猜疑与背叛的较量。"
   },
   "观相|2013": {
     "poster": "/posters/collections/26265e0c2cea5a26.jpg",
     "genre": "剧情 / 历史",
     "cast": "宋康昊、李政宰、白润植、曹政奭",
     "source": "https://movie.douban.com/subject/10563780/",
-    "rating": "7.4"
+    "rating": "7.4",
+    "director": "韩在林",
+    "area": "韩国",
+    "ratingSource": "豆瓣",
+    "doubanId": "10563780",
+    "mediaType": "movie",
+    "intro": "一名善于观相的男子进入朝廷，却发现自己看得透人心，也难以逃开王位争夺的风暴。"
   },
   "中国城|2015": {
     "poster": "/posters/collections/30e9e9f339aacf55.jpg",
@@ -7318,7 +7336,13 @@
     "genre": "惊悚 / 情色",
     "cast": "全度妍、李政宰、尹汝贞、徐雨",
     "source": "https://movie.douban.com/subject/3268192/",
-    "rating": "5.8"
+    "rating": "5.8",
+    "director": "林常树",
+    "area": "韩国",
+    "ratingSource": "豆瓣",
+    "doubanId": "3268192",
+    "mediaType": "movie",
+    "intro": "一名女佣进入富裕家庭工作，与男主人发生关系后，卷入这个家庭的欲望与权力纠葛。"
   },
   "倒计时|2011": {
     "poster": "/posters/collections/c715660e4f759c47.jpg",
@@ -7474,7 +7498,12 @@
     "cast": "全智贤、李政宰、河正宇",
     "intro": "三名抵抗者受命前往京城执行刺杀，却不知自己的行踪已被出卖。",
     "doubanId": "25823132",
-    "rating": "8.1"
+    "rating": "8.1",
+    "director": "崔东勋",
+    "area": "韩国",
+    "ratingSource": "豆瓣",
+    "source": "https://movie.douban.com/subject/25823132/",
+    "mediaType": "movie"
   },
   "小姐|2016": {
     "poster": "/posters/collections/a84efed26963e64a.jpg",
@@ -7495,7 +7524,13 @@
     "genre": "剧情 / 奇幻",
     "cast": "河正宇、车太贤、朱智勋、金香起",
     "source": "https://movie.douban.com/subject/11584016/",
-    "rating": "7.8"
+    "rating": "7.8",
+    "director": "金容华",
+    "area": "韩国",
+    "ratingSource": "豆瓣",
+    "doubanId": "11584016",
+    "mediaType": "movie",
+    "intro": "消防员殉职后由三名阴间使者护送，经历七场审判，生前未能说出的遗憾也逐一浮现。"
   },
   "非官方行动|2023": {
     "poster": "/posters/korean/unofficial.jpg",
@@ -7602,7 +7637,13 @@
     "genre": "爱情 / 奇幻",
     "cast": "全智贤、李政宰、崔允英、金茂生",
     "source": "https://movie.douban.com/subject/1306526/",
-    "rating": "7.9"
+    "rating": "7.9",
+    "director": "李铉升",
+    "area": "韩国",
+    "ratingSource": "豆瓣",
+    "doubanId": "1306526",
+    "mediaType": "movie",
+    "intro": "住在同一座海边小屋、却相隔两年时光的男女，通过一个神奇的信箱通信，逐渐走近彼此。"
   },
   "我的野蛮女友|2001": {
     "poster": "/posters/collections/f7358eb13827899f.jpg",
@@ -7651,7 +7692,13 @@
     "genre": "剧情 / 爱情",
     "cast": "李政宰、李英爱、权海骁、孔炯轸",
     "source": "https://movie.douban.com/subject/1300021/",
-    "rating": "7.5"
+    "rating": "7.4",
+    "director": "吴基桓",
+    "area": "韩国",
+    "ratingSource": "豆瓣",
+    "doubanId": "1300021",
+    "mediaType": "movie",
+    "intro": "事业不顺的喜剧演员误以为妻子不再爱他，得知她隐瞒的病情后，开始为她准备一份特别的礼物。"
   },
   "春逝|2001": {
     "poster": "/posters/collections/7e7d7ec125d0fcb9.jpg",
@@ -8894,7 +8941,14 @@
     "poster": "/posters/korean/hunt.jpg",
     "genre": "情报内斗",
     "cast": "李政宰、郑雨盛",
-    "intro": "一次刺杀未遂后，两名情报部门负责人奉命追查内鬼，却都把嫌疑指向对方。"
+    "intro": "一次刺杀未遂后，两名情报部门负责人奉命追查内鬼，却都把嫌疑指向对方。",
+    "director": "李政宰",
+    "area": "韩国",
+    "rating": "7.8",
+    "ratingSource": "豆瓣",
+    "doubanId": "35160926",
+    "source": "https://movie.douban.com/subject/35160926/",
+    "mediaType": "movie"
   },
   "王者制造|2022": {
     "poster": "/posters/korean/kingmaker.jpg",
@@ -9447,7 +9501,12 @@
     "cast": "张东健、李政宰、李美妍",
     "director": "郭景泽",
     "source": "https://movie.douban.com/subject/1441499/",
-    "rating": "6.6"
+    "rating": "6.6",
+    "area": "韩国",
+    "ratingSource": "豆瓣",
+    "doubanId": "1441499",
+    "mediaType": "movie",
+    "intro": "一名韩国海军军官奉命追查海盗，却逐渐发现对手的复仇计划背后，藏着一段家庭悲剧。"
   },
   "达摩，玩去吧|2001": {
     "poster": "/posters/collections/96bb37c8724c6485.jpg",
@@ -9511,7 +9570,12 @@
     "cast": "李政宰、李凡修、李莫思",
     "director": "金容华",
     "source": "https://movie.douban.com/subject/2123706/",
-    "rating": "7.7"
+    "rating": "7.7",
+    "area": "韩国",
+    "ratingSource": "豆瓣",
+    "doubanId": "2123706",
+    "mediaType": "movie",
+    "intro": "父亲留下的债务让一名私家侦探与患早衰症的异母弟弟相遇，两人在相处中重新理解亲情。"
   },
   "霜花店|2008": {
     "poster": "/posters/collections/c1b76f51348d50e4.jpg",
@@ -9758,5 +9822,161 @@
     "doubanId": "4004731",
     "source": "https://moviecool.asia/film/gw2xpAvf1HSF",
     "mediaType": "movie"
+  },
+  "从邪恶中拯救我|2020": {
+    "director": "洪元灿",
+    "area": "韩国",
+    "rating": "7.3",
+    "ratingSource": "豆瓣",
+    "doubanId": "30425219",
+    "source": "https://movie.douban.com/subject/30425219/",
+    "mediaType": "movie",
+    "genre": "动作 / 犯罪 / 悬疑",
+    "cast": "黄政民、李政宰、朴正民、朴昭怡、崔嬉序",
+    "intro": "准备退出杀手生涯的仁南前往泰国寻找失踪女孩，同时遭到一名执意为兄复仇的男子追杀。",
+    "poster": "/posters/collections/douban-30425219.jpg"
+  },
+  "娑婆诃|2019": {
+    "director": "张在现",
+    "area": "韩国",
+    "rating": "7.2",
+    "ratingSource": "豆瓣",
+    "doubanId": "27109171",
+    "source": "https://movie.douban.com/subject/27109171/",
+    "mediaType": "movie",
+    "genre": "剧情 / 悬疑 / 惊悚",
+    "cast": "李政宰、朴正民、李在仁、陈善圭、刘智泰",
+    "intro": "调查神秘宗教组织的牧师与追查少女死亡案件的警方，逐渐触及一对双胞胎背后的秘密。",
+    "poster": "/posters/collections/douban-27109171.jpg"
+  },
+  "情事|1998": {
+    "director": "李在容",
+    "area": "韩国",
+    "rating": "7.5",
+    "ratingSource": "豆瓣",
+    "doubanId": "1306020",
+    "source": "https://movie.douban.com/subject/1306020/",
+    "mediaType": "movie",
+    "genre": "剧情 / 爱情 / 情色",
+    "cast": "李政宰、李美淑、金玟、宋永彰",
+    "intro": "生活平静的已婚女子遇见妹妹的未婚夫，突如其来的感情让她在家庭责任与个人欲望之间挣扎。",
+    "poster": "/posters/collections/douban-1306020.jpg"
+  },
+  "日出城市|1999": {
+    "director": "金性洙",
+    "area": "韩国",
+    "rating": "7.7",
+    "ratingSource": "豆瓣",
+    "doubanId": "1307420",
+    "source": "https://movie.douban.com/subject/1307420/",
+    "mediaType": "movie",
+    "genre": "剧情",
+    "cast": "郑雨盛、李政宰、韩高恩、李凡秀、金英浩",
+    "intro": "失意拳手与负债累累的青年结成伙伴，在追逐金钱和梦想的过程中，承受友情与现实的考验。",
+    "poster": "/posters/collections/douban-1307420.jpg"
+  },
+  "惊天大逆转|2016": {
+    "director": "李骏",
+    "area": "中国大陆",
+    "rating": "6.9",
+    "ratingSource": "豆瓣",
+    "doubanId": "26375609",
+    "source": "https://movie.douban.com/subject/26375609/",
+    "mediaType": "movie",
+    "genre": "剧情 / 犯罪 / 悬疑",
+    "cast": "钟汉良、李政宰、郎月婷、李彩英、闵武济",
+    "intro": "一场人质危机牵出体育场炸弹威胁，韩国警察与心理医生必须在倒计时中破解嫌犯的布局。",
+    "poster": "/posters/collections/douban-26375609.jpg"
+  },
+  "代立军|2017": {
+    "director": "郑胤澈",
+    "area": "韩国",
+    "rating": "6.6",
+    "ratingSource": "豆瓣",
+    "doubanId": "26800974",
+    "source": "https://movie.douban.com/subject/26800974/",
+    "mediaType": "movie",
+    "genre": "剧情 / 历史 / 战争 / 古装",
+    "cast": "李政宰、吕珍九、金武烈、裴秀彬、赵东仁",
+    "intro": "战乱中的朝鲜，一群替贵族服兵役的平民奉命护送年轻世子光海，在逃亡与战斗中面对生存和责任。",
+    "poster": "/posters/collections/douban-26800974.jpg"
+  },
+  "与神同行2：因与缘|2018": {
+    "director": "金容华",
+    "area": "韩国",
+    "rating": "7.6",
+    "ratingSource": "豆瓣",
+    "doubanId": "27003543",
+    "source": "https://movie.douban.com/subject/27003543/",
+    "mediaType": "movie",
+    "genre": "动作 / 奇幻",
+    "cast": "河正宇、朱智勋、马东锡、金香起、李政宰",
+    "intro": "阴间使者迎来新的审判任务，又与人间的成造神相遇，三人千年前的恩怨逐渐揭开。",
+    "poster": "/posters/collections/douban-27003543.jpg"
+  },
+  "辅佐官：改变世界的人们|2019": {
+    "director": "郭政焕",
+    "area": "韩国",
+    "rating": "8.6",
+    "ratingSource": "豆瓣",
+    "doubanId": "30441168",
+    "source": "https://movie.douban.com/subject/30441168/",
+    "mediaType": "tv",
+    "genre": "剧情",
+    "cast": "李政宰、申敏儿、李伊利雅、金桐俊、郑镇荣",
+    "intro": "国会议员的辅佐官张泰俊在幕后运筹帷幄，一边争取改变现实的机会，一边走向权力中心。",
+    "poster": "/posters/collections/douban-30441168.jpg"
+  },
+  "辅佐官2：改变世界的人们|2019": {
+    "director": "郭政焕",
+    "area": "韩国",
+    "rating": "8.9",
+    "ratingSource": "豆瓣",
+    "doubanId": "34851293",
+    "source": "https://movie.douban.com/subject/34851293/",
+    "mediaType": "tv",
+    "genre": "剧情",
+    "cast": "李政宰、申敏儿、李伊利雅、金桐俊、金甲洙",
+    "intro": "成为国会议员的张泰俊继续追查政商利益网络，与旧日盟友和对手展开更直接的权力较量。",
+    "poster": "/posters/collections/douban-34851293.jpg"
+  },
+  "鱿鱼游戏|2021": {
+    "director": "黄东赫",
+    "area": "韩国",
+    "rating": "7.7",
+    "ratingSource": "豆瓣",
+    "doubanId": "34812928",
+    "source": "https://movie.douban.com/subject/34812928/",
+    "mediaType": "tv",
+    "genre": "悬疑 / 惊悚",
+    "cast": "李政宰、朴海秀、魏嘏隽、孔刘、李炳宪",
+    "intro": "负债者接受神秘邀请，参加争夺巨额奖金的童年游戏，却很快发现失败的代价是生命。",
+    "poster": "/posters/collections/douban-34812928.jpg"
+  },
+  "鱿鱼游戏第二季|2024": {
+    "director": "黄东赫",
+    "area": "韩国",
+    "rating": "6.4",
+    "ratingSource": "豆瓣",
+    "doubanId": "35656342",
+    "source": "https://movie.douban.com/subject/35656342/",
+    "mediaType": "tv",
+    "genre": "剧情 / 动作 / 悬疑 / 惊悚",
+    "cast": "李政宰、李炳宪、魏嘏隽、孔刘、任时完",
+    "intro": "上一届幸存者成奇勋放弃离开韩国，再次进入游戏，试图查清幕后组织并阻止杀戮继续。",
+    "poster": "/posters/collections/douban-35656342.jpg"
+  },
+  "鱿鱼游戏第三季|2025": {
+    "director": "黄东赫",
+    "area": "韩国",
+    "rating": "6.4",
+    "ratingSource": "豆瓣",
+    "doubanId": "36407380",
+    "source": "https://movie.douban.com/subject/36407380/",
+    "mediaType": "tv",
+    "genre": "剧情 / 动作 / 悬疑 / 惊悚",
+    "cast": "李政宰、李炳宪、魏嘏隽、任时完、朴珪瑛",
+    "intro": "反抗失败后，成奇勋与幸存玩家被迫继续闯关，在更残酷的选择中守住最后的信念。",
+    "poster": "/posters/collections/douban-36407380.jpg"
   }
 }
