@@ -105,8 +105,8 @@ export function RecommendSection({ visible, onPick, sources = [], section }: { v
 }
 
 function CollectionList({ collection, onPick }: { collection: FilmCollection; onPick: (title: string) => void }) {
-  const films = collection.sections.flatMap(({ films }) =>
-    films.map(([title, year]) => ({ id: `${title}|${year}`, title, year })));
+  const films = collection.sections.flatMap(({ films, mediaType }) =>
+    films.map(([title, year]) => ({ id: `${title}|${year}`, title, year, mediaType })));
   return (
     <section aria-label={collection.name}>
       <h2 className="text-xl font-bold">{collection.name}</h2>
