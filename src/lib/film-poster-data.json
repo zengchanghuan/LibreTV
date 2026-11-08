@@ -430,7 +430,8 @@
     "cast": "李连杰、元彪、关之琳、张学友",
     "source": "https://movie.douban.com/subject/1298443/",
     "rating": "8.4",
-    "director": "徐克"
+    "director": "徐克",
+    "intro": "黄飞鸿面对外来势力与本地恶霸的冲突，在保护亲友和百姓的过程中思考习武与救国。"
   },
   "东方三侠|1993": {
     "poster": "/posters/collections/4338ea85ffa5e1aa.jpg",
@@ -445,7 +446,9 @@
     "genre": "喜剧 / 动作 / 武侠",
     "cast": "李连杰、萧芳芳、陈松勇、李嘉欣",
     "source": "https://movie.douban.com/subject/1297763/",
-    "rating": "8.0"
+    "rating": "8.0",
+    "director": "元奎",
+    "intro": "少年方世玉因比武招亲惹出连串风波，与母亲苗翠花共同应对家族和江湖的危机。"
   },
   "刀剑笑|1994": {
     "poster": "/posters/collections/c8aa53e1cdba1293.jpg",
@@ -466,7 +469,9 @@
     "genre": "剧情 / 爱情 / 武侠",
     "cast": "李连杰、林青霞、关之琳、李嘉欣",
     "source": "https://movie.douban.com/subject/1294417/",
-    "rating": "8.5"
+    "rating": "8.5",
+    "director": "程小东",
+    "intro": "令狐冲原想退出江湖，却因任盈盈与东方不败卷入日月神教的权力争斗。"
   },
   "黄飞鸿之二：男儿当自强|1992": {
     "poster": "/posters/collections/0a772a0a0b2c2f76.jpg",
@@ -474,7 +479,8 @@
     "cast": "李连杰、关之琳、甄子丹、莫少聪",
     "source": "https://movie.douban.com/subject/1293475/",
     "rating": "8.3",
-    "director": "徐克"
+    "director": "徐克",
+    "intro": "黄飞鸿抵达广州，在白莲教、清廷与革命者的冲突中救助无辜，并迎战纳兰元述。"
   },
   "新仙鹤神针|1993": {
     "poster": "/posters/collections/455a40185448311d.jpg",
@@ -495,14 +501,18 @@
     "genre": "喜剧 / 动作 / 武侠",
     "cast": "李连杰、杨紫琼、钱小豪、袁洁莹",
     "source": "https://movie.douban.com/subject/1294561/",
-    "rating": "8.1"
+    "rating": "8.1",
+    "director": "袁和平",
+    "intro": "张君宝与董天宝离开少林后走上不同道路，昔日兄弟在权势与道义之间分道扬镳。"
   },
   "倚天屠龙记之魔教教主|1993": {
     "poster": "/posters/collections/4f8825e027d1a558.jpg",
     "genre": "动作 / 奇幻 / 武侠",
     "cast": "李连杰、张敏、邱淑贞、黎姿",
     "source": "https://movie.douban.com/subject/1299059/",
-    "rating": "7.9"
+    "rating": "7.9",
+    "director": "王晶",
+    "intro": "张无忌历经磨难习得绝学，在六大派围攻光明顶时挺身而出，卷入明教与江湖纷争。"
   },
   "东邪西毒|1994": {
     "poster": "/posters/collections/6a3e60e6bdf2d7de.jpg",
@@ -3733,7 +3743,8 @@
     "cast": "李连杰、梁朝伟、张曼玉、章子怡",
     "source": "https://movie.douban.com/subject/1306123/",
     "rating": "7.6",
-    "director": "张艺谋"
+    "director": "张艺谋",
+    "intro": "刺客无名获准觐见秦王，借几段不同的叙述揭开刺秦计划与人物抉择。"
   },
   "十面埋伏|2004": {
     "poster": "/posters/collections/500e3bc1a97c9425.jpg",
@@ -4052,7 +4063,8 @@
     "cast": "李连杰、周迅、陈坤、李宇春",
     "source": "https://movie.douban.com/subject/4896304/",
     "rating": "6.9",
-    "director": "徐克"
+    "director": "徐克",
+    "intro": "龙门客栈风沙再起，侠客、官兵与寻宝者汇聚，围绕逃亡宫女和大漠宝藏展开争斗。"
   },
   "智取威虎山|2014": {
     "poster": "/posters/collections/09a8645e9662d5a2.jpg",
@@ -7075,7 +7087,9 @@
     "genre": "动作 / 惊悚 / 冒险",
     "cast": "西尔维斯特·史泰龙、杰森·斯坦森、李连杰、杜夫·龙格尔",
     "source": "https://movie.douban.com/subject/3279080/",
-    "rating": "6.9"
+    "rating": "6.9",
+    "director": "西尔维斯特·史泰龙",
+    "intro": "一支雇佣兵小队前往南美执行任务，在独裁统治与幕后势力之间展开营救和反击。"
   },
   "比尔和泰德历险记|1989": {
     "poster": "/posters/collections/fe77595623ab9276.jpg",
@@ -9575,6 +9589,174 @@
     "ratingSource": "豆瓣",
     "doubanId": "1308456",
     "source": "https://moviecool.asia/film/qdmkFgwPT4x",
+    "mediaType": "movie"
+  },
+  "少林寺|1982": {
+    "poster": "/posters/collections/jet-li-1982-q1layNlCdORV.jpg",
+    "genre": "动作",
+    "cast": "李连杰、于海、丁岚、于承惠",
+    "director": "张鑫炎",
+    "intro": "觉远逃难至少林寺，拜师习武，在乱世中与僧众共同对抗暴政。",
+    "rating": "8.4",
+    "ratingSource": "豆瓣",
+    "doubanId": "1301198",
+    "source": "https://moviecool.asia/film/q1layNlCdORV",
+    "mediaType": "movie"
+  },
+  "少林小子|1984": {
+    "poster": "/posters/collections/jet-li-1984-qwBPjmwxTIP.jpg",
+    "genre": "动作",
+    "cast": "李连杰、黄秋燕、于海、于承惠",
+    "director": "张鑫炎",
+    "intro": "漓江两岸的少林与武当两家因婚事和门派之见生隙，面对匪徒时携手御敌。",
+    "rating": "7.2",
+    "ratingSource": "豆瓣",
+    "doubanId": "1297726",
+    "source": "https://moviecool.asia/film/qwBPjmwxTIP",
+    "mediaType": "movie"
+  },
+  "南北少林|1986": {
+    "poster": "/posters/collections/jet-li-1986-yw_LLnIuGBRc.jpg",
+    "genre": "动作",
+    "cast": "李连杰、黄秋燕、胡坚强、于承惠",
+    "director": "刘家良",
+    "intro": "南北少林的年轻弟子为父辈冤仇相遇，在追击与营救中联手对抗权贵。",
+    "rating": "7.2",
+    "ratingSource": "豆瓣",
+    "doubanId": "1296240",
+    "source": "https://moviecool.asia/film/yw_LLnIuGBRc",
+    "mediaType": "movie"
+  },
+  "黄飞鸿之三：狮王争霸|1993": {
+    "poster": "/posters/collections/jet-li-1993-qwI2nvCw9Ej.jpg",
+    "genre": "动作",
+    "cast": "李连杰、关之琳、莫少聪、熊欣欣",
+    "director": "徐克",
+    "intro": "黄飞鸿进京参加狮王大会，卷入地方豪强争斗，并与鬼脚七携手迎战群狮。",
+    "rating": "8.2",
+    "ratingSource": "豆瓣",
+    "doubanId": "1292704",
+    "source": "https://moviecool.asia/film/qwI2nvCw9Ej",
+    "mediaType": "movie"
+  },
+  "方世玉续集|1993": {
+    "poster": "/posters/collections/jet-li-1993-qdkFnefdORc.jpg",
+    "genre": "动作",
+    "cast": "李连杰、萧芳芳、李嘉欣、郑少秋",
+    "director": "元奎",
+    "intro": "方世玉加入红花会后受命夺取密函，却被卷入帮会内部的权力纷争。",
+    "rating": "7.8",
+    "ratingSource": "豆瓣",
+    "doubanId": "1295485",
+    "source": "https://moviecool.asia/film/qdkFnefdORc",
+    "mediaType": "movie"
+  },
+  "新少林五祖|1994": {
+    "poster": "/posters/collections/jet-li-1994-gd212nLCd9Ej.jpg",
+    "genre": "动作",
+    "cast": "李连杰、邱淑贞、谢苗、叶德娴",
+    "director": "王晶",
+    "intro": "洪熙官携幼子浪迹江湖，为保护身负秘密的少林少年，与追兵和仇敌交锋。",
+    "rating": "8.1",
+    "ratingSource": "豆瓣",
+    "doubanId": "1296837",
+    "source": "https://moviecool.asia/film/gd212nLCd9Ej",
+    "mediaType": "movie"
+  },
+  "中南海保镖|1994": {
+    "poster": "/posters/collections/jet-li-1994-gGYaAsudBRV.jpg",
+    "genre": "动作",
+    "cast": "李连杰、钟丽缇、郑则仕、邹兆龙",
+    "director": "元奎",
+    "intro": "许正阳赴香港保护一宗凶案的女证人，在接连袭击中履行职责，也面对情感考验。",
+    "rating": "7.9",
+    "ratingSource": "豆瓣",
+    "doubanId": "1297068",
+    "source": "https://moviecool.asia/film/gGYaAsudBRV",
+    "mediaType": "movie"
+  },
+  "精武英雄|1994": {
+    "poster": "/posters/collections/jet-li-1994-ydIbcv-GHkF.jpg",
+    "genre": "动作",
+    "cast": "李连杰、钱小豪、蔡少芬、仓田保昭",
+    "director": "陈嘉上",
+    "intro": "陈真从日本赶回上海调查师父之死，在精武门内外的冲突中寻找真相、守护同门。",
+    "rating": "8.7",
+    "ratingSource": "豆瓣",
+    "doubanId": "1292895",
+    "source": "https://moviecool.asia/film/ydIbcv-GHkF",
+    "mediaType": "movie"
+  },
+  "给爸爸的信|1995": {
+    "poster": "/posters/collections/jet-li-1995-m11YceCwOEV.jpg",
+    "genre": "动作",
+    "cast": "李连杰、梅艳芳、谢苗、于荣光",
+    "director": "元奎",
+    "intro": "卧底警察巩伟赴香港调查犯罪集团，与儿子在危险任务中重逢，共同面对身份暴露的危机。",
+    "rating": "8.1",
+    "ratingSource": "豆瓣",
+    "doubanId": "1299250",
+    "source": "https://moviecool.asia/film/m11YceCwOEV",
+    "mediaType": "movie"
+  },
+  "黑侠|1996": {
+    "poster": "/posters/collections/jet-li-1996-q1FJ8IfG9EF.jpg",
+    "genre": "动作",
+    "cast": "李连杰、刘青云、莫文蔚、黄秋生",
+    "director": "李仁港",
+    "intro": "逃离秘密部队的徐夕隐身香港，旧日同伴再次制造杀戮，迫使他化身黑侠保护朋友。",
+    "rating": "6.9",
+    "ratingSource": "豆瓣",
+    "doubanId": "1295746",
+    "source": "https://moviecool.asia/film/q1FJ8IfG9EF",
+    "mediaType": "movie"
+  },
+  "杀手之王|1998": {
+    "poster": "/posters/collections/jet-li-1998-qGolbs-dBSF.jpg",
+    "genre": "动作",
+    "cast": "李连杰、曾志伟、任达华、梁咏琪",
+    "director": "董玮",
+    "intro": "身手不凡的小富与潦倒的经纪人搭档，卷入一笔巨额复仇基金引发的杀手争夺。",
+    "rating": "6.9",
+    "ratingSource": "豆瓣",
+    "doubanId": "1297194",
+    "source": "https://moviecool.asia/film/qGolbs-dBSF",
+    "mediaType": "movie"
+  },
+  "霍元甲|2006": {
+    "poster": "/posters/collections/jet-li-2006-mdoGE_ICdBEc.jpg",
+    "genre": "动作",
+    "cast": "李连杰、孙俪、董勇、中村狮童",
+    "director": "于仁泰",
+    "intro": "霍元甲经历争强好胜带来的惨痛代价后，重新理解武术的意义，并走上擂台迎接挑战。",
+    "rating": "7.2",
+    "ratingSource": "豆瓣",
+    "doubanId": "1441602",
+    "source": "https://moviecool.asia/film/mdoGE_ICdBEc",
+    "mediaType": "movie"
+  },
+  "投名状|2007": {
+    "poster": "/posters/collections/jet-li-2007-m109oT-1ORj.jpg",
+    "genre": "动作",
+    "cast": "李连杰、刘德华、金城武、徐静蕾",
+    "director": "陈可辛",
+    "intro": "乱世中三人立誓结义、共同征战，兄弟情谊却在权力、欲望与战争面前逐渐崩裂。",
+    "rating": "7.9",
+    "ratingSource": "豆瓣",
+    "doubanId": "1947089",
+    "source": "https://moviecool.asia/film/m109oT-1ORj",
+    "mediaType": "movie"
+  },
+  "海洋天堂|2010": {
+    "poster": "/posters/collections/jet-li-2010-gw2xpAvf1HSF.jpg",
+    "genre": "剧情",
+    "cast": "李连杰、文章、桂纶镁、朱媛媛",
+    "director": "薛晓路",
+    "intro": "身患重病的父亲抓紧有限的时间，教自闭症儿子学习独立生活，并为他的未来寻找依靠。",
+    "rating": "8.0",
+    "ratingSource": "豆瓣",
+    "doubanId": "4004731",
+    "source": "https://moviecool.asia/film/gw2xpAvf1HSF",
     "mediaType": "movie"
   }
 }
