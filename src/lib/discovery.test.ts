@@ -51,6 +51,12 @@ describe('discovery dates and resources', () => {
     expect(parseDiscoveryItem({ ...raw, vod_name: '测试影片解说' }, source, now)).toBeUndefined();
     expect(parseDiscoveryItem(raw, { ...source, isAdult: true }, now)).toBeUndefined();
   });
+  it('excludes future-year source metadata, including entries cached before validation', () => {
+    expect(parseDiscoveryItem({ ...raw, vod_year: '2027' }, source, now)).toBeUndefined();
+    const cached = parseDiscoveryItem(raw, source, now)!;
+    cached.work.year = '2027';
+    expect(recentCards([cached], new Set([sourceIdentity(source.url)]), now).added).toHaveLength(0);
+  });
 });
 describe('real watching', () => {
   const sample = { at: 1000, position: 10, playing: true, seeking: false, ready: true, rate: 1 };

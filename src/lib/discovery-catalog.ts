@@ -11,6 +11,7 @@ export const DAY = 86400_000;
 export const emptyDiscovery = (): DiscoveryStore => ({ version: 1, refreshedAt: 0, attemptedAt: 0, failures: 0, works: [] });
 export function sourceIdentity(url: string) { return createHash('sha256').update(url.replace(/\/+$/, '')).digest('hex').slice(0, 20); }
 const clean = (x: unknown, max = 200) => typeof x === 'string' ? x.replace(/<[^>]*>/g, '').trim().slice(0, max) : '';
+const currentYear = (now: number) => new Date(now + 8 * 3600_000).getUTCFullYear();
 /** Only explicit, valid calendar dates. A year and an ingestion timestamp are not release dates. */
 export function calendarDate(value: unknown, now: number): string | undefined {
   if (typeof value !== 'string') return;
@@ -25,7 +26,7 @@ export function parseDiscoveryItem(raw: Record<string, unknown>, source: SourceC
   const title = clean(raw.vod_name, 100), typeName = clean(raw.type_name);
   const year = String(raw.vod_year || '').match(/^(18|19|20)\d{2}$/)?.[0];
   const vodId = typeof raw.vod_id === 'number' || typeof raw.vod_id === 'string' ? String(raw.vod_id).slice(0, 100) : '';
-  if (!title || !vodId || !year || source.isAdult || isAdultContent(title + ',' + typeName) || /情色|解说|解說|预告|預告|花絮|幕后/.test(title + typeName)) return;
+  if (!title || !vodId || !year || Number(year) > currentYear(now) || source.isAdult || isAdultContent(title + ',' + typeName) || /情色|解说|解說|预告|預告|花絮|幕后/.test(title + typeName)) return;
   const mediaType = classifyMediaType(typeName);
   if (mediaType === 'unknown') return;
   const seed = seedWork({ title, year, typeName, cover: filmPosterUrl(clean(raw.vod_pic, 4096), source.url),
@@ -68,7 +69,7 @@ export function mergeDiscovery(previous: DiscoveryWork[], incoming: DiscoveryWor
 export function recentCards(works: DiscoveryWork[], allowedSources: Set<string>, now: number): Record<RecentTab, RecentCard[]> {
   const result: Record<RecentTab, { card: RecentCard; time: number; priority: number }[]> = { new: [], series: [], added: [] };
   for (const entry of works) {
-    const resources = entry.resources.filter(r => allowedSources.has(r.sourceId) && now - r.observedAt <= DAY);
+    const resources = visibleResources(entry, allowedSources, now);
     if (!resources.length) continue;
     const count = new Set(resources.map(r => r.sourceId)).size;
     const add = (tab: RecentTab, time: number, label: string) => result[tab].push({ time, priority: ['movie', 'tv', 'documentary', 'animation', 'variety', 'short'].indexOf(entry.work.mediaType), card: { work: { ...entry.work, reasons: [label] }, sourceCount: count, date: new Date(time).toISOString(), label } });
@@ -88,5 +89,6 @@ export function recentCards(works: DiscoveryWork[], allowedSources: Set<string>,
   return Object.fromEntries(Object.entries(result).map(([tab, rows]) => [tab, rows.sort((a, b) => b.time - a.time || a.priority - b.priority || a.card.work.title.localeCompare(b.card.work.title)).slice(0, 48).map(r => r.card)])) as Record<RecentTab, RecentCard[]>;
 }
 export function visibleResources(entry: DiscoveryWork, sources: Set<string>, now: number): DiscoveryResource[] {
+  if (Number(entry.work.year) > currentYear(now)) return [];
   return entry.resources.filter(r => sources.has(r.sourceId) && now - r.observedAt <= DAY);
 }
