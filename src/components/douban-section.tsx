@@ -10,6 +10,7 @@ import type { SourceConfig } from '@/lib/types';
 import type { DoubanItem } from '@/lib/types';
 import { filmCollections, koreanModernHistory, type FilmCollection } from '@/lib/film-collections';
 import { chungmuroCollection } from '@/lib/chungmuro-collection';
+import { koreanBoxOfficeCollection } from '@/lib/korean-box-office-collection';
 import { peopleCollections } from '@/lib/people-collections';
 import { FilmPosterGrid } from './film-poster-grid';
 import { KoreanThrillers } from './korean-thrillers';
@@ -23,12 +24,13 @@ const WEEKDAYS = ['周一', '周二', '周三', '周四', '周五', '周六', '�
 const topicOptions = [
   { id: 'home', name: '首页推荐' },
   { id: 'korean', name: '韩国政治惊悚片' },
+  { id: koreanBoxOfficeCollection.id, name: koreanBoxOfficeCollection.name },
   { id: chungmuroCollection.id, name: chungmuroCollection.name },
   { id: koreanModernHistory.id, name: koreanModernHistory.name },
   { id: 'zhangyan', name: '张燕版韩国政治惊悚片' },
   ...filmCollections.map(({ id, name }) => ({ id, name })),
 ];
-const allCollections: FilmCollection[] = [chungmuroCollection, koreanModernHistory, ...filmCollections, ...peopleCollections];
+const allCollections: FilmCollection[] = [koreanBoxOfficeCollection, chungmuroCollection, koreanModernHistory, ...filmCollections, ...peopleCollections];
 const directories = {
   topics: topicOptions,
   directors: peopleCollections.filter(({ role }) => role !== 'actor').flatMap<FilmCollection>(person =>
@@ -106,16 +108,17 @@ export function RecommendSection({ visible, onPick, sources = [], section }: { v
 
 function CollectionList({ collection, onPick }: { collection: FilmCollection; onPick: (title: string) => void }) {
   const films = collection.sections.flatMap(({ films, mediaType }) =>
-    films.map(([title, year]) => ({ id: `${title}|${year}`, title, year, mediaType })));
+    films.map(([title, year, note]) => ({ id: `${title}|${year}`, title, year, note, mediaType })));
+  const sources = collection.sources ?? (collection.source ? [collection.source] : []);
   return (
     <section aria-label={collection.name}>
       <h2 className="text-xl font-bold">{collection.name}</h2>
       {collection.intro && <p className="mt-1 text-sm text-muted">{collection.intro}</p>}
       <p className="mb-4 mt-1 text-sm text-muted">
         共 {films.length} 部 · 选择影片搜索片源
-        {collection.source && (
-          <> · <a href={collection.source.url} target="_blank" rel="noopener noreferrer" className="underline">{collection.source.name}</a></>
-        )}
+        {sources.map(source => (
+          <span key={source.url}> · <a href={source.url} target="_blank" rel="noopener noreferrer" className="underline">{source.name}</a></span>
+        ))}
       </p>
       <FilmPosterGrid films={films} onPick={onPick} />
     </section>

@@ -12,13 +12,14 @@ export interface PosterFilm {
   title: string;
   searchTitle?: string;
   year: number;
+  note?: string;
   mediaType?: MediaType;
 }
 
 export function FilmPosterGrid({ films, onPick }: { films: PosterFilm[]; onPick: (title: string) => void }) {
   return (
     <ol className="grid grid-cols-2 gap-x-3 gap-y-6 sm:grid-cols-3 lg:grid-cols-6">
-      {films.map(({ id, title, searchTitle = title, year, mediaType = 'movie' }, i) => {
+      {films.map(({ id, title, searchTitle = title, year, note, mediaType = 'movie' }, i) => {
         const metadata = getFilmPosterMetadata(searchTitle, year);
         const poster = metadata?.poster;
         return (
@@ -31,6 +32,7 @@ export function FilmPosterGrid({ films, onPick }: { films: PosterFilm[]; onPick:
               </span>
               <strong className="mt-2 block group-hover:text-accent">{title}</strong>
             </button>
+            {note && <p className="mt-1 text-xs text-muted">{note}</p>}
             <div className="mt-1"><FilmCardDetails metadata={metadata} year={year} /></div>
           </li>
         );

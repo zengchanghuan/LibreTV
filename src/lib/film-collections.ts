@@ -3,7 +3,8 @@ export interface FilmCollection {
   name: string;
   intro: string;
   source?: { name: string; url: string };
-  sections: { label: string; mediaType?: 'movie' | 'tv'; films: [title: string, year: number][] }[];
+  sources?: { name: string; url: string }[];
+  sections: { label: string; mediaType?: 'movie' | 'tv'; films: [title: string, year: number, note?: string][] }[];
 }
 
 export const koreanModernHistory: FilmCollection = {

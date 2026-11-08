@@ -3,13 +3,14 @@ import { recommendationCatalog, catalogIdentity } from './recommendation-catalog
 import { filmCollections, koreanModernHistory } from './film-collections';
 import { peopleCollections } from './people-collections';
 import { chungmuroCollection } from './chungmuro-collection';
+import { koreanBoxOfficeCollection } from './korean-box-office-collection';
 import { isAdultContent } from './cms-parser';
 import { seriesQuery } from './related-videos';
 import type { RecommendedWork } from './recommendations';
 import { homeDay, type HomeRecommendations } from './home-discovery-types';
 
 export const homeCatalogVersion = createHash('sha256').update(JSON.stringify(recommendationCatalog)).digest('hex').slice(0, 12) + '-v2';
-const collections = [chungmuroCollection, koreanModernHistory, ...filmCollections, ...peopleCollections];
+const collections = [koreanBoxOfficeCollection, chungmuroCollection, koreanModernHistory, ...filmCollections, ...peopleCollections];
 const inCollections = new Set(collections.flatMap(c => c.sections.flatMap(s => s.films.map(([t, y]) => `${t}|${y}`))));
 
 function hash(text: string) {
