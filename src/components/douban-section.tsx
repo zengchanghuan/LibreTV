@@ -59,10 +59,6 @@ export function RecommendSection({ visible, onPick, sources = [], section }: { v
   const charts = recommendSource === 'bangumi' ? <BangumiView onPick={onPick} /> : recommendSource === 'douban' ? <DoubanView onPick={onPick} /> : <HotListView onPick={onPick} />;
   return <>
     <nav aria-label="必看片单" className="mb-5">
-      {!showDiscovery && <div className="mb-2 flex items-baseline gap-2">
-        <h2 className="text-lg font-bold">必看片单</h2>
-        <span className="text-xs text-muted">{topicOptions.length - 1 + peopleCollections.length} 份片单</span>
-      </div>}
       <div className="mb-2 flex flex-wrap items-center gap-1">
         {homeLayout === 'curated' && <TypeButton active={showDiscovery} onClick={() => setDiscovery(true)}>为你精选</TypeButton>}
         {directoryLabels.map(([key, label]) => (
@@ -76,6 +72,10 @@ export function RecommendSection({ visible, onPick, sources = [], section }: { v
         ))}
       </div>
       {!showDiscovery && <>
+      <div className="mb-2 flex items-baseline gap-2">
+        <h2 className="text-lg font-bold">必看片单</h2>
+        <span className="text-xs text-muted">{topicOptions.length - 1 + peopleCollections.length} 份片单</span>
+      </div>
       <select aria-label="选择片单" value={collection} onChange={(event) => setCollection(event.target.value)}
         className="w-full rounded-lg bg-chip px-3 py-2 text-sm text-content sm:hidden">
         {options.map(({ id, name }) => <option key={id} value={id}>{name}</option>)}
