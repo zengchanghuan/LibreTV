@@ -5540,7 +5540,9 @@
     "genre": "剧情 / 动作 / 科幻",
     "cast": "宋康昊、边希峰、朴海日、裴斗娜",
     "source": "https://movie.douban.com/subject/1763134/",
-    "rating": "7.6"
+    "rating": "7.6",
+    "director": "奉俊昊",
+    "intro": "汉江出现怪物并掳走少女，她的家人在混乱与封锁中自行寻找下落，展开营救。"
   },
   "密阳|2007": {
     "poster": "/posters/collections/0b0636de96304b72.jpg",
@@ -5570,14 +5572,17 @@
     "cast": "宋康昊、金英爱、吴达洙、任时完",
     "intro": "在釜山靠税务案立足的律师，接手了熟识饭馆老板儿子的国安案件。",
     "doubanId": "21937445",
-    "rating": "9.2"
+    "rating": "9.2",
+    "director": "杨宇硕"
   },
   "雪国列车|2013": {
     "poster": "/posters/collections/8cdf1c0ca4f0c04e.jpg",
     "genre": "剧情 / 动作 / 科幻",
     "cast": "克里斯·埃文斯、宋康昊、艾德·哈里斯、约翰·赫特",
     "source": "https://movie.douban.com/subject/3071441/",
-    "rating": "7.6"
+    "rating": "7.6",
+    "director": "奉俊昊",
+    "intro": "冰封世界中的幸存者栖身于永不停驶的列车，末等车厢的乘客决定向车头进发，挑战车上的等级秩序。"
   },
   "密探|2016": {
     "poster": "/posters/korean/shadows.jpg",
@@ -5590,7 +5595,9 @@
     "genre": "剧情",
     "cast": "宋康昊、李善均、赵汝贞、崔宇植",
     "source": "https://movie.douban.com/subject/27010768/",
-    "rating": "8.8"
+    "rating": "8.8",
+    "director": "奉俊昊",
+    "intro": "住在半地下室的一家人陆续进入富裕家庭工作，精心维持的身份与计划被一场意外打破。"
   },
   "掮客|2022": {
     "poster": "/posters/collections/5d4988bc8d2fd5cb.jpg",
@@ -5661,7 +5668,9 @@
     "genre": "剧情 / 动作 / 传记",
     "cast": "崔岷植、柳承龙、赵震雄、晋久",
     "source": "https://movie.douban.com/subject/7065161/",
-    "rating": "7.2"
+    "rating": "7.2",
+    "director": "金汉珉",
+    "intro": "李舜臣在兵力悬殊的局面下率领残存舰队迎战，借助海峡地形与潮流筹划鸣梁海战。"
   },
   "特别市民|2017": {
     "poster": "/posters/korean/mayor.jpg",
@@ -7407,14 +7416,18 @@
     "genre": "剧情 / 家庭",
     "cast": "黄政民、金允珍、吴达洙、张荣男",
     "source": "https://movie.douban.com/subject/21937450/",
-    "rating": "8.6"
+    "rating": "8.6",
+    "director": "尹济均",
+    "intro": "战乱中与家人失散的德洙承担起养家的责任，此后辗转海外谋生，一生守着重聚的承诺。"
   },
   "老手|2015": {
     "poster": "/posters/collections/88e499ede894462e.jpg",
     "genre": "剧情 / 动作 / 犯罪",
     "cast": "黄政民、刘亚仁、柳海真、吴达洙",
     "source": "https://movie.douban.com/subject/25728010/",
-    "rating": "7.7"
+    "rating": "7.7",
+    "director": "柳昇完",
+    "intro": "一名刑警调查工人受伤事件，发现财阀继承人涉嫌施暴，在重重阻力下坚持追查。"
   },
   "哭声|2016": {
     "poster": "/posters/collections/594d72f07680f102.jpg",
@@ -7452,7 +7465,8 @@
     "cast": "黄政民、郑雨盛",
     "intro": "首都驻军必须在一夜之间决定听谁的命令。",
     "doubanId": "35712804",
-    "rating": "8.8"
+    "rating": "8.8",
+    "director": "金性洙"
   },
   "交涉|2023": {
     "poster": "/posters/korean/pointmen.jpg",
@@ -7594,7 +7608,9 @@
     "genre": "动作 / 冒险",
     "cast": "金南佶、孙艺珍、崔雪莉、柳海真",
     "source": "https://movie.douban.com/subject/24879819/",
-    "rating": "6.7"
+    "rating": "6.7",
+    "director": "李石勋",
+    "intro": "运送国玺的船遭遇鲸鱼，海盗与山贼为追索被吞下的国玺奔赴大海，展开一场混乱冒险。"
   },
   "没有秘密|2016": {
     "poster": "/posters/korean/truth.jpg",
@@ -8274,11 +8290,27 @@
   },
   "破墓|2024": {
     "poster": "/posters/collections/2efc8bafc9a9f2c9.jpg",
-    "source": "https://www.themoviedb.org/movie/838209/images/posters?image_language=zh&language=vi-VN"
+    "source": "https://www.imdb.com/title/tt27802490/",
+    "rating": "6.9",
+    "ratingSource": "IMDb",
+    "director": "张在现",
+    "cast": "崔岷植、金高银、柳海真、李到晛",
+    "genre": "悬疑 / 恐怖",
+    "intro": "巫师、风水师与殡葬师受托迁移一座祖坟，开墓之后，埋藏已久的危险开始显现。",
+    "area": "韩国",
+    "mediaType": "movie"
   },
   "光海，成为王的男人|2012": {
     "poster": "/posters/collections/7e4e7f28fcaada76.jpg",
-    "source": "https://russia.korean-culture.org/ko/1063/board/796/read/130584"
+    "source": "https://www.imdb.com/title/tt2290840/",
+    "rating": "7.8",
+    "ratingSource": "IMDb",
+    "director": "秋昌民",
+    "cast": "李秉宪、柳承龙、韩孝周",
+    "genre": "剧情 / 历史",
+    "intro": "与光海君容貌相似的平民被秘密带进宫中，在国王中毒后充当替身，并以自己的方式面对朝堂与百姓。",
+    "area": "韩国",
+    "mediaType": "movie"
   },
   "网走番外地|1965": {
     "poster": "/posters/collections/52a9ba21920ce68d.jpg",
@@ -9006,7 +9038,13 @@
     "poster": "/posters/korean/taxi.jpg",
     "genre": "光州历史剧情",
     "cast": "宋康昊、托马斯·克莱舒曼、柳海真",
-    "intro": "首尔司机为了车费载德国记者前往光州，驶过封锁线后才明白这趟车意味着什么。"
+    "intro": "首尔司机为了车费载德国记者前往光州，驶过封锁线后才明白这趟车意味着什么。",
+    "source": "https://www.imdb.com/title/tt6878038/",
+    "rating": "7.9",
+    "ratingSource": "IMDb",
+    "director": "张勋",
+    "area": "韩国",
+    "mediaType": "movie"
   },
   "华丽的假期|2007": {
     "poster": "/posters/korean/may.jpg",
@@ -9030,7 +9068,8 @@
     "cast": "薛景求、安圣基、许峻豪",
     "intro": "一批男子在孤岛上受训，准备潜入朝鲜，半岛局势却在训练期间转向。",
     "doubanId": "1389982",
-    "rating": "8.1"
+    "rating": "8.1",
+    "director": "康佑硕"
   },
   "铁雨2：首脑峰会|2020": {
     "poster": "/posters/korean/steel2.jpg",
@@ -9349,7 +9388,8 @@
     "cast": "张东健、元斌、李恩宙、孔炯轸",
     "director": "姜帝圭",
     "source": "https://movie.douban.com/subject/1304972/",
-    "rating": "8.3"
+    "rating": "8.3",
+    "intro": "一对兄弟在朝鲜战争中被迫参军，哥哥拼命立功希望送弟弟回家，战争却不断改变两人的命运。"
   },
   "王的男人|2005": {
     "poster": "/posters/collections/51bea6de74d29ffe.jpg",
@@ -9357,7 +9397,8 @@
     "cast": "甘宇成、郑镇荣、姜成妍、李准基",
     "director": "李濬益",
     "source": "https://movie.douban.com/subject/1466394/",
-    "rating": "7.2"
+    "rating": "7.2",
+    "intro": "两名街头艺人因讽刺君王的演出被带入宫中，在获得赏识的同时卷进了危险的宫廷斗争。"
   },
   "非常主播|2008": {
     "poster": "/posters/collections/b88d25f28e90ff05.jpg",
@@ -9983,60 +10024,120 @@
     "poster": "/posters/collections/naver-korean-boxoffice-02.jpg",
     "area": "韩国",
     "mediaType": "movie",
-    "source": "https://blog.naver.com/nereid/224195411592"
+    "source": "https://www.imdb.com/title/tt9541602/",
+    "rating": "7.1",
+    "ratingSource": "IMDb",
+    "director": "李炳宪",
+    "cast": "柳承龙、李荷妮、陈善圭、李东辉、孔明",
+    "genre": "喜剧 / 动作 / 犯罪",
+    "intro": "缉毒小队盘下一家炸鸡店监视嫌犯，意外把生意做得火爆，卧底任务与餐馆经营逐渐纠缠在一起。"
   },
   "7号房的礼物|2013": {
     "poster": "/posters/collections/naver-korean-boxoffice-09.jpg",
     "area": "韩国",
     "mediaType": "movie",
-    "source": "https://blog.naver.com/nereid/224195411592"
+    "source": "https://www.imdb.com/title/tt2659414/",
+    "rating": "8.1",
+    "ratingSource": "IMDb",
+    "director": "李焕庆",
+    "cast": "柳承龙、葛素媛、朴信惠、吴达洙",
+    "genre": "剧情 / 喜剧 / 家庭",
+    "intro": "蒙冤入狱的父亲牵挂着年幼女儿，同牢房的狱友逐渐了解他的遭遇，设法让父女团聚。"
   },
   "犯罪都市2|2022": {
     "poster": "/posters/collections/naver-korean-boxoffice-11.jpg",
     "area": "韩国",
     "mediaType": "movie",
-    "source": "https://blog.naver.com/nereid/224190877908"
+    "source": "https://www.imdb.com/title/tt15838850/",
+    "rating": "7.0",
+    "ratingSource": "IMDb",
+    "director": "李相龙",
+    "cast": "马东锡、孙锡久、崔奎华",
+    "genre": "动作 / 犯罪 / 惊悚",
+    "intro": "马锡道赴越南执行引渡任务，却发现针对游客的绑架杀人案，追查凶徒的行动一路延伸回韩国。"
   },
   "釜山行|2016": {
     "poster": "/posters/collections/naver-korean-boxoffice-18.jpg",
     "area": "韩国",
     "mediaType": "movie",
-    "source": "https://blog.naver.com/nereid/224190877908"
+    "source": "https://www.imdb.com/title/tt5700672/",
+    "rating": "7.6",
+    "ratingSource": "IMDb",
+    "director": "延尚昊",
+    "cast": "孔刘、郑有美、马东锡、金秀安",
+    "genre": "动作 / 惊悚 / 灾难",
+    "intro": "病毒在驶往釜山的列车上蔓延，带着女儿出行的父亲与其他乘客必须穿越失控的车厢寻找生路。"
   },
   "犯罪都市4|2024": {
     "poster": "/posters/collections/naver-korean-boxoffice-19.jpg",
     "area": "韩国",
     "mediaType": "movie",
-    "source": "https://blog.naver.com/nereid/224190877908"
+    "source": "https://www.imdb.com/title/tt27811040/",
+    "rating": "6.6",
+    "ratingSource": "IMDb",
+    "director": "许明行",
+    "cast": "马东锡、金武烈、朴智焕、李东辉",
+    "genre": "动作 / 犯罪 / 惊悚",
+    "intro": "马锡道与网络犯罪调查组合作，追捕操纵跨国网络赌场的前雇佣兵及其幕后同伙。"
   },
   "海云台|2009": {
     "poster": "/posters/collections/naver-korean-boxoffice-20.jpg",
     "area": "韩国",
     "mediaType": "movie",
-    "source": "https://blog.naver.com/nereid/224190877908"
+    "source": "https://www.imdb.com/title/tt1153040/",
+    "rating": "5.5",
+    "ratingSource": "IMDb",
+    "director": "尹济均",
+    "cast": "薛景求、河智苑、朴重勋、严正化",
+    "genre": "剧情 / 动作 / 灾难",
+    "intro": "釜山海云台的居民与游客过着各自的生活，远海的异常却预示着巨型海啸即将袭来。"
   },
   "犯罪都市3|2023": {
     "poster": "/posters/collections/naver-korean-boxoffice-23.jpg",
     "area": "韩国",
     "mediaType": "movie",
-    "source": "https://blog.naver.com/nereid/224169927830"
+    "source": "https://www.imdb.com/title/tt21364552/",
+    "rating": "6.6",
+    "ratingSource": "IMDb",
+    "director": "李相龙",
+    "cast": "马东锡、李浚赫、青木崇高",
+    "genre": "动作 / 犯罪 / 惊悚",
+    "intro": "加入新调查队的马锡道从一宗命案追查新型毒品交易，与藏身警方及黑帮中的对手交锋。"
   },
   "检察官外传|2016": {
     "poster": "/posters/collections/naver-korean-boxoffice-25.jpg",
     "area": "韩国",
     "mediaType": "movie",
-    "source": "https://blog.naver.com/nereid/224169927830"
+    "source": "https://www.imdb.com/title/tt5442308/",
+    "rating": "6.7",
+    "ratingSource": "IMDb",
+    "director": "李日炯",
+    "cast": "黄政民、姜栋元",
+    "genre": "喜剧 / 犯罪 / 动作",
+    "intro": "检察官遭陷害入狱后，与一名擅长骗术的囚犯联手，试图揭开真相并洗清罪名。"
   },
   "极限逃生|2019": {
     "poster": "/posters/collections/naver-korean-boxoffice-26.jpg",
     "area": "韩国",
     "mediaType": "movie",
-    "source": "https://blog.naver.com/nereid/224169927830"
+    "source": "https://www.imdb.com/title/tt10648440/",
+    "rating": "7.0",
+    "ratingSource": "IMDb",
+    "director": "李相槿",
+    "cast": "曹政奭、林允儿、高斗心",
+    "genre": "喜剧 / 动作 / 灾难",
+    "intro": "城市突遭毒气袭击，待业青年与曾经的攀岩社同学被困楼宇，必须利用攀登技巧逃出生天。"
   },
   "奇怪的她|2014": {
     "poster": "/posters/collections/naver-korean-boxoffice-30.jpg",
     "area": "韩国",
     "mediaType": "movie",
-    "source": "https://blog.naver.com/nereid/224169927830"
+    "source": "https://www.imdb.com/title/tt3516378/",
+    "rating": "7.2",
+    "ratingSource": "IMDb",
+    "director": "黄东赫",
+    "cast": "沈恩敬、罗文姬、朴仁焕",
+    "genre": "喜剧 / 奇幻 / 音乐",
+    "intro": "一位七十多岁的老妇人意外恢复二十岁的容貌，以新的身份追寻年轻时未能实现的歌唱梦想。"
   }
 }
