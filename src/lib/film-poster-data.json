@@ -9516,5 +9516,65 @@
     "source": "https://www.imdb.com/title/tt1185594/",
     "rating": "6.1",
     "ratingSource": "IMDb"
+  },
+  "唐山大兄|1971": {
+    "poster": "/posters/collections/bruce-lee-1971-g1Sbpn4CGOEF.jpg",
+    "genre": "动作",
+    "cast": "李小龙、田俊、衣依",
+    "director": "罗维",
+    "intro": "郑潮安赴泰国冰厂谋生，发现工友失踪背后的贩毒秘密，挺身对抗厂方恶势力。",
+    "rating": "7.8",
+    "ratingSource": "豆瓣",
+    "doubanId": "1307577",
+    "source": "https://moviecool.asia/film/g1Sbpn4CGOEF",
+    "mediaType": "movie"
+  },
+  "精武门|1972": {
+    "poster": "/posters/collections/bruce-lee-1972-gGSppNLu1BkV.jpg",
+    "genre": "动作",
+    "cast": "李小龙、苗可秀、田丰",
+    "director": "罗维",
+    "intro": "霍元甲去世后，弟子陈真调查师父的死因，并为遭到欺辱的精武门挺身而出。",
+    "rating": "8.5",
+    "ratingSource": "豆瓣",
+    "doubanId": "1294991",
+    "source": "https://moviecool.asia/film/gGSppNLu1BkV",
+    "mediaType": "movie"
+  },
+  "猛龙过江|1972": {
+    "poster": "/posters/collections/bruce-lee-1972-mdyk6AI-wBRj.jpg",
+    "genre": "动作",
+    "cast": "李小龙、苗可秀、查克·诺瑞斯",
+    "director": "李小龙",
+    "intro": "唐龙远赴罗马，帮助经营餐馆的亲友抵抗强夺地皮的团伙，并与受雇而来的高手交锋。",
+    "rating": "8.4",
+    "ratingSource": "豆瓣",
+    "doubanId": "1306870",
+    "source": "https://moviecool.asia/film/mdyk6AI-wBRj",
+    "mediaType": "movie"
+  },
+  "龙争虎斗|1973": {
+    "poster": "/posters/collections/bruce-lee-1973-gG-5YALCG9Rc.jpg",
+    "genre": "动作",
+    "cast": "李小龙、石坚、洪金宝",
+    "director": "罗伯特·高洛斯",
+    "intro": "一名武术高手赴孤岛参加比武大会，暗中调查岛上犯罪集团的活动。",
+    "rating": "8.3",
+    "ratingSource": "豆瓣",
+    "doubanId": "1293118",
+    "source": "https://moviecool.asia/film/gG-5YALCG9Rc",
+    "mediaType": "movie"
+  },
+  "死亡游戏|1978": {
+    "poster": "/posters/collections/bruce-lee-1978-qdmkFgwPT4x.jpg",
+    "genre": "动作",
+    "cast": "李小龙、唐龙、洪金宝",
+    "director": "罗伯特·高洛斯",
+    "intro": "功夫明星遭犯罪集团胁迫后，借假死反击对手。本片为李小龙逝世后，结合其生前素材与补拍镜头完成的公映版本。",
+    "rating": "7.8",
+    "ratingSource": "豆瓣",
+    "doubanId": "1308456",
+    "source": "https://moviecool.asia/film/qdmkFgwPT4x",
+    "mediaType": "movie"
   }
 }
