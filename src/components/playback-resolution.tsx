@@ -8,6 +8,6 @@ export function PlaybackResolution({ video }: { video: HTMLVideoElement }) {
   useEffect(() => observeVideoResolution(video, setResolution), [video]);
   if (!resolution) return null;
   return <span className="playback-resolution" title={`当前分辨率：${resolution.detail}`} aria-label={`当前分辨率：${resolution.detail}`}>
-    {resolution.label}
+    {resolution.label}{resolution.badge && <sup className="playback-resolution-badge">{resolution.badge}</sup>}
   </span>;
 }
