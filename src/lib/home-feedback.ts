@@ -1,0 +1,45 @@
+import { createHmac } from 'node:crypto';
+import { discoveryTransaction } from './discovery-storage';
+import { emptyDiscovery } from './discovery-catalog';
+import { recommendationCatalog } from './recommendation-catalog';
+import type { HomeFeedbackResponse, HomePreference, HomeVote } from './home-feedback-types';
+import type { RecommendedWork } from './recommendations';
+
+interface FeedbackStore { version: 1; items: HomePreference[] }
+const emptyFeedback = (): FeedbackStore => ({ version: 1, items: [] });
+const MAX_FEEDBACK = 1000;
+
+function feedbackFile(account: string | null) {
+  const secret = process.env.PROXY_SECRET || process.env.PASSWORD;
+  if (!secret) throw new Error('喜好记录暂不可用');
+  const actor = createHmac('sha256', secret).update(`home-feedback:${account || 'shared-password-account'}`).digest('hex');
+  return `feedback-${actor}`;
+}
+export function readHomeFeedback(account: string | null): Promise<HomePreference[]> {
+  return discoveryTransaction(feedbackFile(account), emptyFeedback, data => data.items);
+}
+export function publicHomeFeedback(items: HomePreference[]): HomeFeedbackResponse {
+  return { items: items.map(({ workId, vote, updatedAt }) => ({ workId, vote, updatedAt })) };
+}
+
+/** Resolve identities/credits on the server; clients submit only an ID and a vote. */
+export async function saveHomeFeedback(account: string | null, workId: string, vote: HomeVote | null, now = Date.now()) {
+  let work: RecommendedWork | undefined;
+  if (vote) {
+    work = recommendationCatalog.find(item => item.id === workId)
+      || await discoveryTransaction('catalog', emptyDiscovery, data => data.works.find(item => item.work.id === workId)?.work);
+  }
+  return discoveryTransaction(feedbackFile(account), emptyFeedback, data => {
+    const previous = data.items.find(item => item.workId === workId);
+    // Existing feedback remains editable even after a source leaves the recent catalog.
+    const known = work || previous?.work;
+    if (vote && !known) return null;
+    data.items = data.items.filter(item => item.workId !== workId);
+    if (vote && known) {
+      const { id, title, year, mediaType, aliases, genres, directors, cast } = known;
+      data.items.push({ workId, vote, updatedAt: now, work: { id, title, year, mediaType, aliases, genres, directors, cast } });
+      data.items = data.items.sort((a, b) => b.updatedAt - a.updatedAt).slice(0, MAX_FEEDBACK);
+    }
+    return publicHomeFeedback(data.items);
+  }, true);
+}

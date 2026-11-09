@@ -13,6 +13,8 @@ vi.mock('./auth', () => ({ useAuth: () => ({ verified: true }) }));
 vi.mock('./home-continue', () => ({ HomeContinue: () => null }));
 vi.mock('./recommended-work-card', () => ({ RecommendedWorkCard: () => null }));
 vi.mock('./recommended-work-sources', () => ({ RecommendedWorkSources: () => null }));
+vi.mock('./home-feedback', async original => ({ ...await original<typeof import('./home-feedback')>(), useHomeFeedback: () => ({ voteFor: () => undefined, disabled: false, vote: vi.fn() }) }));
+vi.mock('./home-personal-recommendations', () => ({ HomePersonalRecommendations: () => null }));
 const render = () => renderToStaticMarkup(createElement(HomeDiscovery, { sources: [], onCollection: () => {}, charts: null }));
 const empty = (): DiscoveryResponse => ({ recent: { new: [], series: [], added: [] }, refreshedAt: null, partial: false, stale: false, loading: false, popular: [], popularStatus: 'collecting', editorial: [], enabled: { recent: true, popular: true, editorial: true } });
 beforeEach(() => { state.data = undefined; state.isLoading = true; state.isError = false; });
@@ -48,5 +50,13 @@ describe('home discovery cold start', () => {
       const html = renderToStaticMarkup(createElement(FilmPoster, { title: '测试影片', year: '1999', url, mode: 'direct' }));
       expect(html).toContain('测试影片'); expect(html).toContain('1999'); expect(html).toContain('bg-gradient-to-br');
     }
+  });
+  it.each(['new', 'series', 'added'] as const)('puts accessible feedback controls on %s cards', tab => {
+    state.data = empty(); state.isLoading = false;
+    state.data.recent[tab] = [{ work: discoveryStarters[0], sourceCount: 2, date: '2026-11-09T00:00:00Z', label: '更新至 12 集' }];
+    const html = render();
+    expect(html).toContain(`点赞《${discoveryStarters[0].title}》`);
+    expect(html).toContain(`点踩《${discoveryStarters[0].title}》`);
+    expect(html).toContain('aria-pressed="false"');
   });
 });

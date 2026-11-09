@@ -8,6 +8,8 @@ import { isAdultContent } from './cms-parser';
 import { seriesQuery } from './related-videos';
 import type { RecommendedWork } from './recommendations';
 import { homeDay, type HomeRecommendations } from './home-discovery-types';
+import type { HomePreference } from './home-feedback-types';
+import { homePreferenceScore, samePreferenceWork } from './home-preferences';
 
 export const homeCatalogVersion = createHash('sha256').update(JSON.stringify(recommendationCatalog)).digest('hex').slice(0, 12) + '-v2';
 const collections = [koreanBoxOfficeCollection, chungmuroCollection, koreanModernHistory, ...filmCollections, ...peopleCollections];
@@ -37,14 +39,26 @@ export function verifiedHomeAI(items: RecommendedWork[], filterAdult: boolean) {
   });
 }
 
-export function buildHomeRecommendations(filterAdult: boolean, ai: RecommendedWork[] = [], now = Date.now()): HomeRecommendations {
+export function buildHomeRecommendations(filterAdult: boolean, ai: RecommendedWork[] = [], now = Date.now(), preferences: HomePreference[] = []): HomeRecommendations {
   const day = homeDay(now), seed = `${day}:${homeCatalogVersion}:${filterAdult}`;
+  const disliked = preferences.filter(item => item.vote === 'dislike');
+  const allowed = (work: RecommendedWork) => !disliked.some(item => samePreferenceWork(work, item));
+  const scores = new Map<string, ReturnType<typeof homePreferenceScore>>();
+  const preferenceFor = (work: RecommendedWork) => {
+    if (!scores.has(work.id)) scores.set(work.id, homePreferenceScore(work, preferences));
+    return scores.get(work.id)!;
+  };
+  const personalize = (work: RecommendedWork) => {
+    const { reason } = preferenceFor(work);
+    return reason ? { ...work, reasons: [reason, ...work.reasons].slice(0, 2) } : work;
+  };
   const unique = new Map<string, RecommendedWork>();
-  for (const work of recommendationCatalog) if (eligibleHomeWork(work, filterAdult) && !unique.has(work.id)) {
+  for (const work of recommendationCatalog) if (eligibleHomeWork(work, filterAdult) && allowed(work) && !unique.has(work.id)) {
     unique.set(work.id, { ...work, reasons: [work.genres.length ? `精选片单 · ${work.genres.slice(0, 2).join(' / ')}` : '来自精选片单'] });
   }
-  const local = [...unique.values()].sort((a, b) => hash(seed + a.id) - hash(seed + b.id) || a.id.localeCompare(b.id));
-  const verified = verifiedHomeAI(ai, filterAdult);
+  const local = [...unique.values()].sort((a, b) => preferenceFor(b).score - preferenceFor(a).score
+    || hash(seed + a.id) - hash(seed + b.id) || a.id.localeCompare(b.id));
+  const verified = verifiedHomeAI(ai, filterAdult).filter(allowed);
   const used = new Set<string>();
   const batches: RecommendedWork[][] = [];
   for (let batch = 0; batch < 3; batch++) {
@@ -57,14 +71,26 @@ export function buildHomeRecommendations(filterAdult: boolean, ai: RecommendedWo
         || work.directors.some(p => (directors.get(p) || 0) >= 2)
         || (franchise && (series.get(franchise) || 0) >= 2)) return;
       if (diverse && ((decades.get(decade) || 0) >= 4 || (work.genres[0] && (genres.get(work.genres[0]) || 0) >= 4))) return;
-      used.add(work.id); chosen.push(work);
+      used.add(work.id); chosen.push(personalize(work));
       work.cast.forEach(p => actors.set(p, (actors.get(p) || 0) + 1));
       work.directors.forEach(p => directors.set(p, (directors.get(p) || 0) + 1));
       if (franchise) series.set(franchise, (series.get(franchise) || 0) + 1);
       decades.set(decade, (decades.get(decade) || 0) + 1);
       if (work.genres[0]) genres.set(work.genres[0], (genres.get(work.genres[0]) || 0) + 1);
     };
-    for (const work of verified) { if (chosen.length >= 4) break; add(work, true); }
+    // Leave room for exploration and retain director/cast/genre diversity in every batch.
+    for (const work of local) { if (chosen.length >= 8 || preferenceFor(work).score <= 0) break; add(work, true); }
+    if (preferences.some(item => item.vote === 'like')) {
+      local.filter(work => preferenceFor(work).score === 0).forEach(work => add(work, true));
+    }
+    let aiCount = 0;
+    for (const work of verified) {
+      if (aiCount >= 4) break;
+      if (preferenceFor(work).score < 0) continue;
+      const before = chosen.length; add(work, true); if (chosen.length > before) aiCount++;
+    }
+    local.filter(w => preferenceFor(w).score >= 0).forEach(w => add(w, true));
+    local.filter(w => preferenceFor(w).score >= 0).forEach(w => add(w, false));
     local.forEach(w => add(w, true));
     local.forEach(w => add(w, false));
     if (chosen.length) batches.push(chosen);
@@ -74,7 +100,7 @@ export function buildHomeRecommendations(filterAdult: boolean, ai: RecommendedWo
   const week = Math.floor((dayNumber + 3) / 7);
   const topics = collections.map(c => ({ c, works: c.sections.flatMap(s => s.films)
     .map(([t, y]) => recommendationCatalog.find(w => w.title === t && w.year === String(y)))
-    .filter((w): w is RecommendedWork => Boolean(w && eligibleHomeWork(w, filterAdult))) }))
+    .filter((w): w is RecommendedWork => Boolean(w && eligibleHomeWork(w, filterAdult) && allowed(w))) }))
     .filter(c => c.works.length).sort((a, b) => hash(`${week}:${a.c.id}`) - hash(`${week}:${b.c.id}`)).slice(0, 3);
   return { day, version: homeCatalogVersion, generatedAt: new Date(now).toISOString(),
     expiresAt: new Date(Date.parse(`${day}T00:00:00+08:00`) + 86400000).toISOString(), batches,
