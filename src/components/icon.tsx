@@ -7,6 +7,9 @@ import type { ReactNode } from 'react';
  */
 
 export type IconName =
+  | 'play'
+  | 'more'
+  | 'cloud'
   | 'close'
   | 'edit'
   | 'refresh'
@@ -27,6 +30,9 @@ export type IconName =
   | 'home';
 
 const PATHS: Record<IconName, ReactNode> = {
+  play: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="m8 5 11 7-11 7V5Z" />,
+  more: <><circle cx="5" cy="12" r="1" /><circle cx="12" cy="12" r="1" /><circle cx="19" cy="12" r="1" /></>,
+  cloud: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M7 18h10a4 4 0 0 0 .4-8A6 6 0 0 0 6 8.5 4.8 4.8 0 0 0 7 18Z" />,
   close: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />,
   edit: (
     <path

@@ -58,6 +58,11 @@ enum NativeNavigation {
         let parent: URL?
     }
 
+    /// The watch page supplies its own compact navigation and playback actions.
+    static func usesWatchLayout(for url: URL, origin: URL) -> Bool {
+        sameOrigin(url, origin) && url.path.trimmingCharacters(in: CharacterSet(charactersIn: "/")) == "watch"
+    }
+
     static func page(for url: URL, origin: URL) -> Page? {
         guard sameOrigin(url, origin) else { return nil }
         let path = url.path == "/" ? "/" : url.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))

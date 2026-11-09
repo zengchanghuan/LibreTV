@@ -69,5 +69,9 @@ func runNativeNavigationTests() throws {
     let foreign = try url("https://other.example.com/hd/hdzone")
     try testCheck(NativeNavigation.page(for: foreign, origin: origin) == nil && NativeNavigation.backURL(from: foreign, previous: origin, origin: origin) == nil)
     try testCheck(NativeNavigation.backURL(from: detail, previous: foreign, origin: origin) == filtered, "Foreign history must never become a native back destination")
-    print("iOS native navigation: 28 regression scenarios passed")
+    try testCheck(NativeNavigation.usesWatchLayout(for: watch, origin: origin))
+    try testCheck(NativeNavigation.usesWatchLayout(for: try url("/watch/?id=42"), origin: origin))
+    try testCheck(!NativeNavigation.usesWatchLayout(for: hd, origin: origin))
+    try testCheck(!NativeNavigation.usesWatchLayout(for: try url("https://other.example.com/watch"), origin: origin))
+    print("iOS native navigation: 32 regression scenarios passed")
 }

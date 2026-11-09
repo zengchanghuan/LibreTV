@@ -157,7 +157,7 @@ export function SwitchSourceModal({
 
   return (
     <div
-      className="fixed inset-0 z-[65] flex items-start justify-center overflow-y-auto bg-black/80 py-10 px-4 animate-fade-in"
+      className="fixed inset-0 z-[65] flex items-end justify-center bg-black/60 sm:items-center sm:p-4 animate-fade-in"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
@@ -165,12 +165,13 @@ export function SwitchSourceModal({
       <div
         ref={panelRef}
         tabIndex={-1}
-        className="bg-surface-raised rounded-xl w-full max-w-3xl shadow-2xl p-5 animate-slide-up outline-none"
+        className="bg-surface-raised rounded-t-2xl sm:rounded-2xl w-full max-w-3xl max-h-[85dvh] overflow-y-auto shadow-2xl px-5 pt-4 pb-[max(20px,env(safe-area-inset-bottom))] animate-slide-up outline-none"
         role="dialog"
         aria-modal="true"
         aria-label={`换源：${currentTitle}`}
       >
-        <div className="flex items-center justify-between mb-4">
+        <div className="mx-auto mb-3 h-1 w-8 rounded-full bg-faint/40 sm:hidden" aria-hidden="true" />
+        <div className="flex items-center justify-between mb-4 gap-3">
           <div className="min-w-0">
             <h2 className="text-lg font-semibold text-content truncate" title={currentTitle}>
               {currentTitle}
@@ -183,15 +184,15 @@ export function SwitchSourceModal({
                   : `共 ${sorted.length} 个来源 · ${sorted.filter((c) => c.ok).length} 个可用`}
             </p>
           </div>
-          <button className="p-1.5 rounded-md text-muted hover:text-content hover:bg-hover" onClick={onClose} aria-label="关闭">
+          <button className="min-h-11 min-w-11 p-2 rounded-md text-muted hover:text-content hover:bg-hover" onClick={onClose} aria-label="关闭">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
         </div>
 
-        {phase === 'done' && <div className="mb-3 flex items-center justify-between gap-3">
-          <p className="text-xs text-faint">优先高清有字幕、速度足够的来源。字幕未确认不代表没有；速度为当前网络抽样。</p>
+        {phase === 'done' && <div className="mb-3 flex flex-wrap items-center gap-3">
+          <p className="w-full text-xs text-faint">优先高清有字幕、速度足够的来源。字幕未确认不代表没有；速度为当前网络抽样。</p>
           <button className="btn-ghost btn-sm shrink-0" disabled={quality.testing} onClick={quality.retest}>重新检测</button>
           <button className="btn-primary btn-sm shrink-0" disabled={!recommended}
             onClick={() => recommended && switchTo(recommended)}>切换推荐源</button>

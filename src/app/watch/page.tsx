@@ -21,7 +21,9 @@ import { enqueueDownload } from '@/components/download-manager';
 import { Icon } from '@/components/icon';
 import { useAuth } from '@/components/auth';
 import { FamilyButton, useFamily } from '@/components/family';
-import { NativePlayerPanel, useNativeApp } from '@/components/native-player';
+import { NativePlayerPanel, useNativeApp, useLegacyNativeWatchHeader } from '@/components/native-player';
+import { nativePost } from '@/lib/native-player';
+import { WatchMoreSheet } from '@/components/watch-more-sheet';
 import { resolveSource, useAppStore } from '@/lib/store';
 import {
   clearProgress,
@@ -33,7 +35,7 @@ import {
 } from '@/lib/db';
 import { cn } from '@/lib/utils';
 import { RelatedVideos } from '@/components/related-videos';
-import { VideoInfoPanel } from '@/components/video-info-panel';
+import { VideoInfoPanel, videoInfoSummary } from '@/components/video-info-panel';
 import { PwaUpdateBanner } from '@/components/pwa';
 import { WatchTelemetry } from '@/components/watch-telemetry';
 
@@ -63,9 +65,18 @@ function WatchContent() {
   const router = useRouter();
   const store = useAppStore();
   const { verified } = useAuth();
-  const { ready: historyReady } = useFamily();
+  const { ready: historyReady, open: openFamily } = useFamily();
   const nativeApp = useNativeApp();
-  const [webPlayback, setWebPlayback] = useState(false);
+  const legacyNativeHeader = useLegacyNativeWatchHeader();
+  const [moreOpen, setMoreOpen] = useState(false);
+  const closeMore = useCallback(() => setMoreOpen(false), []);
+  useEffect(() => {
+    if (!nativeApp) return;
+    const enter = () => { nativePost({ type: 'watchLayout', enabled: true }); };
+    enter();
+    window.addEventListener('libretv:native-ready', enter);
+    return () => { window.removeEventListener('libretv:native-ready', enter); nativePost({ type: 'watchLayout', enabled: false }); };
+  }, [nativeApp]);
 
   const sourceKey = searchParams.get('source') || '';
   const vodId = searchParams.get('id') || '';
@@ -91,6 +102,7 @@ function WatchContent() {
   });
 
   const episodes = useMemo(() => detailQuery.data?.episodes ?? [], [detailQuery.data]);
+  const multipleEpisodes = episodes.length > 1;
   const videoTitle = titleParam || detailQuery.data?.videoInfo?.title || '未知视频';
 
   // 当前播放地址：优先取剧集列表中的当前集，其次直连 URL 参数
@@ -121,10 +133,12 @@ function WatchContent() {
   // 进度恢复优先级：URL position 参数 > IndexedDB 记录
   const getRestorePosition = useCallback(async () => {
     const urlPos = parseInt(searchParams.get('position') || '0', 10) || 0;
-    if (urlPos > 0) return urlPos;
+    if (urlPos > 0) { latestPosition.current = urlPos; return urlPos; }
     if (!vodId) return 0;
     const entry = await db.progress.get(progressKeyOf(sourceKey, vodId, currentIndex));
-    return entry?.position ?? 0;
+    const position = entry?.position ?? 0;
+    latestPosition.current = position;
+    return position;
   }, [searchParams, sourceKey, vodId, currentIndex]);
 
   // 写入观看历史（进入页面即记录，进度后续增量更新）
@@ -189,6 +203,12 @@ function WatchContent() {
   }, [currentIndex, episodes.length, goEpisode]);
 
   const orderedEpisodes = reversed ? [...episodes].map((_, i) => episodes.length - 1 - i) : episodes.map((_, i) => i);
+  const downloadUnavailable = !currentUrl || currentUrl.startsWith('/api/site-playback?');
+  const downloadCurrent = () => {
+    if (downloadUnavailable) return;
+    setMoreOpen(false);
+    enqueueDownload({ url: currentUrl, title: `${videoTitle}${multipleEpisodes ? ` 第${currentIndex + 1}集` : ''}`, format: 'MP4' });
+  };
 
   if (!verified || !historyReady) {
     return (
@@ -213,39 +233,34 @@ function WatchContent() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="watch-page min-h-screen flex flex-col">
       <WatchTelemetry sourceKey={source.key} vodId={vodId} episode={currentIndex} enabled={verified && historyReady} />
       <header className="sticky top-0 z-40 bg-surface/90 backdrop-blur border-b border-line">
         <PwaUpdateBanner />
-        <div className="max-w-7xl mx-auto px-4 min-h-14 py-2 flex flex-wrap sm:flex-nowrap items-center gap-3">
+        {!legacyNativeHeader && <div className="grid min-h-14 grid-cols-[44px_1fr_44px] items-center px-4 sm:hidden">
+          <BackButton />
+          <span className="text-center text-sm font-medium">影片详情</span>
+          <button className="btn-ghost !min-h-11 !min-w-11 !p-2" aria-label="更多操作" onClick={() => setMoreOpen(true)}><Icon name="more" /></button>
+        </div>}
+        <div className={cn('max-w-7xl mx-auto px-4 min-h-14 py-2 items-center gap-3', legacyNativeHeader ? 'hidden' : 'hidden sm:flex')}>
           <BackButton />
           <HomeButton />
           <div className="min-w-0 flex-1">
             <h1 className="text-sm font-medium text-content truncate">{videoTitle}</h1>
             <p className="text-xs text-faint">
               {source.name}
-              {episodes.length > 0 && ` · 第 ${currentIndex + 1}/${episodes.length} 集`}
+              {multipleEpisodes && ` · 第 ${currentIndex + 1}/${episodes.length} 集`}
             </p>
           </div>
           <div className="ml-auto w-full sm:w-auto flex justify-end items-center gap-2">
             <FamilyButton />
             <button
               className="btn-ghost btn-sm"
-              disabled={currentUrl.startsWith('/api/site-playback?')}
+              disabled={downloadUnavailable}
               title={currentUrl.startsWith('/api/site-playback?') ? '该网站暂不支持站内下载' : undefined}
-              onClick={() => {
-                if (!currentUrl) return;
-                enqueueDownload({
-                  url: currentUrl,
-                  // 多集才带集数后缀；单集影片（含电影）文件名就是纯标题
-                  title: `${videoTitle}${episodes.length > 1 ? ` 第${currentIndex + 1}集` : ''}`,
-                  format: 'MP4',
-                });
-                // 「已加入下载队列」由 DownloadManager 在真正入队后提示：
-                // 这里先提示的话，用户随后取消保存位置会出现「已加入→已取消」的矛盾
-              }}
+              onClick={downloadCurrent}
             >
-              下载本集
+              {multipleEpisodes ? '下载本集' : '下载影片'}
             </button>
             <button className="btn-ghost btn-sm" onClick={() => setSwitchOpen(true)}>
               切换资源
@@ -254,23 +269,29 @@ function WatchContent() {
         </div>
       </header>
 
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 py-4">
+      <main className="flex-1 max-w-7xl w-full mx-auto px-5 pt-5 pb-[max(24px,env(safe-area-inset-bottom))] sm:px-4 sm:py-4">
+        <div className={cn('mb-6', !legacyNativeHeader && 'sm:hidden')}>
+          <div className="flex items-start justify-between gap-3"><h1 className="text-2xl font-semibold leading-tight tracking-tight text-content">{videoTitle}</h1>
+            {legacyNativeHeader && <button className="btn-ghost -mr-2 !min-h-11 !min-w-11 !p-2" aria-label="更多操作" onClick={() => setMoreOpen(true)}><Icon name="more" /></button>}
+          </div>
+          {videoInfoSummary(detailQuery.data?.videoInfo) && <p className="mt-2 text-xs leading-relaxed text-muted">{videoInfoSummary(detailQuery.data?.videoInfo)}</p>}
+        </div>
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-4">
           <div>
-            <div className="aspect-video bg-black rounded-lg overflow-hidden">
+            <div className={cn(nativeApp && currentUrl ? '' : 'aspect-video bg-black rounded-xl overflow-hidden')}>
               {currentUrl ? (
-                nativeApp && !webPlayback ? <NativePlayerPanel
+                nativeApp ? <NativePlayerPanel
                   key={`${sourceKey}:${vodId}`} title={videoTitle} sourceKey={sourceKey} sourceUrl={source.url}
                   vodId={vodId || currentUrl} episodes={episodes.length ? episodes : [currentUrl]} index={episodes.length ? currentIndex : 0}
                   ready={!vodId || detailQuery.isSuccess || detailQuery.isError}
-                  autoplayNext={store.autoplayNext} getPosition={getRestorePosition} onEpisode={goEpisode}
-                  onSleep={() => store.updateSettings({ autoplayNext: false })} onWeb={() => setWebPlayback(true)}
+                  autoplayNext={multipleEpisodes && store.autoplayNext} getPosition={getRestorePosition} onEpisode={goEpisode}
+                  onSleep={() => store.updateSettings({ autoplayNext: false })} onProgress={position => { latestPosition.current = position; }}
                 /> : <PlayerShell
                   url={currentUrl}
                   qualitySource={source.url}
                   title={videoTitle}
                   adFilter={store.adFilter}
-                  autoplayNext={store.autoplayNext}
+                  autoplayNext={multipleEpisodes && store.autoplayNext}
                   episodeCount={episodes.length}
                   episodeIndex={currentIndex}
                   onEpisode={goEpisode}
@@ -300,39 +321,44 @@ function WatchContent() {
               )}
             </div>
 
-            {/* 操作栏 */}
-            <div className="flex flex-wrap items-center gap-2 mt-3">
+            <div className={cn('mt-4 flex items-center justify-between gap-3 border-b border-line py-4', !legacyNativeHeader && 'sm:hidden')}>
+              <div className="min-w-0"><p className="mb-1 text-xs text-muted">当前资源</p><p className="truncate text-sm font-medium">{source.name}</p></div>
+              <button className="btn-ghost shrink-0 !min-h-11 !rounded-xl !px-4 text-accent" onClick={() => setSwitchOpen(true)}><Icon name="refresh" className="h-4 w-4" />换源</button>
+            </div>
+
+            {/* Single-film pages have no episode navigation or auto-next setting. */}
+            {multipleEpisodes && <div className="flex flex-wrap items-center gap-2 mt-3">
               <button
-                className="btn-ghost btn-sm"
+                className="btn-ghost btn-sm !min-h-11"
                 disabled={currentIndex <= 0}
                 onClick={() => goEpisode(currentIndex - 1)}
               >
                 上一集
               </button>
               <button
-                className="btn-ghost btn-sm"
+                className="btn-ghost btn-sm !min-h-11"
                 disabled={episodes.length === 0 || currentIndex >= episodes.length - 1}
                 onClick={() => goEpisode(currentIndex + 1)}
               >
                 下一集
               </button>
-              <label className="flex items-center gap-1.5 text-xs text-muted ml-auto cursor-pointer">
+              <label className="flex min-h-11 items-center gap-2 text-xs text-muted ml-auto cursor-pointer">
                 <input
                   type="checkbox"
-                  className="h-3.5 w-3.5 accent-[#2563eb]"
+                  className="h-4 w-4 accent-[rgb(var(--c-accent))]"
                   checked={store.autoplayNext}
                   onChange={(e) => store.updateSettings({ autoplayNext: e.target.checked })}
                 />
                 自动连播
               </label>
-            </div>
+            </div>}
           </div>
 
           {/* 剧集侧栏 */}
-          <aside className="min-w-0 bg-surface-raised rounded-lg p-3 h-fit">
-            <div className="flex items-center justify-between gap-2 mb-2.5">
+          <aside className="min-w-0 h-fit sm:bg-surface-raised sm:rounded-xl sm:p-4">
+            {multipleEpisodes && <><div className="flex items-center justify-between gap-2 mb-2.5">
               <h2 className="text-sm font-semibold text-content">
-                剧集列表{episodes.length > 0 && `（${episodes.length}）`}
+                选集 <span className="ml-1 font-normal text-muted">{currentIndex + 1} / {episodes.length}</span>
               </h2>
               {/* 排列开关紧贴它所作用的列表：放在这里才看得出它管的是这一栏的顺序 */}
               {episodes.length > 1 && (
@@ -350,14 +376,7 @@ function WatchContent() {
                 </button>
               )}
             </div>
-            {episodes.length === 0 ? (
-              detailQuery.isLoading ? (
-                <LoadingState />
-              ) : (
-                <EmptyState variant="plain" title={detailQuery.isError ? '获取剧集失败' : '暂无剧集信息'} />
-              )
-            ) : (
-              <div className="grid grid-cols-5 lg:grid-cols-4 gap-1.5 max-h-[65vh] overflow-y-auto scrollbar-thin pr-1">
+              <div className="grid grid-cols-[repeat(auto-fill,minmax(44px,1fr))] lg:grid-cols-4 gap-2 max-h-64 overflow-y-auto scrollbar-thin pr-1">
                 {orderedEpisodes.map((realIndex) => (
                   <EpisodeButton
                     key={realIndex}
@@ -366,9 +385,10 @@ function WatchContent() {
                     onClick={() => goEpisode(realIndex)}
                   />
                 ))}
-              </div>
-            )}
-            <VideoInfoPanel info={detailQuery.data?.videoInfo} />
+              </div></>}
+            {detailQuery.isLoading && <LoadingState label="正在读取影片资料…" />}
+            {detailQuery.isError && <EmptyState variant="plain" title="暂未获取到影片资料" />}
+            <VideoInfoPanel info={detailQuery.data?.videoInfo} compactOnMobile />
             <p className="hidden md:block text-[10px] text-faint mt-3 leading-relaxed">
               快捷键：空格 播放/暂停 · ←/→ 快退/快进 5s · ↑/↓ 音量 · F 全屏 · Alt+←/→ 切换集数
             </p>
@@ -382,6 +402,9 @@ function WatchContent() {
           section={searchParams.get('section') === 'hd' ? 'hd' : undefined}
         />
       </main>
+
+      {moreOpen && <WatchMoreSheet multipleEpisodes={multipleEpisodes} downloadUnavailable={downloadUnavailable} onClose={closeMore}
+        onDownload={downloadCurrent} onSync={() => { setMoreOpen(false); openFamily(); }} />}
 
       {switchOpen && (
         <SwitchSourceModal
@@ -408,7 +431,7 @@ function EpisodeButton({ index, active, onClick }: { index: number; active: bool
   return (
     <button
       ref={ref}
-      className={cn('btn btn-sm !px-1', active ? 'episode-active' : 'btn-ghost')}
+      className={cn('btn btn-sm !min-h-11 !px-1 !rounded-xl', active ? 'episode-active' : 'btn-ghost')}
       onClick={onClick}
     >
       {index + 1}
@@ -420,7 +443,7 @@ function BackButton() {
   const router = useRouter();
   return (
     <button
-      className="p-2 -ml-2 rounded-md text-muted hover:text-content hover:bg-hover transition-colors"
+      className="min-h-11 min-w-11 p-2 -ml-2 rounded-md text-muted hover:text-content hover:bg-hover transition-colors"
       onClick={() => {
         if (window.history.length > 1) router.back();
         else router.push('/');

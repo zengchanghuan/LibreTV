@@ -20,13 +20,14 @@ class MainActivity : Activity() {
     private lateinit var web: WebView
     private lateinit var status: TextView
     private lateinit var retry: Button
+    private lateinit var toolbar: LinearLayout
     private val prefs by lazy { getSharedPreferences("libretv", MODE_PRIVATE) }
     private var origin: Uri? = null
     private var playback: NativePlayback? = null
     private var navigationFailed = false
     private var pending = JSONObject()
     private val pendingKey get() = "pending:${origin}"
-    private val bridgeScript = """window.__LIBRETV_NATIVE__={version:1,platform:'android',postMessage:m=>libretvNative.postMessage(JSON.stringify(m))};window.dispatchEvent(new Event('libretv:native-ready'));"""
+    private val bridgeScript = """window.__LIBRETV_NATIVE__={version:1,platform:'android',watchLayout:true,postMessage:m=>libretvNative.postMessage(JSON.stringify(m))};window.dispatchEvent(new Event('libretv:native-ready'));"""
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -45,7 +46,7 @@ class MainActivity : Activity() {
             onBackInvokedDispatcher.registerOnBackInvokedCallback(android.window.OnBackInvokedDispatcher.PRIORITY_DEFAULT) { handleBack() }
         }
         val column = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        val toolbar = LinearLayout(this)
+        toolbar = LinearLayout(this)
         listOf("首页" to { origin?.let { connect(it) } }, "设置" to { settings() }).forEach { (title, action) ->
             toolbar.addView(Button(this).apply { text = title; setOnClickListener { action() } }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         }
@@ -62,7 +63,7 @@ class MainActivity : Activity() {
         }
         root.addView(connectionStatus, FrameLayout.LayoutParams(-1, -2, android.view.Gravity.CENTER))
         web.webViewClient = object : WebViewClient() {
-            override fun onPageStarted(view: WebView, url: String, favicon: android.graphics.Bitmap?) { navigationFailed = false }
+            override fun onPageStarted(view: WebView, url: String, favicon: android.graphics.Bitmap?) { navigationFailed = false; toolbar.visibility = View.VISIBLE }
             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
                 if (origin?.let { sameOrigin(request.url, it) } == true) return false
                 if (request.isForMainFrame && request.hasGesture() && request.url.scheme in listOf("http", "https")) runCatching { startActivity(Intent(Intent.ACTION_VIEW, request.url)) }
@@ -92,6 +93,11 @@ class MainActivity : Activity() {
     }
     private fun command(body: JSONObject) {
         when (body.optString("type")) {
+            "watchLayout" -> {
+                val current = Uri.parse(web.url ?: "")
+                val watch = body.optBoolean("enabled") && current.path?.trim('/') == "watch" && origin?.let { sameOrigin(current, it) } == true
+                toolbar.visibility = if (watch) View.GONE else View.VISIBLE
+            }
             "ready" -> flush()
             "ack" -> { val id = body.optString("eventId"); pending.keys().asSequence().toList().filter { pending.getJSONObject(it).optString("eventId") == id }.forEach { pending.remove(it) }; persist() }
             "close" -> if (playback?.session?.id == body.optString("sessionId")) playback?.close()

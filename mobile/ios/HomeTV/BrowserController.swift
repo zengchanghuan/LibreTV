@@ -14,6 +14,10 @@ final class BrowserController: UIViewController, WKScriptMessageHandler, WKNavig
     override var preferredStatusBarStyle: UIStatusBarStyle { darkTheme ? .lightContent : .darkContent }
     private let tabBar = UITabBar()
     private var tabBarHeight: NSLayoutConstraint!
+    private var navigationBarHeight: NSLayoutConstraint!
+    private var webBottomToTabs: NSLayoutConstraint!
+    private var webBottomToSafeArea: NSLayoutConstraint!
+    private var watchLayout = false
     private let connectionStatus = UIStackView()
     private let offlineButton = UIButton(type: .system)
     private let retry = UIButton(type: .system)
@@ -27,7 +31,7 @@ final class BrowserController: UIViewController, WKScriptMessageHandler, WKNavig
         config.applicationNameForUserAgent = "LibreTVNative/1"
         config.userContentController.add(self, name: "libretvNative")
         let bridge = """
-        window.__LIBRETV_NATIVE__={version:1,platform:'ios',postMessage:m=>window.webkit.messageHandlers.libretvNative.postMessage(m)};
+        window.__LIBRETV_NATIVE__={version:1,platform:'ios',watchLayout:true,postMessage:m=>window.webkit.messageHandlers.libretvNative.postMessage(m)};
         window.addEventListener('libretv:show-download-manager',e=>{e.stopImmediatePropagation();window.__LIBRETV_NATIVE__.postMessage({type:'downloads'});});
         window.addEventListener('libretv:add-download',e=>{e.stopImmediatePropagation();window.__LIBRETV_NATIVE__.postMessage({type:'download',url:e.detail?.url,title:e.detail?.title});});
         window.dispatchEvent(new Event('libretv:native-ready'));
@@ -53,11 +57,14 @@ final class BrowserController: UIViewController, WKScriptMessageHandler, WKNavig
         connectionStatus.addArrangedSubview(status); connectionStatus.addArrangedSubview(retry); connectionStatus.addArrangedSubview(offlineButton)
         for sub in [web!, connectionStatus, bottomBackground, tabBar, navigationBar] { sub.translatesAutoresizingMaskIntoConstraints = false; view.addSubview(sub) }
         tabBarHeight = tabBar.heightAnchor.constraint(equalToConstant: 83)
+        navigationBarHeight = navigationBar.heightAnchor.constraint(equalToConstant: 44)
+        webBottomToTabs = web.bottomAnchor.constraint(equalTo: tabBar.topAnchor)
+        webBottomToSafeArea = web.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor)
         NSLayoutConstraint.activate([
             tabBar.bottomAnchor.constraint(equalTo: view.bottomAnchor), tabBar.leadingAnchor.constraint(equalTo: view.leadingAnchor), tabBar.trailingAnchor.constraint(equalTo: view.trailingAnchor), tabBarHeight,
             bottomBackground.topAnchor.constraint(equalTo: tabBar.topAnchor), bottomBackground.bottomAnchor.constraint(equalTo: view.bottomAnchor), bottomBackground.leadingAnchor.constraint(equalTo: view.leadingAnchor), bottomBackground.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            navigationBar.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor), navigationBar.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor), navigationBar.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor), navigationBar.heightAnchor.constraint(equalToConstant: 44),
-            web.topAnchor.constraint(equalTo: navigationBar.bottomAnchor), web.bottomAnchor.constraint(equalTo: tabBar.topAnchor), web.leadingAnchor.constraint(equalTo: view.leadingAnchor), web.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            navigationBar.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor), navigationBar.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor), navigationBar.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor), navigationBarHeight,
+            web.topAnchor.constraint(equalTo: navigationBar.bottomAnchor), webBottomToTabs, web.leadingAnchor.constraint(equalTo: view.leadingAnchor), web.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             connectionStatus.centerXAnchor.constraint(equalTo: web.centerXAnchor), connectionStatus.centerYAnchor.constraint(equalTo: web.centerYAnchor), connectionStatus.widthAnchor.constraint(lessThanOrEqualTo: web.widthAnchor, constant: -40)
         ])
         applyTheme(dark: darkTheme)
@@ -72,8 +79,17 @@ final class BrowserController: UIViewController, WKScriptMessageHandler, WKNavig
         // A system tab bar includes the home-indicator inset in its own height.
         // Constraining it above that inset compresses its icon/title content.
         let fitted = tabBar.sizeThatFits(CGSize(width: view.bounds.width, height: 0)).height
-        let height = max(49 + view.safeAreaInsets.bottom, fitted)
+        let height = watchLayout ? 0 : max(49 + view.safeAreaInsets.bottom, fitted)
         if abs(tabBarHeight.constant - height) > 0.5 { tabBarHeight.constant = height }
+    }
+    private func setWatchLayout(_ enabled: Bool) {
+        guard watchLayout != enabled else { return }
+        watchLayout = enabled
+        navigationBar.isHidden = enabled; tabBar.isHidden = enabled; bottomBackground.isHidden = enabled
+        navigationBarHeight.constant = enabled ? 0 : 44
+        webBottomToTabs.isActive = !enabled
+        webBottomToSafeArea.isActive = enabled
+        view.setNeedsLayout()
     }
     private func applyTheme(dark: Bool) {
         darkTheme = dark
@@ -150,6 +166,7 @@ final class BrowserController: UIViewController, WKScriptMessageHandler, WKNavig
               let items = tabBar.items, items.indices.contains(index) else { return }
         tabBar.selectedItem = items[index]
         navigationURL = url
+        setWatchLayout(NativeNavigation.usesWatchLayout(for: url, origin: origin))
         if let page = NativeNavigation.page(for: url, origin: origin) {
             pageNavigationItem.title = page.title
             if page.parent != nil {
@@ -163,6 +180,8 @@ final class BrowserController: UIViewController, WKScriptMessageHandler, WKNavig
     private func connectionFailed(_ error: Error) {
         let failure = error as NSError
         if failure.domain == NSURLErrorDomain && failure.code == NSURLErrorCancelled { return }
+        // Keep native navigation available if the web page cannot render its controls.
+        setWatchLayout(false)
         let detail = "\(failure.domain) (\(failure.code)): \(failure.localizedDescription)"
         UserDefaults.standard.set(detail, forKey: "lastConnectionError")
         status.text = "连接失败：\(failure.localizedDescription)\n错误码 \(failure.code)"

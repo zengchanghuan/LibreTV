@@ -186,9 +186,25 @@ private final class PessimisticBufferItem: AVPlayerItem {
             _ = await until { !web.isLoading && navigation.topItem?.title == "首页" }
             _ = try await web.evaluateJavaScript("history.pushState({},'', '/?s=movie');history.pushState({},'', '/watch?id=42')")
             _ = await until { navigation.topItem?.title == "影片详情" }
-            try tapNavigationBack()
+            await wait(0.3)
+            func watchFitsSafeArea() -> Bool {
+                navigation.isHidden && tabs.isHidden && abs(web.frame.minY - host.view.safeAreaInsets.top) < 2
+                    && abs(web.frame.maxY - (host.view.bounds.height - host.view.safeAreaInsets.bottom)) < 2
+            }
+            check("watch-page-has-one-navigation-and-no-tabs", watchFitsSafeArea())
+            snapshot("watch-layout-portrait")
+            scene.requestGeometryUpdate(.iOS(interfaceOrientations: .landscapeRight))
+            _ = await until { scene.interfaceOrientation == .landscapeRight }; await wait(0.5)
+            check("watch-page-landscape-safe-area", watchFitsSafeArea())
+            scene.requestGeometryUpdate(.iOS(interfaceOrientations: .portrait))
+            _ = await until { scene.interfaceOrientation == .portrait }; await wait(0.3)
+            browser.webView(web, didFail: nil, withError: NSError(domain: NSURLErrorDomain, code: NSURLErrorNotConnectedToInternet))
+            check("watch-navigation-restored-on-load-failure", !navigation.isHidden && !tabs.isHidden)
+            _ = try await web.evaluateJavaScript("history.replaceState({},'',location.href)")
+            _ = await until { navigation.isHidden && tabs.isHidden }
+            _ = try await web.evaluateJavaScript("history.back()")
             let searchBack = await until { navigation.topItem?.title == "搜索结果" && web.url?.query == "s=movie" }
-            check("navigation-watch-back-to-search", searchBack && navigation.topItem?.leftBarButtonItem != nil)
+            check("navigation-watch-back-to-search", searchBack && navigation.topItem?.leftBarButtonItem != nil && !navigation.isHidden && !tabs.isHidden)
             try tapNavigationBack()
             _ = await until { navigation.topItem?.title == "首页" }
             check("navigation-search-back-to-home", navigation.topItem?.leftBarButtonItem == nil && tabs.selectedItem?.tag == 0)

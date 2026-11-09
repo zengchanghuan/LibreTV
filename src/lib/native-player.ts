@@ -13,7 +13,7 @@ export interface NativeProgress {
 }
 declare global {
   interface Window {
-    __LIBRETV_NATIVE__?: { version: number; platform: string; postMessage: (message: unknown) => void };
+    __LIBRETV_NATIVE__?: { version: number; platform: string; watchLayout?: boolean; postMessage: (message: unknown) => void };
   }
 }
 export function isNativeApp(): boolean {
