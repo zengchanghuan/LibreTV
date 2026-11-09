@@ -1,5 +1,6 @@
 import metadataData from './film-poster-data.json';
 import titleData from './work-title-data.json';
+import grandSlamData from './korean-grand-slam-data.json';
 import type { FilmPosterMetadata } from './film-poster-metadata';
 import type { MediaType } from './media-type';
 import { searchTitleKey } from './cms-parser';
@@ -84,7 +85,29 @@ export function createWorkCatalog(metadata: Record<string, FilmPosterMetadata>, 
   return { works, byId, resolve };
 }
 
-export const workCatalog = createWorkCatalog(metadataData as Record<string, FilmPosterMetadata>, titleData.works as WorkTitleRecord[]);
+// Curated award films participate in the same identity/alias search as other collections.
+// Preserve existing canonical IDs so saved feedback and history still identify the same work.
+const catalogMetadata = { ...metadataData } as Record<string, FilmPosterMetadata>;
+const catalogTitles: WorkTitleRecord[] = titleData.works.map(work => ({ ...work,
+  aliases: [...work.aliases], metadataKeys: [...work.metadataKeys],
+})) as WorkTitleRecord[];
+for (const film of grandSlamData.films) {
+  const key = `${film.title}|${film.year}`;
+  const names = new Set([film.title, ...film.aliases].map(workTitleKey));
+  const matches = catalogTitles.filter(work => work.year === film.year && work.mediaType === 'movie'
+    && [work.title, ...work.aliases, ...work.metadataKeys.map(key => key.slice(0, key.lastIndexOf('|')))]
+      .some(name => names.has(workTitleKey(name))));
+  const previous = matches.length === 1 ? matches[0] : undefined;
+  catalogMetadata[key] = { ...catalogMetadata[key], ...film.metadata, mediaType: 'movie' };
+  if (previous) {
+    previous.metadataKeys = [...new Set([...previous.metadataKeys, key])];
+    previous.aliases = [...new Set([...previous.aliases, film.title, ...film.aliases])];
+  } else {
+    catalogTitles.push({ id: film.id, title: film.title, year: film.year, mediaType: 'movie',
+      originalTitle: film.referenceTitle, aliases: film.aliases, metadataKeys: [key] });
+  }
+}
+export const workCatalog = createWorkCatalog(catalogMetadata, catalogTitles);
 export const resolveWork = workCatalog.resolve;
 export const getWork = (id: string) => workCatalog.byId.get(id);
 

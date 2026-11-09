@@ -1,12 +1,13 @@
 'use client';
 
 import { useState } from 'react';
+import { contextForFilm, type PickFilm } from '@/lib/work-search';
 import { grandSlamActors, grandSlamActorFilms, grandSlamSingleActors, koreanGrandSlamCollection, type GrandSlamActor } from '@/lib/korean-grand-slam';
 import { cn } from '@/lib/utils';
 import { FilmPoster } from './film-poster';
 import { FilmCardDetails } from './film-card-details';
 
-export function KoreanGrandSlam({ onPick }: { onPick: (title: string) => void }) {
+export function KoreanGrandSlam({ onPick }: { onPick: PickFilm }) {
   const [view, setView] = useState<'single' | 'actors'>('single');
   const [gender, setGender] = useState<'male' | 'female'>('male');
   const [selected, setSelected] = useState<Record<'male' | 'female', string>>({ male: grandSlamActors.find(a => a.gender === 'male')!.name, female: grandSlamActors.find(a => a.gender === 'female')!.name });
@@ -32,7 +33,7 @@ export function KoreanGrandSlam({ onPick }: { onPick: (title: string) => void })
     </div>}
     <div className="grid grid-cols-2 items-start gap-x-3 gap-y-6 lg:grid-cols-4 lg:gap-x-5">
       {displayed.flatMap(actor => grandSlamActorFilms(actor).map(({ film, awards }) => <article key={`${actor.name}-${film.id}`}>
-        <button type="button" onClick={() => onPick(film.title)} aria-label={`查找《${film.title}》片源`} className={cn("block aspect-[4/5] w-full overflow-hidden rounded-xl", film.posterLandscape && "bg-black [&_img]:object-contain")}>
+        <button type="button" onClick={() => onPick(film.title, contextForFilm(film.title, film.year, 'movie'))} aria-label={`查找《${film.title}》片源`} className={cn("block aspect-[4/5] w-full overflow-hidden rounded-xl", film.posterLandscape && "bg-black [&_img]:object-contain")}>
           <FilmPoster title={film.title} year={String(film.year)} url={film.metadata.poster} mode="direct" imageAlt={film.coverKind === 'still' ? `${film.title}剧照` : undefined} />
         </button>
         <h3 className="mt-3 font-semibold leading-6">{film.title} <span className="text-xs font-normal text-muted">{film.year}</span></h3>
@@ -47,7 +48,7 @@ export function KoreanGrandSlam({ onPick }: { onPick: (title: string) => void })
             <p><External href={film.source}>影片资料</External>{film.metadata.rating && film.metadata.source !== film.source && <> · <External href={film.metadata.source!}>评分来源</External></>} · <AwardSources actor={actor} /></p>
           </div>
         </details>
-        <button type="button" onClick={() => onPick(film.title)} className="mt-3 rounded-lg bg-chip px-3 py-2 text-xs hover:bg-hover">查找片源</button>
+        <button type="button" onClick={() => onPick(film.title, contextForFilm(film.title, film.year, 'movie'))} className="mt-3 rounded-lg bg-chip px-3 py-2 text-xs hover:bg-hover">查找片源</button>
       </article>))}
     </div>
     <details className="mt-7 border-t border-line pt-4 text-xs leading-6 text-muted">

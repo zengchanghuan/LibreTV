@@ -1,4 +1,7 @@
 import { describe, expect, it } from 'vitest';
+import { contextForFilm, buildSearchPlan, workResultStatus } from './work-search';
+import { resolveWork } from './work-catalog';
+import type { SearchResultItem } from './types';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { grandSlamActors, grandSlamFilms, grandSlamActorFilms, grandSlamSingleActors, koreanGrandSlamCollection } from './korean-grand-slam';
@@ -33,6 +36,15 @@ describe('韩国大满贯 curated collection', () => {
     expect(grandSlamFilms.find(f => f.title === '国际市场')?.year).toBe(2014);
     expect(grandSlamFilms.find(f => f.title === '大院君')?.year).toBe(1968);
     expect(grandSlamFilms.find(f => f.title === '石花村')?.year).toBe(1972);
+  });
+  it('passes aliases and year/type identity through the shared search catalog', () => {
+    const context = contextForFilm('我能说', 2017, 'movie');
+    expect(context.workId).toBe('kofic-20174142');
+    expect(buildSearchPlan('我能说', context).titles).toContain('花漾奶奶秀英文');
+    expect(resolveWork('老男孩', 2003, 'movie')?.id).toBe('tmdb:movie:670');
+    expect(resolveWork('1987', 2017, 'movie')?.id).toBe('tmdb:movie:437103');
+    const plan = buildSearchPlan('断箭', contextForFilm('断箭', 2012, 'movie'));
+    expect(workResultStatus({ name: '断箭', year: '1996', typeName: '动作片' } as SearchResultItem, plan)).toBe('reject');
   });
   it('ships readable credits and local posters without invented placeholders', () => {
     for (const film of grandSlamFilms) {
