@@ -1,4 +1,4 @@
-import { localDatabaseName } from './account-client';
+import { activeAccountId, localDatabaseName } from './account-client';
 import { SETTINGS_FORMAT, isSettingsFormat } from './settings-format';
 import Dexie, { type EntityTable } from 'dexie';
 import type { SourceConfig } from './types';
@@ -77,6 +77,8 @@ export interface DownloadTaskEntry {
 
 // A profile change reloads the page. Each open page keeps writing to its original profile.
 export const activeProfileId = readProfileId();
+export const activeSyncId = activeProfileId || activeAccountId;
+export const accountHistorySync = Boolean(activeAccountId && !activeProfileId);
 export const db = new Dexie(activeProfileId ? `libretv-family-${activeProfileId}` : localDatabaseName) as Dexie & {
   history: EntityTable<HistoryEntry, 'id'>;
   progress: EntityTable<ProgressEntry, 'key'>;
@@ -86,6 +88,7 @@ export const db = new Dexie(activeProfileId ? `libretv-family-${activeProfileId}
   downloads: EntityTable<DownloadTaskEntry, 'id'>;
   syncOutbox: EntityTable<SyncMutation, 'id'>;
   syncMeta: EntityTable<{ key: string; value: number }, 'key'>;
+  syncBackup: EntityTable<{ id: string; kind: SyncKind; value: HistoryEntry | ProgressEntry }, 'id'>;
   nativeReceipts: EntityTable<{ key: string; sequence: number; receivedAt: number; openedAt?: number; sessionId?: string }, 'key'>;
 };
 
@@ -108,10 +111,12 @@ db.version(3).stores({
 
 db.version(4).stores({ syncOutbox: 'id', syncMeta: 'key' });
 db.version(5).stores({ nativeReceipts: 'key, receivedAt' });
+// One-time local backup before account history starts synchronizing. Never uploaded as a table.
+db.version(6).stores({ syncBackup: 'id' });
 
 /** Returns whether this event may update the current playback preferences. ACK even stale events. */
 export async function recordNativeProgress(p: NativeProgress): Promise<boolean> {
-  if (p.profileId !== activeProfileId) return false;
+  if (p.profileId !== activeSyncId) return false;
   const current = await db.transaction('rw', [db.history, db.progress, db.syncOutbox, db.syncMeta, db.nativeReceipts], async () => {
     const receiptKey = `${p.sessionId}:${p.index}`;
     if (((await db.nativeReceipts.get(receiptKey))?.sequence ?? -1) >= p.sequence) return false;
@@ -150,12 +155,12 @@ export async function recordNativeProgress(p: NativeProgress): Promise<boolean> 
 }
 
 async function dirty(kind: SyncKind, key: string, value: HistoryEntry | ProgressEntry | null) {
-  if (!activeProfileId) return;
+  if (!activeSyncId) return;
   const revision = (await db.syncMeta.get('revision'))?.value || 0;
   await db.syncOutbox.put({ id: `${kind}:${key}`, mutationId: crypto.randomUUID(), kind, key, value, baseRevision: revision });
 }
 function notifyHistoryChange() {
-  if (activeProfileId && typeof window !== 'undefined') window.dispatchEvent(new Event('libretv:history-changed'));
+  if (activeSyncId && typeof window !== 'undefined') window.dispatchEvent(new Event('libretv:history-changed'));
 }
 async function writeHistory(action: () => Promise<void>) {
   await db.transaction('rw', [db.history, db.progress, db.syncOutbox, db.syncMeta], action);

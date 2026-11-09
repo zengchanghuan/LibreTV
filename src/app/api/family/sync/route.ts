@@ -1,6 +1,6 @@
 import { accountIdFromCookie } from '@/lib/auth';
 import { guardFamily, familyJson, readFamilyBody } from '@/lib/family-api';
-import { syncProfile } from '@/lib/family-server';
+import { syncAccount, syncProfile } from '@/lib/family-server';
 import { parseMutations, validProfileId } from '@/lib/family-types';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -9,8 +9,15 @@ export async function POST(req: Request) {
   const guard = guardFamily(req); if (guard) return guard;
   try {
     const body = await readFamilyBody(req);
+    const accountId = accountIdFromCookie(req.headers.get('cookie'));
+    if (body.scope === 'account') {
+      if (!accountId) return familyJson({ error: '请先登录账号' }, 401);
+      if (body.accountId !== accountId) return familyJson({ error: '账号已切换，请刷新页面后重试' }, 409);
+      return familyJson(await syncAccount(accountId, parseMutations(body.mutations)));
+    }
+    if (body.scope !== undefined) return familyJson({ error: '同步范围无效' }, 400);
     if (!validProfileId(body.profileId)) return familyJson({ error: '无效的家庭成员' }, 400);
-    return familyJson(await syncProfile(body.profileId, parseMutations(body.mutations), accountIdFromCookie(req.headers.get('cookie'))));
+    return familyJson(await syncProfile(body.profileId, parseMutations(body.mutations), accountId));
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code) return familyJson({ error: '同步暂时不可用，请检查服务器数据目录' }, 503);
     return familyJson({ error: error instanceof Error ? error.message : '同步失败' }, 400);

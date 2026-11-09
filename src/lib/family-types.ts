@@ -11,6 +11,8 @@ export interface SyncMutation {
   key: string;
   value: HistoryEntry | ProgressEntry | null;
   baseRevision: number;
+  /** One-time import of pre-sync local history; never resurrects a server deletion. */
+  initialImport?: boolean;
 }
 export interface SyncRow { kind: SyncKind; key: string; value: HistoryEntry | ProgressEntry | null; revision: number }
 export interface FamilySnapshot { revision: number; floorRevision: number; rows: SyncRow[] }
@@ -24,7 +26,7 @@ export function readProfileId(): string | null {
 
 function text(value: unknown, max: number): value is string { return typeof value === 'string' && value.length > 0 && value.length <= max; }
 function number(value: unknown, max = Number.MAX_SAFE_INTEGER): value is number { return typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= max; }
-function optionalUrl(value: unknown): boolean { return value === undefined || value === '' || (typeof value === 'string' && value.length <= 4096 && /^https?:\/\//i.test(value)); }
+function optionalUrl(value: unknown, local = false): boolean { return value === undefined || value === '' || (typeof value === 'string' && value.length <= 4096 && (/^https?:\/\//i.test(value) || (local && /^\/(?!\/)/.test(value)))); }
 
 export function parseMutations(input: unknown): SyncMutation[] {
   if (!Array.isArray(input) || input.length > 400) throw new Error('同步记录数量超出限制');
@@ -41,7 +43,7 @@ export function parseMutations(input: unknown): SyncMutation[] {
             key !== `${value.sourceKey}_${value.vodId}` || !number(value.episodeIndex, 100000) || !Number.isInteger(value.episodeIndex) ||
             !number(value.totalEpisodes, 100000) || !Number.isInteger(value.totalEpisodes) ||
             !number(value.playbackPosition, 864000) || !number(value.duration, 864000) ||
-            !number(value.timestamp) || !optionalUrl(value.sourceUrl) || !optionalUrl(value.pic)) throw new Error('历史记录格式不正确');
+            !number(value.timestamp) || !optionalUrl(value.sourceUrl) || !optionalUrl(value.pic, true)) throw new Error('历史记录格式不正确');
         normalized = { id: key, sourceKey: value.sourceKey, vodId: value.vodId, title: value.title,
           sourceUrl: value.sourceUrl, pic: value.pic, episodeIndex: value.episodeIndex, totalEpisodes: value.totalEpisodes,
           playbackPosition: value.playbackPosition, duration: value.duration, timestamp: value.timestamp };
@@ -50,7 +52,8 @@ export function parseMutations(input: unknown): SyncMutation[] {
         normalized = { key, position: value.position, duration: value.duration, updatedAt: value.updatedAt };
       }
     }
-    return { id: `${kind}:${key}`, kind, key, value: normalized, mutationId, baseRevision };
+    return { id: `${kind}:${key}`, kind, key, value: normalized, mutationId, baseRevision,
+      ...(raw.initialImport === true && normalized ? { initialImport: true } : {}) };
   });
 }
 
@@ -61,10 +64,15 @@ export function mergeFamily(snapshot: FamilySnapshot, mutations: SyncMutation[],
   const accepted: string[] = [], conflicts: string[] = [];
   for (const mutation of mutations) {
     const old = rows.get(mutation.id);
+    const importing = mutation.initialImport && mutation.value !== null;
+    const timestamp = (value: HistoryEntry | ProgressEntry) => 'timestamp' in value ? value.timestamp : value.updatedAt;
+    const importTime = mutation.value ? Math.min(timestamp(mutation.value), now) : 0;
     if (mutation.baseRevision < snapshot.floorRevision || mutation.baseRevision > snapshot.revision ||
-        (old && old.revision > mutation.baseRevision)) { conflicts.push(mutation.mutationId); continue; }
+        (importing ? old && (!old.value || timestamp(old.value) >= importTime) : old && old.revision > mutation.baseRevision)) {
+      conflicts.push(mutation.mutationId); continue;
+    }
     const value = mutation.value === null ? null : mutation.kind === 'history'
-      ? { ...mutation.value, timestamp: now } : { ...mutation.value, updatedAt: now };
+      ? { ...mutation.value, timestamp: importing ? importTime : now } : { ...mutation.value, updatedAt: importing ? importTime : now };
     rows.set(mutation.id, { kind: mutation.kind, key: mutation.key, value, revision: ++revision });
     accepted.push(mutation.mutationId);
   }

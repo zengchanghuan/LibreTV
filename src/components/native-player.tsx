@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import { isNativeApp, nativePost, parseNativeProgress, scheduleNativeAutoOpen, type NativeSession } from '@/lib/native-player';
-import { activeProfileId, db, recordNativeProgress } from '@/lib/db';
+import { activeSyncId, db, recordNativeProgress } from '@/lib/db';
 import { useAuth } from './auth';
 import { useFamily } from './family';
 
@@ -24,7 +24,7 @@ export function NativePlaybackSync() {
     let queue = Promise.resolve();
     const event = (raw: Event) => {
       const payload = parseNativeProgress((raw as CustomEvent).detail);
-      if (!payload || payload.profileId !== activeProfileId) return;
+      if (!payload || payload.profileId !== activeSyncId) return;
       queue = queue.then(async () => {
         const current = await recordNativeProgress(payload);
         if (current && payload.rate && [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 3].includes(payload.rate)) {
@@ -77,7 +77,7 @@ export function NativePlayerPanel({ title, sourceKey, sourceUrl, vodId, episodes
       const position = await getPosition();
       const savedRate = Number(localStorage.getItem('libretv-playback-rate'));
       const session: NativeSession = {
-        id: crypto.randomUUID(), title, sourceKey, sourceUrl, vodId, profileId: activeProfileId,
+        id: crypto.randomUUID(), title, sourceKey, sourceUrl, vodId, profileId: activeSyncId,
         index, episodes: episodes.map((url, i) => ({ url: new URL(url, location.origin).href, title: `第 ${i + 1} 集`, position: i === index ? position : positions[i]?.position || 0 })),
         rate: [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 3].includes(savedRate) ? savedRate : 1,
         autoplayNext, baseRevision: (await db.syncMeta.get('revision'))?.value || 0, openedAt: Date.now(),

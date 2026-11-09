@@ -6,7 +6,8 @@ import { beforeEach, afterEach, describe, it, expect, vi } from 'vitest';
 import { checkAccount, type Account } from './accounts';
 import { signSession, verifySession, accountIdFromCookie } from './auth';
 import { POST } from '@/app/api/auth/route';
-import { createProfile, listProfiles, syncProfile } from './family-server';
+import { createProfile, listProfiles, syncAccount, syncProfile } from './family-server';
+import { POST as syncHistory } from '@/app/api/family/sync/route';
 let directory: string;
 let account: Account;
 beforeEach(async () => {
@@ -21,6 +22,29 @@ function login(body: unknown, ip = randomUUID()) {
   return POST(new Request('https://tv.example/api/auth', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-real-ip': ip }, body: JSON.stringify(body) }));
 }
 describe('independent accounts and legacy compatibility', () => {
+  it('synchronizes account history without a family profile, persists it and keeps optional members separate', async () => {
+    const value = { id: 's_42', sourceKey: 's', vodId: '42', title: '历史测试', episodeIndex: 0, totalEpisodes: 1, playbackPosition: 120, duration: 1800, timestamp: 100 };
+    const request = (mutations: unknown[]) => new Request('https://tv.example/api/family/sync', { method: 'POST', headers: {
+      'content-type': 'application/json', cookie: `ltv_session=${signSession(account).token}`,
+    }, body: JSON.stringify({ scope: 'account', accountId: account.id, mutations }) });
+    const result = await syncHistory(request([{ kind: 'history', key: value.id, value, mutationId: 'import', baseRevision: 0, initialImport: true }]));
+    expect(result.status).toBe(200); expect(result.headers.get('cache-control')).toContain('no-store');
+    expect((await result.json()).rows[0].value).toMatchObject({ timestamp: 100, playbackPosition: 120 });
+    expect(await listProfiles(account.id)).toEqual([]);
+    const profile = await createProfile('可选成员', '🐻', account.id);
+    expect((await syncProfile(profile.id, [], account.id)).rows).toEqual([]);
+    expect((await (await syncHistory(request([]))).json()).rows).toHaveLength(1);
+    expect((await syncAccount(randomUUID(), [])).rows).toEqual([]);
+  });
+
+  it('rejects stale account tabs and never uses a submitted account ID as the destination', async () => {
+    const request = (id: string, token = signSession(account).token) => new Request('https://tv.example/api/family/sync', { method: 'POST', headers: {
+      'content-type': 'application/json', cookie: `ltv_session=${token}`,
+    }, body: JSON.stringify({ scope: 'account', accountId: id, mutations: [] }) });
+    expect((await syncHistory(request(randomUUID()))).status).toBe(409);
+    expect((await syncHistory(request(account.id, signSession().token))).status).toBe(401);
+    expect((await syncAccount(account.id, [])).rows).toEqual([]);
+  });
   it('accepts leading-zero passwords and rejects wrong or missing accounts', async () => {
     expect((await checkAccount('bruce', '034567'))?.id).toBe(account.id);
     expect(await checkAccount('bruce', '34567')).toBeNull();

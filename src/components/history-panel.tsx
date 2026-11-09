@@ -19,6 +19,7 @@ import {
 import { buildWatchUrl, cn, formatRelativeTime, formatTime } from '@/lib/utils';
 import { useToast } from './toast';
 import { resolveSource, useAppStore } from '@/lib/store';
+import { useFamily } from './family';
 
 /**
  * 观看历史面板（IndexedDB 实时查询）。
@@ -30,6 +31,9 @@ import { resolveSource, useAppStore } from '@/lib/store';
 const VISIBLE_LIMIT = 50;
 
 export function HistoryPanel({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const sync = useFamily();
+  const { accountSync, synchronize } = sync;
+  useEffect(() => { if (open && accountSync) void synchronize(); }, [open, accountSync, synchronize]);
   // 全量读取（上限即 DB 淘汰上限）：默认只渲染最近若干条，搜索时覆盖更早的记录
   const history = useLiveQuery(
     () => db.history.orderBy('timestamp').reverse().limit(MAX_HISTORY).toArray(),
@@ -97,6 +101,10 @@ export function HistoryPanel({ open, onClose }: { open: boolean; onClose: () => 
         ) : undefined
       }
     >
+      <div className="flex items-center justify-between gap-3 mb-4 text-xs text-muted">
+        <span role="status">{sync.status || '登录账号后自动同步播放历史'}</span>
+        <button type="button" className="shrink-0 text-accent" onClick={sync.open}>同步设置</button>
+      </div>
       {!history ? (
         <LoadingState />
       ) : total === 0 ? (

@@ -3,7 +3,7 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { AVATARS, mergeFamily, type FamilyProfile, type FamilySnapshot, type SyncMutation } from './family-types';
 
-interface FamilyFile { version: 1; profiles: FamilyProfile[]; states: Record<string, FamilySnapshot> }
+interface FamilyFile { version: 1; profiles: FamilyProfile[]; states: Record<string, FamilySnapshot>; accountState?: FamilySnapshot }
 // Shared across route modules in the one Node process supported by the file backend.
 const shared = globalThis as typeof globalThis & { libretvFamilyQueues?: Map<string, Promise<unknown>> };
 const queues = shared.libretvFamilyQueues ??= new Map();
@@ -57,6 +57,16 @@ export function syncProfile(id: string, mutations: SyncMutation[], accountId?: s
     if (!file.profiles.some(profile => profile.id === id)) throw new Error('家庭成员不存在');
     const result = mergeFamily(file.states[id], mutations);
     file.states[id] = { revision: result.revision, floorRevision: result.floorRevision, rows: result.rows };
+    return result;
+  }, mutations.length > 0, accountId);
+}
+
+/** Account identity comes from the authenticated session, never a client-selected destination. */
+export function syncAccount(accountId: string, mutations: SyncMutation[]) {
+  if (!accountId) throw new Error('请先登录账号');
+  return transact(file => {
+    const result = mergeFamily(file.accountState || { revision: 0, floorRevision: 0, rows: [] }, mutations);
+    file.accountState = { revision: result.revision, floorRevision: result.floorRevision, rows: result.rows };
     return result;
   }, mutations.length > 0, accountId);
 }
