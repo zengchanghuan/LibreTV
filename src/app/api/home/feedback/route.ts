@@ -1,6 +1,8 @@
 import { accountIdFromCookie } from '@/lib/auth';
 import { guardFamily, familyJson } from '@/lib/family-api';
 import { publicHomeFeedback, readHomeFeedback, saveHomeFeedback } from '@/lib/home-feedback';
+import { readHomeRecommendations } from '@/lib/home-recommendation-service';
+import { buildHomeRecommendations } from '@/lib/home-recommendations';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -28,11 +30,22 @@ export async function POST(req: Request) {
     body = JSON.parse(text + decoder.decode());
   } catch { return familyJson({ error: '反馈格式无效' }, 400); }
   if (!body || typeof body !== 'object') return familyJson({ error: '反馈格式无效' }, 400);
-  const { workId, vote } = body as Record<string, unknown>;
+  const { workId, vote, filterAdult } = body as Record<string, unknown>;
   if (typeof workId !== 'string' || !workId || workId.length > 300
-    || (vote !== 'like' && vote !== 'dislike' && vote !== null)) return familyJson({ error: '反馈参数无效' }, 400);
+    || (vote !== 'like' && vote !== 'dislike' && vote !== null)
+    || (filterAdult !== undefined && typeof filterAdult !== 'boolean')) return familyJson({ error: '反馈参数无效' }, 400);
   try {
-    const result = await saveHomeFeedback(accountIdFromCookie(req.headers.get('cookie')), workId, vote);
-    return result ? familyJson(result) : familyJson({ error: '未找到这部影片，请刷新后重试' }, 404);
+    const account = accountIdFromCookie(req.headers.get('cookie'));
+    const result = await saveHomeFeedback(account, workId, vote);
+    if (!result) return familyJson({ error: '未找到这部影片，请刷新后重试' }, 404);
+    if (typeof filterAdult === 'boolean') {
+      try {
+        const [daily, preferences] = await Promise.all([readHomeRecommendations(filterAdult), readHomeFeedback(account)]);
+        const recommendations = preferences.length ? { ...buildHomeRecommendations(filterAdult,
+          daily.batches.flat().filter(work => work.origin === 'ai'), Date.now(), preferences), aiStatus: daily.aiStatus } : daily;
+        return familyJson({ ...publicHomeFeedback(preferences), recommendations });
+      } catch { /* The vote is already durable. Let the client retry recommendations without rolling it back. */ }
+    }
+    return familyJson(result);
   } catch { return familyJson({ error: '保存失败，请重试' }, 503); }
 }

@@ -44,8 +44,9 @@ export function HomeDiscovery({ sources, section, onCollection, charts }: {
   });
   const data = query.data;
   const tab = chosenTab || (data?.recent.new.length ? 'new' : data?.recent.series.length ? 'series' : 'added');
-  const cards = data?.recent[tab] || [], issue = data?.editorial[issueIndex % (data?.editorial.length || 1)] || starterEditorial;
-  const starterCards = (works: RecommendedWork[], compact = false) => <div className={compact ? 'grid grid-cols-3 gap-3' : 'grid grid-cols-2 gap-x-3 gap-y-5 sm:grid-cols-3 lg:grid-cols-6'}>{works.map(work => <article key={work.id} className="relative min-w-0">
+  const cards = (data?.recent[tab] || []).filter(card => feedback.voteFor(card.work.id) !== 'dislike');
+  const issue = data?.editorial[issueIndex % (data?.editorial.length || 1)] || starterEditorial;
+  const starterCards = (works: RecommendedWork[], compact = false) => <div className={compact ? 'grid grid-cols-3 gap-3' : 'grid grid-cols-2 gap-x-3 gap-y-5 sm:grid-cols-3 lg:grid-cols-6'}>{works.filter(work => feedback.voteFor(work.id) !== 'dislike').slice(0, compact ? 3 : 6).map(work => <article key={work.id} className="relative min-w-0">
     <button className="block w-full text-left" onClick={() => pick(work)} aria-label={`查看《${work.title}》的影片详情`}>
       <div className="relative aspect-[2/3] overflow-hidden rounded-xl bg-chip"><FilmPoster title={work.title} year={work.year} url={work.poster} mode={store.imageProxyMode} customProxy={store.customImageProxy} /><span className="absolute left-2 top-2 rounded bg-black/75 px-2 py-1 text-[10px] text-white">精选推荐</span></div>
       <h3 className="mt-2 truncate text-sm font-semibold">{work.title}</h3>
@@ -78,7 +79,7 @@ export function HomeDiscovery({ sources, section, onCollection, charts }: {
           <HomeFeedbackButtons title={card.work.title} value={feedback.voteFor(card.work.id)} disabled={feedback.disabled} pending={feedback.pendingId === card.work.id} onVote={vote => feedback.vote(card.work.id, vote)} />
         </article>)}</div> : <div>
           <p className="mb-4 text-xs leading-6 text-muted" role="status">{!data && !query.isError ? '近期内容正在整理，先看这些精选影片。' : query.isError ? '近期内容暂时加载失败，仍可浏览以下精选影片。' : tab === 'new' ? '暂未找到日期核对通过的新片，先看看精选片单。' : tab === 'series' ? '暂未发现新增剧集，先看看精选片单。' : !sourceKeys ? '选择片源后可查看近期收录，现在可先浏览精选影片。' : '近期内容正在整理，先看这些精选影片。'}</p>
-          {starterCards(discoveryStarters.slice(0, 6))}
+          {starterCards(discoveryStarters)}
         </div>}
       <p className="mt-3 text-xs text-faint">{tab === 'new' ? '按明确上线日期排序；日期不完整或有冲突的影片只列入最近收录。' : tab === 'series' ? '新增剧集才算更新，更换海报或播放地址不会重新排到前面。' : '收录日期是本站首次发现时间，不代表影片首映日期。'}</p>
     </section>}

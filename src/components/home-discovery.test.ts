@@ -6,18 +6,18 @@ import { discoveryStarters } from '@/lib/discovery-starters';
 import { HomeDiscovery } from './home-discovery';
 import { FilmPoster } from './film-poster';
 
-const state = vi.hoisted(() => ({ data: undefined as DiscoveryResponse | undefined, isLoading: true, isError: false }));
+const state = vi.hoisted(() => ({ data: undefined as DiscoveryResponse | undefined, isLoading: true, isError: false, dislikes: new Set<string>() }));
 vi.mock('@tanstack/react-query', () => ({ useQuery: () => ({ ...state, refetch: vi.fn() }) }));
 vi.mock('@/lib/store', () => ({ useAppStore: () => ({ yellowFilter: true, imageProxyMode: 'direct', customImageProxy: '' }) }));
 vi.mock('./auth', () => ({ useAuth: () => ({ verified: true }) }));
 vi.mock('./home-continue', () => ({ HomeContinue: () => null }));
 vi.mock('./recommended-work-card', () => ({ RecommendedWorkCard: () => null }));
 vi.mock('./recommended-work-sources', () => ({ RecommendedWorkSources: () => null }));
-vi.mock('./home-feedback', async original => ({ ...await original<typeof import('./home-feedback')>(), useHomeFeedback: () => ({ voteFor: () => undefined, disabled: false, vote: vi.fn() }) }));
+vi.mock('./home-feedback', async original => ({ ...await original<typeof import('./home-feedback')>(), useHomeFeedback: () => ({ voteFor: (id: string) => state.dislikes.has(id) ? 'dislike' : undefined, disabled: false, vote: vi.fn() }) }));
 vi.mock('./home-personal-recommendations', () => ({ HomePersonalRecommendations: () => null }));
 const render = () => renderToStaticMarkup(createElement(HomeDiscovery, { sources: [], onCollection: () => {}, charts: null }));
 const empty = (): DiscoveryResponse => ({ recent: { new: [], series: [], added: [] }, refreshedAt: null, partial: false, stale: false, loading: false, popular: [], popularStatus: 'collecting', editorial: [], enabled: { recent: true, popular: true, editorial: true } });
-beforeEach(() => { state.data = undefined; state.isLoading = true; state.isError = false; });
+beforeEach(() => { state.data = undefined; state.isLoading = true; state.isError = false; state.dislikes.clear(); });
 describe('home discovery cold start', () => {
   it('renders actionable real films before the first response, with no blank skeleton cards', () => {
     const html = render();
@@ -58,5 +58,22 @@ describe('home discovery cold start', () => {
     expect(html).toContain(`点赞《${discoveryStarters[0].title}》`);
     expect(html).toContain(`点踩《${discoveryStarters[0].title}》`);
     expect(html).toContain('aria-pressed="false"');
+  });
+  it.each(['new', 'series', 'added'] as const)('immediately removes disliked %s cards and fills the six visible places without deleting metadata', tab => {
+    state.data = empty(); state.isLoading = false;
+    state.data.recent[tab] = discoveryStarters.slice(0, 7).map(work => ({ work, sourceCount: 2, date: '2026-11-09T00:00:00Z', label: '更新至 12 集' }));
+    const recent = () => render().split('aria-label="近期内容"')[1].split('</section>')[0];
+    expect(recent()).toContain(`点踩《${discoveryStarters[0].title}》`);
+    expect(recent()).not.toContain(`点踩《${discoveryStarters[6].title}》`);
+    state.dislikes.add(discoveryStarters[0].id);
+    const html = recent();
+    expect(html).not.toContain(`点踩《${discoveryStarters[0].title}》`);
+    expect(html).toContain(`点踩《${discoveryStarters[6].title}》`);
+    expect(html.match(/<article /g)).toHaveLength(6);
+    expect(html.match(/已收录 2 个片源/g)).toHaveLength(6);
+    expect(html).toContain(discoveryStarters[1].year);
+    expect(html).toContain(tab === 'series' ? '更新至 12 集' : tab === 'new' ? '11/9 上线' : '11/9 收录');
+    state.dislikes.clear();
+    expect(recent()).toContain(`点踩《${discoveryStarters[0].title}》`);
   });
 });
