@@ -38,7 +38,7 @@ function isTimeoutError(err: unknown): boolean {
  * 整源受 SEARCH_SOURCE_TIMEOUT_MS 总死线约束。
  * 旧版在浏览器里打满 N 个请求（暴露用户 IP、无法缓存、超时失控），现全部上移。
  */
-export async function searchSource(source: SourceConfig, wd: string, options: { signal?: AbortSignal; maxPages?: number; timeoutMs?: number } = {}): Promise<SourceSearchOutcome> {
+export async function searchSource(source: SourceConfig, wd: string, options: { signal?: AbortSignal; maxPages?: number; timeoutMs?: number; matchTitles?: string[] } = {}): Promise<SourceSearchOutcome> {
   options.signal?.throwIfAborted();
   const timeoutMs = options.timeoutMs ?? SEARCH_SOURCE_TIMEOUT_MS;
   const start = Date.now();
@@ -99,6 +99,7 @@ export async function searchSource(source: SourceConfig, wd: string, options: { 
     if (siteAdapterFor(source.url)) return { sourceKey: source.key, ok: true, list: await searchSite(source, term, controller.signal) };
     const first = await fetchPage(1);
     const list = parseSearchList(first, source);
+    let partial = false;
     // 源站真实总页数与配置上限取较小者；pagecount 缺失或非法时视为 1 页
     const rawPageCount = parseInt(String((first as { pagecount?: unknown }).pagecount ?? '1'), 10);
     const pageCount = Math.min(Number.isFinite(rawPageCount) ? Math.max(1, rawPageCount) : 1, options.maxPages ?? SEARCH_MAX_PAGES);
@@ -108,19 +109,20 @@ export async function searchSource(source: SourceConfig, wd: string, options: { 
           try {
             return parseSearchList(await fetchPage(page), source);
           } catch {
+            partial = true;
             return [];
           }
         })
       );
       list.push(...extraPages.flat());
     }
-    return { sourceKey: source.key, ok: true, list };
+    return { sourceKey: source.key, ok: true, list, ...(partial ? { partial: true, error: '部分分页请求失败' } : {}) };
   };
 
   try {
     // 死线先到时 run 仍会在后台被 abort 并 reject，必须先挂 catch 防未处理 rejection
     const runPromise = run()
-      .then(outcome => finish({ ...outcome, list: prepareSearchResults(outcome.list, wd, false) }))
+      .then(outcome => finish({ ...outcome, list: (options.matchTitles || [wd]).flatMap(title => prepareSearchResults(outcome.list, title, false)) }))
       .catch((err: unknown): SourceSearchOutcome =>
         finish({
           sourceKey: source.key,

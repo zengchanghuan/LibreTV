@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { publicHomeFeedback, readHomeFeedback, saveHomeFeedback } from './home-feedback';
-import { recommendationCatalog } from './recommendation-catalog';
+import { recommendationCatalog, recommendationByTitle } from './recommendation-catalog';
 import { discoveryTransaction } from './discovery-storage';
 import { emptyDiscovery } from './discovery-catalog';
 import { nextHomeVote } from './home-feedback-types';
@@ -17,6 +17,17 @@ beforeEach(async () => {
 afterEach(async () => { vi.unstubAllEnvs(); await rm(directory, { recursive: true, force: true }); });
 
 describe('persistent home feedback', () => {
+  it('separates old votes that shared an incorrect source ID using their stored titles', () => {
+    const first = recommendationByTitle('海滩的一天', 1983)!;
+    const second = recommendationByTitle('看海的日子', 1983)!;
+    expect(first.id).not.toBe(second.id);
+    const oldId = 'local:douban:1298871:1983';
+    const result = publicHomeFeedback([
+      { workId: oldId, vote: 'like', updatedAt: 1, work: { ...first, id: oldId } },
+      { workId: oldId, vote: 'dislike', updatedAt: 2, work: { ...second, id: oldId } },
+    ]);
+    expect(result.items.map(item => [item.workId, item.vote])).toEqual([[second.id, 'dislike'], [first.id, 'like']]);
+  });
   it('stores one vote per account/work, switches and clears idempotently', async () => {
     const id = works[0].id;
     expect(nextHomeVote(undefined, 'like')).toBe('like');

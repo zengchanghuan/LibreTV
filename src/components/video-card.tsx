@@ -99,6 +99,7 @@ export function AggregatedCard({
               {group.typeName && <span className="tag bg-accent/15 text-accent">{group.typeName}</span>}
               {group.year && <span className="tag bg-purple-500/15 text-purple-600 dark:text-purple-300">{group.year}</span>}
               {adult && <span className="tag bg-pink-500/15 text-pink-600 dark:text-pink-400">(18+)</span>}
+              {group.identityUnconfirmed && <span className="tag bg-chip text-warning">年份或类型待确认</span>}
             </div>
             <p className="text-xs text-muted line-clamp-2 mb-2">{group.remarks || '暂无介绍'}</p>
           </div>
@@ -148,6 +149,7 @@ export function AggregatedCard({
               >
                 <span className="min-w-0">
                   <span className="block font-medium text-content break-words">{item.sourceName}{quality.best === item ? ' · 推荐' : ''}</span>
+                  {item.name !== group.name && <span className="block text-faint">片源名：{item.name}</span>}
                   <span className="mt-1 block text-faint leading-5">{quality.labelOf(item)}</span>
                 </span>
                 <svg

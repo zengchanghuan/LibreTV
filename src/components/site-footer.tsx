@@ -104,6 +104,7 @@ export function SiteFooter() {
         {' · '}
         AGPL-3.0 License
       </p>
+      <p className="mt-2 text-center text-xs text-faint"><a href="/about#tmdb" className="hover:text-accent">片名资料：TMDB · 致谢</a></p>
     </footer>
   );
 }

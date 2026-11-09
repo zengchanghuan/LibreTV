@@ -13,6 +13,9 @@ export interface SourceConfig {
 }
 
 export interface SearchResultItem {
+  /** Set only after title, year and type agree with the local work catalog. */
+  workId?: string;
+  identityUnconfirmed?: boolean;
   sourceKey: string;
   sourceName: string;
   vodId: string;
@@ -66,6 +69,8 @@ export interface DoubanItem {
 }
 
 export interface SourceSearchOutcome {
+  /** Successful results remain usable when an alias/page/detail lookup fails. */
+  partial?: boolean;
   sourceKey: string;
   ok: boolean;
   list: SearchResultItem[];
@@ -80,11 +85,12 @@ export interface SourceSearchOutcome {
 
 export interface SearchResponse {
   list: SearchResultItem[];
-  failures: { sourceKey: string; error: string; timedOut?: boolean }[];
+  failures: { sourceKey: string; error: string; timedOut?: boolean; partial?: boolean }[];
 }
 
 /** /api/search?stream=1 的 NDJSON 事件：逐源推送 + 最终聚合 */
 export type SearchStreamEvent =
+  | ({ type: 'progress' } & SourceSearchOutcome)
   | ({ type: 'source' } & SourceSearchOutcome)
   | { type: 'done'; list: SearchResultItem[]; failures: SearchResponse['failures'] };
 

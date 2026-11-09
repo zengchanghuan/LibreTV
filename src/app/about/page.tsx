@@ -36,6 +36,17 @@ export default function AboutPage() {
           </p>
         </section>
 
+        <section id="tmdb">
+          <h2 className="text-base font-semibold text-content mb-2.5">作品资料与致谢</h2>
+          <a href="https://www.themoviedb.org/" target="_blank" rel="noopener noreferrer" className="inline-block mb-3">
+            {/* Official, unmodified TMDB attribution asset. */}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/tmdb-logo.svg" alt="TMDB" width="120" height="16" />
+          </a>
+          <p className="text-sm text-muted leading-relaxed">部分片名、原名和地区别名资料来自 TMDB，用于识别同一作品的不同译名。</p>
+          <p className="mt-2 text-sm text-faint">This product uses the TMDB API but is not endorsed or certified by TMDB.</p>
+        </section>
+
         <section>
           <h2 className="text-base font-semibold text-content mb-2.5">免责声明</h2>
           <p className="text-sm text-faint leading-relaxed">

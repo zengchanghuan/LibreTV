@@ -1,21 +1,18 @@
-import data from './film-poster-data.json';
+import { workCatalog, workTitleKey } from './work-catalog';
+import originalMetadata from './film-poster-data.json';
 import type { FilmPosterMetadata } from './film-poster-metadata';
 import { peopleCollections } from './people-collections';
 import { contentGenres, matchesWorkTitle, personTokens, rankWorks, seedWork, type RecommendedWork } from './recommendations';
 import type { VideoInfo } from './types';
 
 const credits = new Map<string, { directors: string[]; cast: string[] }>();
-const metadata = data as Record<string, FilmPosterMetadata>;
-function metadataIdentity(key: string, meta: FilmPosterMetadata) {
+// Keep persisted feedback/resource IDs stable when TMDB supplies a better display title.
+function persistedId(key: string) {
+  const meta = (originalMetadata as Record<string, FilmPosterMetadata>)[key] || {};
+  const year = key.slice(key.lastIndexOf('|') + 1);
   const subject = meta.doubanId || meta.source?.match(/movie\.douban\.com\/subject\/(\d+)/)?.[1];
   const tmdb = meta.source?.match(/themoviedb\.org\/(movie|tv)\/(\d+)/);
-  const year = key.slice(key.lastIndexOf('|') + 1);
-  return subject ? `douban:${subject}:${year}` : tmdb ? `tmdb:${tmdb[1]}:${tmdb[2]}:${year}` : key;
-}
-const aliases = new Map<string, string[]>();
-for (const [key, meta] of Object.entries(metadata)) {
-  const id = metadataIdentity(key, meta), names = aliases.get(id) || [];
-  names.push(key.slice(0, key.lastIndexOf('|'))); aliases.set(id, names);
+  return `local:${subject ? `douban:${subject}:${year}` : tmdb ? `tmdb:${tmdb[1]}:${tmdb[2]}:${year}` : key}`;
 }
 for (const person of peopleCollections) for (const section of person.sections) {
   const directing = person.role === 'director' || (person.role === 'both' && /^(导演|执导|自导)/.test(section.label));
@@ -25,15 +22,42 @@ for (const person of peopleCollections) for (const section of person.sections) {
     credits.set(key, value);
   }
 }
-export const recommendationCatalog: RecommendedWork[] = Object.entries(metadata).map(([key, raw]) => {
-  const meta: FilmPosterMetadata = raw, at = key.lastIndexOf('|'), title = key.slice(0, at), year = key.slice(at + 1);
-  const people = credits.get(key);
-  const identity = metadataIdentity(key, meta);
-  return { id: `local:${identity}`, title, year, aliases: (aliases.get(identity) || []).filter(name => name !== title), mediaType: meta.mediaType || (/themoviedb\.org\/tv\//.test(meta.source || '') ? 'tv' : /themoviedb\.org\/movie\//.test(meta.source || '') ? 'movie' : 'unknown'),
-    metadata: { ...meta, director: meta.director || people?.directors.join(' / '), cast: meta.cast || people?.cast.join(' / ') },
-    poster: meta.poster, genres: contentGenres(meta.genre), directors: [...new Set([...personTokens(meta.director), ...people?.directors || []])],
-    cast: [...new Set([...personTokens(meta.cast), ...people?.cast || []])].slice(0, 5), score: 0, reasons: [], origin: 'catalog' };
+const legacyOwners = new Map<string, Set<string>>();
+for (const work of workCatalog.works) for (const key of work.metadataKeys) {
+  const id = persistedId(key);
+  const owners = legacyOwners.get(id) || new Set<string>();
+  owners.add(work.id); legacyOwners.set(id, owners);
+}
+export const recommendationCatalog: RecommendedWork[] = workCatalog.works.map(work => {
+  const { title, year, aliases, metadata: meta, mediaType } = work;
+  const people = work.metadataKeys.map(key => credits.get(key)).filter(value => value !== undefined);
+  const directors = [...new Set([...personTokens(meta.director), ...people.flatMap(p => p.directors)])];
+  const cast = [...new Set([...personTokens(meta.cast), ...people.flatMap(p => p.cast)])];
+  const oldId = persistedId(work.metadataKeys[0]);
+  return { id: legacyOwners.get(oldId)!.size === 1 ? oldId : `local:work:${work.id}`, title, year, aliases, mediaType,
+    metadata: { ...meta, director: meta.director || directors.join(' / '), cast: meta.cast || cast.join(' / ') },
+    poster: meta.poster, genres: contentGenres(meta.genre), directors,
+    cast: cast.slice(0, 5), score: 0, reasons: [], origin: 'catalog' };
 });
+
+const byLegacyId = new Map<string, RecommendedWork>();
+const byTitleYear = new Map<string, RecommendedWork[]>();
+for (const [index, work] of recommendationCatalog.entries()) {
+  byLegacyId.set(work.id, work);
+  for (const key of workCatalog.works[index].metadataKeys) {
+    const id = persistedId(key);
+    if (legacyOwners.get(id)!.size === 1) byLegacyId.set(id, work);
+  }
+  for (const title of new Set([work.title, ...work.aliases].map(workTitleKey))) {
+    const key = `${title}|${work.year}`;
+    byTitleYear.set(key, [...byTitleYear.get(key) || [], work]);
+  }
+}
+export const recommendationById = (id: string) => byLegacyId.get(id);
+export function recommendationByTitle(title: string, year: string | number) {
+  const hits = byTitleYear.get(`${workTitleKey(title)}|${year}`) || [];
+  return hits.length === 1 ? hits[0] : undefined;
+}
 
 export function catalogIdentity(work: RecommendedWork): RecommendedWork | undefined {
   const hits = recommendationCatalog.filter(item => (matchesWorkTitle(work, item.title) || matchesWorkTitle(item, work.title)) && (!work.year || work.year === item.year)

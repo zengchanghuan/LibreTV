@@ -1,4 +1,5 @@
-import { isAdultContent, searchTitleKey } from './cms-parser';
+import { isAdultContent } from './cms-parser';
+import { workTitleKey } from './work-catalog';
 import { contentGenres, genreSimilarity, personTokens, sharedValues as intersection } from './content-similarity';
 export { contentGenres, personTokens } from './content-similarity';
 import { classifyMediaType, type MediaType } from './media-type';
@@ -50,10 +51,7 @@ export function seedWork(info: VideoInfo): RecommendedWork {
 export function workKey(work: Pick<RecommendedWork, 'title' | 'year' | 'mediaType'>) {
   return JSON.stringify([resourceTitleKey(work.title), work.year, work.mediaType]);
 }
-export function resourceTitleKey(title: string) {
-  const clean = title.replace(/(?:\s*[（(\[【]?(?:国语|粤语|普通话|英语|日语|韩语|中字|中文|中英双字|双语|原声|高清|蓝光|超清|修复|加长|未删减|4k|1080p|720p|HD|BD)(?:版)?[）)\]】]?)+\s*$/gi, '');
-  return searchTitleKey(clean);
-}
+export const resourceTitleKey = workTitleKey;
 
 /** Unknown years are not silently attached to one of several same-name remakes. */
 export function matchesWorkTitle(work: Pick<RecommendedWork, 'title' | 'aliases'>, title: string) {

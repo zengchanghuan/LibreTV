@@ -1,8 +1,10 @@
 import { classifyMediaType, type MediaType } from './media-type';
 import { searchTitleKey } from './cms-parser';
 import type { SearchResultItem } from './types';
+import { getWork } from './work-catalog';
 
 export interface AggregatedGroup {
+  identityUnconfirmed?: boolean;
   key: string;
   name: string;
   year?: string;
@@ -15,6 +17,7 @@ export interface AggregatedGroup {
 
 function buildGroup(name: string, year: string | undefined, mediaType: MediaType, items: SearchResultItem[]): AggregatedGroup {
   return {
+    identityUnconfirmed: items.some(item => item.identityUnconfirmed) || undefined,
     key: `${name}|${year ?? ''}|${mediaType}|${items.map((i) => `${i.sourceKey}_${i.vodId}`).join(',')}`,
     name,
     year,
@@ -33,13 +36,14 @@ export function aggregateResults(list: SearchResultItem[]): AggregatedGroup[] {
   for (const item of list) {
     const name = (item.name || '').trim();
     if (!name) continue;
-    const identity = searchTitleKey(name);
+    const identity = item.identityUnconfirmed ? `unconfirmed:${item.sourceKey}:${item.vodId}`
+      : item.workId && getWork(item.workId) ? `work:${item.workId}` : searchTitleKey(name);
     if (!byName.has(identity)) byName.set(identity, []);
     byName.get(identity)!.push(item);
   }
   const groups: AggregatedGroup[] = [];
   for (const items of byName.values()) {
-    const name = items[0].name.trim();
+    const name = (items[0].workId ? getWork(items[0].workId)?.title : undefined) || items[0].name.trim();
     const years = [...new Set(items.map((i) => i.year).filter(Boolean))] as string[];
     const byYear: [string | undefined, SearchResultItem[]][] = years.length > 1
       ? [...years, undefined].map((year) => [year, items.filter((i) => year ? i.year === year : !i.year)])

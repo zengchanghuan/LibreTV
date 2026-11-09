@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { deepSeekRecommendations, parseDeepSeekWorks } from './deepseek-recommendations';
 import { fetchUpstream, getCache, setCache } from './fetch-utils';
 import { seedWork } from './recommendations';
+import { recommendationByTitle } from './recommendation-catalog';
 
 vi.mock('./fetch-utils', () => ({ fetchUpstream: vi.fn(), getCache: vi.fn(), setCache: vi.fn() }));
 const seed = seedWork({ title: '亲切的金子', year: '2005', typeName: '电影', sourceKey: '', sourceName: '' });
@@ -17,7 +18,8 @@ describe('DeepSeek recommendation boundary', () => {
       { ...item, title: '亲切的金子' }, { ...item, title: '成人', adult: true }, { ...item, title: '剧集', mediaType: 'tv' },
       { ...item, title: '假影片', year: 'oops' }]), seed, true);
     expect(result).toHaveLength(1);
-    expect(result[0]).toMatchObject({ title: '老男孩', origin: 'ai', aliases: [], aiReason: item.reason });
+    expect(result[0]).toMatchObject({ title: '老男孩', origin: 'ai', aliases: recommendationByTitle('老男孩', 2003)!.aliases, aiReason: item.reason });
+    expect(result[0].aliases).not.toContain('不可信别名');
     expect(result[0].directors).not.toContain('模型虚构导演');
     expect(result[0].metadata?.rating).toBeTruthy();
     expect(result[0].metadata?.cast).toBeTruthy();

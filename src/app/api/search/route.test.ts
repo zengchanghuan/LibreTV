@@ -1,6 +1,8 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { POST } from './route';
 import { SESSION_COOKIE, signSession } from '@/lib/auth';
+import { contextForFilm } from '@/lib/work-search';
+import { aggregateResults } from '@/lib/search-result-groups';
 
 /**
  * 聚合搜索接口单测：跨源聚合、同源去重、精确命中置顶、成人内容过滤、
@@ -61,6 +63,68 @@ afterEach(() => {
 });
 
 describe('POST /api/search', () => {
+  it.each([false, true])('searches common and literal titles with year/type boundaries and the same cached result (stream=%s)', async stream => {
+    const source = { key: `alias-${stream}`, name: '别名测试源', url: `https://alias-${stream}.example.com/api.php` };
+    const original = '光海，成为王的男人';
+    const fetchSpy = vi.fn(async (input: RequestInfo | URL) => {
+      const url = new URL(String(input));
+      const common = url.searchParams.get('wd') === '双面君王';
+      return new Response(cmsList([
+        { vod_id: common ? 2 : 1, vod_name: common ? '双面君王' : original, vod_year: '2012', type_name: '电影' },
+        { vod_id: 3, vod_name: '双面君王', vod_year: '2019', type_name: '韩国剧' },
+        { vod_id: 4, vod_name: '双面君王', vod_year: '2019', type_name: '电影' },
+      ]));
+    });
+    vi.stubGlobal('fetch', fetchSpy);
+    const body = { wd: original, context: contextForFilm(original, 2012, 'movie'), sources: [source] };
+    const response = await POST(makeRequest(body, stream));
+    const events = stream ? (await response.text()).trim().split('\n').map(s => JSON.parse(s)) : [];
+    const data = stream ? events.at(-1) : await response.json();
+    expect(data.list.map((i: { vodId: string }) => i.vodId).sort()).toEqual(['1', '2']);
+    expect(aggregateResults(data.list)).toHaveLength(1);
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    if (stream) {
+      expect(events.filter(e => e.type === 'source')).toHaveLength(1);
+      expect(events.filter(e => e.type === 'progress')).toHaveLength(2);
+      expect(events.filter(e => e.type === 'source')[0].list).toEqual(data.list);
+    }
+    fetchSpy.mockClear();
+    const cached = await POST(makeRequest(body, true));
+    const cachedEvents = (await cached.text()).trim().split('\n').map(s => JSON.parse(s));
+    expect(cachedEvents).toHaveLength(1); expect(cachedEvents[0].list).toEqual(data.list);
+    expect(fetchSpy).not.toHaveBeenCalled();
+    const broad = await POST(makeRequest({ wd: original, sources: [source] }));
+    expect((await broad.json()).list.some((i: { vodId: string }) => i.vodId === '3')).toBe(true);
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps one successful name when the other fails and does not cache an incomplete response', async () => {
+    const original = '光海，成为王的男人';
+    const source = { key: 'partial-alias', name: '部分源', url: 'https://partial-alias.example.com/api.php' };
+    const fetchSpy = vi.fn(async (input: RequestInfo | URL) => new URL(String(input)).searchParams.get('wd') === original
+      ? new Response(cmsList([{ vod_id: 1, vod_name: original, vod_year: '2012', type_name: '电影' }]))
+      : new Response('failed', { status: 500 }));
+    vi.stubGlobal('fetch', fetchSpy);
+    const body = { wd: original, context: contextForFilm(original, 2012, 'movie'), sources: [source] };
+    const events = (await (await POST(makeRequest(body, true))).text()).trim().split('\n').map(s => JSON.parse(s));
+    expect(events.filter(e => e.type === 'source')).toHaveLength(1);
+    expect(events.find(e => e.type === 'source')).toMatchObject({ ok: true, partial: true });
+    expect(events.at(-1).list).toHaveLength(1);
+    expect(events.at(-1).failures[0]).toMatchObject({ partial: true });
+    fetchSpy.mockClear();
+    await POST(makeRequest(body)); expect(fetchSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it('validates malformed keywords, unknown work IDs and contradictory year/type before fetching', async () => {
+    vi.stubGlobal('fetch', vi.fn());
+    for (const body of [null, { wd: 123, sources: SOURCES },
+      { wd: 'x', sources: SOURCES, context: { workId: 'fake' } },
+      { wd: '双面君王', sources: SOURCES, context: { workId: 'tmdb:movie:133200', year: '2019' } }]) {
+      expect((await POST(makeRequest(body))).status).toBe(400);
+    }
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
   it.each([false, true])('季数查询以系列名召回，分页和流式结果均排除错误季数（stream=%s）', async stream => {
     const fetchSpy = vi.fn(async (input: RequestInfo | URL) => {
       const url = new URL(String(input));

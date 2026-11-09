@@ -1,7 +1,8 @@
 import { koreanThrillers, zhangYanThrillers } from '@/lib/korean-thrillers';
 import { FilmPosterGrid } from './film-poster-grid';
+import type { PickFilm } from '@/lib/work-search';
 
-export function KoreanThrillers({ onPick, zhangYan }: { zhangYan: boolean; onPick: (title: string) => void }) {
+export function KoreanThrillers({ onPick, zhangYan }: { zhangYan: boolean; onPick: PickFilm }) {
   const films = zhangYan ? zhangYanThrillers : koreanThrillers;
   const heading = zhangYan ? '张燕版韩国政治惊悚片' : '韩国政治惊悚片必看榜';
   return <section aria-label={heading}>

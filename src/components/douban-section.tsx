@@ -1,5 +1,7 @@
 'use client';
 
+import { contextForFilm, type PickFilm } from '@/lib/work-search';
+
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/client-api';
@@ -43,7 +45,7 @@ const directoryLabels = [
   ['topics', '主题片单'], ['directors', '按导演'], ['actors', '按演员'],
 ] as const;
 
-export function RecommendSection({ visible, onPick, sources = [], section }: { visible: boolean; onPick: (title: string) => void; sources?: SourceConfig[]; section?: 'hd' }) {
+export function RecommendSection({ visible, onPick, sources = [], section }: { visible: boolean; onPick: PickFilm; sources?: SourceConfig[]; section?: 'hd' }) {
   const doubanEnabled = useAppStore((s) => s.doubanEnabled);
   const recommendSource = useAppStore((s) => s.recommendSource);
   const homeLayout = useAppStore(s => s.homeLayout);
@@ -106,7 +108,7 @@ export function RecommendSection({ visible, onPick, sources = [], section }: { v
   </>;
 }
 
-function CollectionList({ collection, onPick }: { collection: FilmCollection; onPick: (title: string) => void }) {
+function CollectionList({ collection, onPick }: { collection: FilmCollection; onPick: PickFilm }) {
   const films = collection.sections.flatMap(({ films, mediaType }) =>
     films.map(([title, year, note]) => ({ id: `${title}|${year}`, title, year, note, mediaType })));
   const sources = collection.sources ?? (collection.source ? [collection.source] : []);
@@ -130,7 +132,7 @@ function CollectionList({ collection, onPick }: { collection: FilmCollection; on
  * 一次性渲染全部条目：数据本就一次拉全（50 条），卡片图片又是 lazy 加载，
  * 视口外的图不会请求，因此不需要「加载更多」这类本地切片分页来打断浏览。
  */
-function DoubanView({ onPick }: { onPick: (title: string) => void }) {
+function DoubanView({ onPick }: { onPick: PickFilm }) {
   const [type, setType] = useState<'movie' | 'tv'>('movie');
   const [tag, setTag] = useState('热门');
 
@@ -190,7 +192,7 @@ function DoubanView({ onPick }: { onPick: (title: string) => void }) {
             <DoubanCard key={item.id} item={item}
               doubanId={type === 'movie' ? item.id : undefined}
               mediaType={type === 'movie' ? 'movie' : tag === '综艺' ? 'variety' : tag === '日本动画' ? 'animation' : tag === '纪录片' ? 'documentary' : 'tv'}
-              onClick={() => onPick(item.title)} />
+              onClick={() => onPick(item.title, contextForFilm(item.title, undefined, type, item.id))} />
           ))}
         </div>
       )}
@@ -199,7 +201,7 @@ function DoubanView({ onPick }: { onPick: (title: string) => void }) {
 }
 
 /** Bangumi 每日放送：星期筛选，一次拉全量无分页 */
-function BangumiView({ onPick }: { onPick: (title: string) => void }) {
+function BangumiView({ onPick }: { onPick: PickFilm }) {
   const [weekday, setWeekday] = useState<number | 'all'>('all');
 
   const query = useQuery({
@@ -234,7 +236,7 @@ function BangumiView({ onPick }: { onPick: (title: string) => void }) {
       ) : (
         <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2.5">
           {items.map((item) => (
-            <DoubanCard key={item.id} item={item} mediaType="animation" onClick={() => onPick(item.title)} />
+            <DoubanCard key={item.id} item={item} mediaType="animation" onClick={() => onPick(item.title, contextForFilm(item.title, undefined, 'animation'))} />
           ))}
         </div>
       )}
@@ -252,7 +254,7 @@ const HOT_LISTS = [
 ];
 
 /** 影视热榜（60s API）：豆瓣五个周榜 + 百度热搜剧集，chips 切换 */
-function HotListView({ onPick }: { onPick: (title: string) => void }) {
+function HotListView({ onPick }: { onPick: PickFilm }) {
   const [listId, setListId] = useState(HOT_LISTS[0].id);
 
   const query = useQuery({
@@ -284,7 +286,7 @@ function HotListView({ onPick }: { onPick: (title: string) => void }) {
             <DoubanCard key={item.id} item={item}
               doubanId={listId === 'douban_movie_weekly' ? item.id : undefined}
               mediaType={listId === 'douban_movie_weekly' ? 'movie' : listId.startsWith('douban_show_') ? 'variety' : 'tv'}
-              onClick={() => onPick(item.title)} />
+              onClick={() => onPick(item.title, contextForFilm(item.title, undefined, listId === 'douban_movie_weekly' ? 'movie' : listId.startsWith('douban_show_') ? 'variety' : 'tv', listId.startsWith('douban_') && /^\d+$/.test(item.id) ? item.id : undefined))} />
           ))}
         </div>
       )}

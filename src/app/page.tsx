@@ -9,7 +9,8 @@ import { DetailModal } from '@/components/detail-modal';
 import { AggregatedCard, aggregateResults } from '@/components/video-card';
 import { useAppStore, resolveSource, isInDisabledSubscription, isSourceDisabled } from '@/lib/store';
 import { api } from '@/lib/client-api';
-import { prepareSearchResults } from '@/lib/cms-parser';
+import { buildSearchPlan, prepareWorkSearchResults, contextFromParams, type SearchContext } from '@/lib/work-search';
+import { MEDIA_TYPE_LABELS } from '@/lib/media-type';
 import type { SearchResultItem, SourceSearchOutcome } from '@/lib/types';
 import { SearchHistoryDropdown, useSearchHistory } from '@/components/search-history';
 import { cn, formatDisableTtl, validateSourceUrl } from '@/lib/utils';
@@ -40,6 +41,8 @@ function HomeContent() {
   const router = useRouter();
   const { toast } = useToast();
   const urlQuery = searchParams.get('s') || '';
+  const searchContext = useMemo(() => contextFromParams(searchParams), [searchParams]);
+  const searchPlan = useMemo(() => buildSearchPlan(urlQuery.slice(0, 100), searchContext), [urlQuery, searchContext]);
   // 精确订阅所需字段（对齐 live 页的做法）：搜索流式期间逐源写健康度、
   // 打开设置抽屉/历史面板等无关 store 变化，都不应触发首页整树重渲染
   const customAPIs = useAppStore((s) => s.customAPIs);
@@ -94,15 +97,20 @@ function HomeContent() {
   );
 
   const searchQuery = useQuery({
-    queryKey: ['search', section, urlQuery, selectedSources.map(s => [s.key, s.url]), yellowFilter],
+    queryKey: ['work-search-v1', section, urlQuery, searchContext, selectedSources, yellowFilter],
     // 与 runSearch 的截断规则保持一致：顶栏搜索 / 手动构造长链接不会绕过上限
     queryFn: ({ signal }) => {
       setStreamedOutcomes([]);
       return api.search(urlQuery.slice(0, 100), selectedSources, yellowFilter, {
         signal,
+        context: searchContext,
+        onProgress: outcome => {
+          if (!signal.aborted) setStreamedOutcomes(prev => [...prev.filter(o => o.sourceKey !== outcome.sourceKey), outcome]);
+        },
         // 逐源结算即更新：结果边搜边渲染，同时滚动健康度
         onSource: (outcome) => {
-          setStreamedOutcomes((prev) => [...prev, outcome]);
+          if (signal.aborted) return;
+          setStreamedOutcomes((prev) => [...prev.filter(o => o.sourceKey !== outcome.sourceKey), outcome]);
           for (const ev of useAppStore.getState().recordSourceHealth([outcome])) {
             toast(
               ev.permanent
@@ -122,7 +130,7 @@ function HomeContent() {
   // 聚焦展示最近搜索，继续输入时按关键词过滤。
   const searchHistory = useSearchHistory(input);
 
-  const runSearch = (q: string) => {
+  const runSearch = (q: string, context?: SearchContext) => {
     const query = q.trim().slice(0, 100);
     if (!query) {
       toast('请输入搜索内容', 'info');
@@ -134,7 +142,7 @@ function HomeContent() {
       return;
     }
     searchHistory.close();
-    router.push(searchPageUrl(section, query), { scroll: false });
+    router.push(searchPageUrl(section, query, context), { scroll: false });
     searchHistory.record(query);
   };
 
@@ -147,8 +155,8 @@ function HomeContent() {
   const isSearching = Boolean(urlQuery) && searchQuery.isFetching && !searchQuery.data;
   // 聚合数据未就绪时，用已结算源的结果增量渲染（健康源不再等坏源超时）
   const streamedList = useMemo(
-    () => prepareSearchResults(streamedOutcomes.flatMap((o) => o.list), urlQuery.slice(0, 100), yellowFilter),
-    [streamedOutcomes, urlQuery, yellowFilter]
+    () => prepareWorkSearchResults(streamedOutcomes.flatMap((o) => o.list), searchPlan, yellowFilter),
+    [streamedOutcomes, searchPlan, yellowFilter]
   );
   const list = useMemo(
     () => searchQuery.data?.list ?? (isSearching ? streamedList : []),
@@ -157,8 +165,8 @@ function HomeContent() {
   const failures =
     searchQuery.data?.failures ??
     streamedOutcomes
-      .filter((o) => !o.ok)
-      .map((o) => ({ sourceKey: o.sourceKey, error: o.error || '请求失败', timedOut: o.timedOut }));
+      .filter((o) => !o.ok || o.partial)
+      .map((o) => ({ sourceKey: o.sourceKey, error: o.error || '请求失败', timedOut: o.timedOut, partial: o.partial }));
   // 跨源同名聚合：同名影片合并为一张卡片，展开后可选择具体来源
   const groups = useMemo(() => aggregateResults(list), [list]);
 
@@ -320,7 +328,7 @@ function HomeContent() {
                 “<span className="text-content">{urlQuery}</span>” 的搜索结果
                 {isSearching ? (
                   <span className="text-faint">
-                    （已就绪 {streamedOutcomes.length}/{selectedSources.length} 个源…）
+                    （已响应 {streamedOutcomes.length}/{selectedSources.length} 个源…）
                   </span>
                 ) : (
                   searchQuery.data && (
@@ -332,13 +340,24 @@ function HomeContent() {
               </h2>
             </div>
 
+            {(searchPlan.strict || searchPlan.titles.length > 1) && (
+              <div className="mb-3 space-y-1 text-xs text-muted" role="status">
+                {searchPlan.strict && <p>正在查找：{searchPlan.work?.title || urlQuery}
+                  {(searchContext.year || searchPlan.work?.year) && ` · ${searchContext.year || searchPlan.work?.year}`}
+                  {(searchContext.mediaType || searchPlan.work?.mediaType) && ` · ${MEDIA_TYPE_LABELS[searchContext.mediaType || searchPlan.work!.mediaType]}`}
+                  <button type="button" className="ml-3 text-accent underline" onClick={() => runSearch(urlQuery)}>查看全部同名结果</button>
+                </p>}
+                {searchPlan.titles.length > 1 && <p>同时搜索：{searchPlan.titles.join('、')}</p>}
+              </div>
+            )}
+
             {failures.length > 0 && (
               <div className="mb-3 text-xs bg-chip rounded-lg px-3 py-2 flex flex-wrap gap-x-3 gap-y-1">
-                <span className="text-faint">{isSearching ? '以下源暂时无响应：' : '部分点播源请求失败：'}</span>
+                <span className="text-faint">{isSearching ? '以下源暂时无响应：' : '部分点播源查询未完成：'}</span>
                 {failures.map((f) => (
                   <span key={f.sourceKey} className={f.timedOut ? 'text-warning' : 'text-faint'}>
                     {f.timedOut ? '⏱' : '✗'} {sourceName(f.sourceKey)}
-                    {f.timedOut ? ' 超时' : ''}
+                    {f.partial ? ' 部分结果' : f.timedOut ? ' 超时' : ''}
                   </span>
                 ))}
               </div>
@@ -397,9 +416,9 @@ function HomeContent() {
 
         {/* 首页推荐（有搜索时隐藏） */}
         <RecommendSection visible={!urlQuery} sources={selectedSources} section={section === 'hd' ? 'hd' : undefined}
-          onPick={(title) => {
+          onPick={(title, context) => {
             setInput(title);
-            runSearch(title);
+            runSearch(title, context);
           }}
         />
       </main>

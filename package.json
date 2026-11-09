@@ -10,7 +10,10 @@
     "start": "next start -p 8080",
     "lint": "eslint src",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "titles:collect": "node scripts/export-work-manifest.mjs && python3 -B scripts/collect_work_titles.py",
+    "titles:apply": "node scripts/export-work-manifest.mjs && python3 -B scripts/collect_work_titles.py --apply",
+    "titles:test": "python3 -B -m unittest discover -s scripts -p 'test_collect_work_titles.py'"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.59.0",

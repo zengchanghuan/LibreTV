@@ -13,6 +13,7 @@ tsconfig.tsbuildinfo
 .env
 .env*.local
 *.log
+.data
 
 # 文档与编排文件（不参与镜像构建）
 Dockerfile

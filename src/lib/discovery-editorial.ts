@@ -1,4 +1,4 @@
-import { recommendationCatalog } from './recommendation-catalog';
+import { recommendationByTitle } from './recommendation-catalog';
 import { isAdultContent } from './cms-parser';
 import { homeDay } from './home-discovery-types';
 import type { EditorialIssue } from './discovery-types';
@@ -19,7 +19,8 @@ export function publishedEditorial(now = Date.now()): EditorialIssue[] {
   return editorialManifest.map((_, i) => editorialManifest[(week % editorialManifest.length + i) % editorialManifest.length]).map(issue => ({
     id: issue.id, title: issue.title, intro: issue.intro, publishedAt: monday,
     works: issue.films.flatMap(key => {
-      const work = recommendationCatalog.find(w => `${w.title}|${w.year}` === key);
+      const at = key.lastIndexOf('|');
+      const work = recommendationByTitle(key.slice(0, at), key.slice(at + 1));
       if (!work?.poster || !work.metadata?.source || isAdultContent(work.genres.join(',')) || /情色/.test(work.genres.join(','))) return [];
       return [{ ...work, reasons: [issue.intro] }];
     }),

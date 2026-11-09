@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { recommendationCatalog, catalogIdentity } from './recommendation-catalog';
+import { recommendationCatalog, catalogIdentity, recommendationByTitle } from './recommendation-catalog';
 import { filmCollections, koreanModernHistory } from './film-collections';
 import { peopleCollections } from './people-collections';
 import { chungmuroCollection } from './chungmuro-collection';
@@ -24,7 +24,7 @@ export function eligibleHomeWork(work: RecommendedWork, filterAdult: boolean) {
   return /^(18|19|20)\d{2}$/.test(work.year) && Boolean(work.poster && work.metadata?.source)
     && (!work.metadata?.rating || Number(work.metadata.rating) >= 7)
     && !['tv', 'variety'].includes(work.mediaType)
-    && inCollections.has(`${work.title}|${work.year}`)
+    && [work.title, ...work.aliases].some(title => inCollections.has(`${title}|${work.year}`))
     && (!filterAdult || (!/情色|色情|成人|倫理|伦理/.test(work.metadata?.genre || work.genres.join(','))
       && !isAdultContent(`${work.title},${work.metadata?.genre || ''},${work.genres.join(',')}`)));
 }
@@ -98,7 +98,7 @@ export function buildHomeRecommendations(filterAdult: boolean, ai: RecommendedWo
   const dayNumber = Math.floor(Date.parse(`${day}T00:00:00Z`) / 86400000);
   const week = Math.floor((dayNumber + 3) / 7);
   const topics = collections.map(c => ({ c, works: c.sections.flatMap(s => s.films)
-    .map(([t, y]) => recommendationCatalog.find(w => w.title === t && w.year === String(y)))
+    .map(([t, y]) => recommendationByTitle(t, y))
     .filter((w): w is RecommendedWork => Boolean(w && eligibleHomeWork(w, filterAdult) && allowed(w))) }))
     .filter(c => c.works.length).sort((a, b) => hash(`${week}:${a.c.id}`) - hash(`${week}:${b.c.id}`)).slice(0, 3);
   return { day, version: homeCatalogVersion, generatedAt: new Date(now).toISOString(),

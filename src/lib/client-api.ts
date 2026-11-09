@@ -1,5 +1,6 @@
 'use client';
 
+import type { SearchContext } from './work-search';
 import type { HomeRecommendations } from './home-discovery-types';
 import type { HDResourceCatalog, HDResourceDetail } from './hd-resource-sites';
 import type { RelatedVideosResponse } from './types';
@@ -138,7 +139,7 @@ export const api = {
     wd: string,
     sources: SourceConfig[],
     filterAdult: boolean,
-    opts?: { signal?: AbortSignal; onSource?: (outcome: SourceSearchOutcome) => void }
+    opts?: { signal?: AbortSignal; context?: SearchContext; onSource?: (outcome: SourceSearchOutcome) => void; onProgress?: (outcome: SourceSearchOutcome) => void }
   ): Promise<SearchResponse> => {
     const signal = opts?.signal;
     const onSource = opts?.onSource;
@@ -146,11 +147,11 @@ export const api = {
       return request<SearchResponse>('/api/search', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ wd, sources, filterAdult }),
+        body: JSON.stringify({ wd, sources, filterAdult, context: opts?.context }),
         signal,
       });
     }
-    return searchStream(wd, sources, filterAdult, onSource, signal);
+    return searchStream(wd, sources, filterAdult, onSource, signal, opts?.context, opts?.onProgress);
   },
 
   detail: (id: string, source: SourceConfig, signal?: AbortSignal) => {
@@ -301,27 +302,49 @@ async function searchStream(
   sources: SourceConfig[],
   filterAdult: boolean,
   onSource: (outcome: SourceSearchOutcome) => void,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  context?: SearchContext,
+  onProgress?: (outcome: SourceSearchOutcome) => void
 ): Promise<SearchResponse> {
   const res = await fetch('/api/search?stream=1', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ wd, sources, filterAdult }),
+    body: JSON.stringify({ wd, sources, filterAdult, context }),
     signal,
   });
     throwForAuthStatus(res);
     if (!res.ok || !res.body) throw new ApiError(`请求失败 (${res.status})`, res.status);
 
-    // done 事件缺失（流被截断）时退化为空结果，不让整次搜索报错
-    let final: SearchResponse = { list: [], failures: [] };
-    await consumeNdjson<SearchStreamEvent>(res, (event) => {
-      if (event.type === 'source') {
+    let final: SearchResponse | undefined;
+    const received = new Map<string, SourceSearchOutcome>();
+    const settled = new Set<string>();
+    try { await consumeNdjson<SearchStreamEvent>(res, (event) => {
+      if (event.type === 'progress') {
+        received.set(event.sourceKey, event);
+        onProgress?.(event);
+      } else if (event.type === 'source') {
+        received.set(event.sourceKey, event);
+        settled.add(event.sourceKey);
         onSource(event);
       } else if (event.type === 'done') {
         final = { list: event.list, failures: event.failures };
       }
-    });
-    return final;
+    }); } catch (error) {
+      signal?.throwIfAborted();
+      if (!received.size) throw error;
+    }
+    if (final) return final;
+    signal?.throwIfAborted();
+    // A truncated stream must retain received results and explicitly mark missing completion.
+    const { buildSearchPlan, prepareWorkSearchResults } = await import('./work-search');
+    return {
+      list: prepareWorkSearchResults([...received.values()].flatMap(o => o.list), buildSearchPlan(wd, context), filterAdult),
+      failures: sources.flatMap(source => {
+        const outcome = received.get(source.key);
+        return !settled.has(source.key) || !outcome?.ok || outcome.partial
+          ? [{ sourceKey: source.key, error: outcome?.error || '搜索连接中断，部分结果可能尚未返回', partial: Boolean(outcome?.ok) }] : [];
+      }),
+    };
   }
 
 export type { SearchResponse, SearchResultItem };

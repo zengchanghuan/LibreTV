@@ -1,4 +1,5 @@
 import data from './film-poster-data.json';
+import { resolveWork } from './work-catalog';
 
 export interface FilmPosterMetadata {
   poster?: string;
@@ -20,7 +21,7 @@ export interface FilmPosterMetadata {
 const filmPosterMetadata = data as Readonly<Partial<Record<string, FilmPosterMetadata>>>;
 
 export function getFilmPosterMetadata(title: string, year: number) {
-  return filmPosterMetadata[`${title}|${year}`];
+  return filmPosterMetadata[`${title}|${year}`] || resolveWork(title, year)?.metadata;
 }
 
 const byDoubanId = new Map<string, { year: number; metadata: FilmPosterMetadata } | undefined>();
