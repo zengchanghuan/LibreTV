@@ -6,15 +6,18 @@ export function resultYear(year?: string) {
   return year?.match(/\b(?:18|19|20)\d{2}\b/)?.[0];
 }
 
-/** Only a separated, trailing year is a hint. Numeric titles and sequel numbers stay intact. */
+/** A joined year needs a matching catalog title/year; numeric titles and sequels stay intact. */
 export function splitSearchTitle(title: string) {
   const value = title.normalize('NFKC').trim();
   // A catalogued literal title takes precedence over a possible year suffix.
   if (workCatalog.findByTitle(value).length) return { title: value, year: undefined };
   const match = value.match(/^(.*?)(?:\s+((?:18|19|20)\d{2})|\s*[（(\[【]((?:18|19|20)\d{2})[）)\]】])$/);
-  return match?.[1].trim()
-    ? { title: match[1].trim(), year: match[2] || match[3] }
-    : { title: value, year: undefined };
+  if (match?.[1].trim()) return { title: match[1].trim(), year: match[2] || match[3] };
+  const joined = value.match(/^(.+?)((?:18|19|20)\d{2})$/);
+  if (joined && workCatalog.findByTitle(joined[1]).some(work => work.year === joined[2])) {
+    return { title: joined[1], year: joined[2] };
+  }
+  return { title: value, year: undefined };
 }
 
 export interface SearchIdentity {

@@ -98,4 +98,18 @@ describe('one source across multiple titles', () => {
     expect(result.list[0].identityUnconfirmed).toBeUndefined();
     expect(readSourceVideoDetails).toHaveBeenCalledTimes(1);
   });
+
+  it('looks up the joined-year conflict from the mobile screenshot and does not merge mixed 360 metadata', async () => {
+    vi.mocked(searchSource).mockResolvedValue({ sourceKey: 'a', ok: true, list: [
+      item('双面君王2012', '5342', '2019', '剧情片'), item('双面君王2012', 'movie', '2012', '剧情片'),
+    ] });
+    vi.mocked(readSourceVideoDetails).mockResolvedValue({ sourceKey: 'a', sourceName: 'A', title: '双面君王2012',
+      year: '2019', typeName: '剧情片', director: '金希元', actor: '吕珍九,李世荣,金相庆,权海骁,张光,' });
+    const result = await searchWorkSource(source, buildSearchPlan('双面君王'));
+    expect(result.list).toHaveLength(2);
+    expect(result.list.find(i => i.vodId === 'movie')).toMatchObject({ workId: 'tmdb:movie:133200', identityUnconfirmed: undefined });
+    expect(result.list.find(i => i.vodId === '5342')).toMatchObject({ identityUnconfirmed: true, identityReason: '标题年份与片源资料不一致' });
+    expect(readSourceVideoDetails).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(readSourceVideoDetails).mock.calls[0][1]).toBe('5342');
+  });
 });
