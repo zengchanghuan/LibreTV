@@ -10,10 +10,7 @@ export async function searchWorkSource(source: SourceConfig, plan: SearchPlan, o
   onProgress?: (outcome: SourceSearchOutcome) => void;
   timeoutMs?: number;
 } = {}): Promise<SourceSearchOutcome> {
-  if (!plan.strict && plan.titles.length === 1) {
-    const outcome = await searchSource(source, plan.query, { signal: options.signal });
-    return { ...outcome, list: prepareWorkSearchResults(outcome.list, plan, options.filterAdult) };
-  }
+  const simple = !plan.strict && plan.titles.length === 1;
   options.signal?.throwIfAborted();
   const start = Date.now(), timeoutMs = options.timeoutMs ?? 10000;
   const controller = new AbortController();
@@ -36,12 +33,12 @@ export async function searchWorkSource(source: SourceConfig, plan: SearchPlan, o
   });
   const run = async () => {
     await Promise.all(plan.titles.map(async title => {
-      const outcome = await searchSource(source, title, { signal, maxPages: 2, timeoutMs: Math.min(timeoutMs, 7000),
+      const outcome = await searchSource(source, title, simple ? { signal } : { signal, maxPages: 2, timeoutMs: Math.min(timeoutMs, 7000),
         matchTitles: plan.work ? [plan.work.title, ...plan.work.aliases] : plan.titles });
       if (closed) return;
       outcomes.push(outcome);
       items = prepareWorkSearchResults([...items, ...outcome.list], plan, options.filterAdult);
-      options.onProgress?.({ ...snapshot(), partial: undefined });
+      if (!simple) options.onProgress?.({ ...snapshot(), partial: undefined });
     }));
     signal.throwIfAborted();
     // At most three metadata lookups, in parallel, inside the same ten-second budget.
@@ -50,8 +47,9 @@ export async function searchWorkSource(source: SourceConfig, plan: SearchPlan, o
       try {
         const detail = await readSourceVideoDetails(source, item.vodId, signal);
         if (closed) return;
-        const enriched = { ...item, name: detail.title || item.name, year: detail.year || item.year,
-          typeName: detail.typeName || item.typeName, pic: item.pic || detail.cover };
+        const enriched = { ...item, pic: item.pic || detail.cover,
+          identityDetails: { title: detail.title, year: detail.year, typeName: detail.typeName,
+            director: detail.director, actor: detail.actor } };
         items = items.map(old => old === item ? enriched : old);
       } catch {
         incomplete = true;

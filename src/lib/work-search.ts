@@ -1,7 +1,9 @@
-import { prepareSearchResults, searchTitleKey } from './cms-parser';
-import { classifyMediaType, type MediaType } from './media-type';
+import { isAdultContent, prepareSearchResults, searchTitleKey } from './cms-parser';
+import { type MediaType } from './media-type';
 import type { SearchResultItem } from './types';
 import { getWork, isDerivativeTitle, resolveWork, workSearchTitles, workTitleKey, type CatalogWork } from './work-catalog';
+import { searchResultIdentity, searchIdentityTitleKey } from './search-result-identity';
+export { resultYear } from './search-result-identity';
 
 export interface SearchContext {
   workId?: string;
@@ -58,38 +60,34 @@ export function buildSearchPlan(query: string, context: SearchContext = {}): Sea
     titles: work ? workSearchTitles(work, query) : [query] };
 }
 
-export function resultYear(year?: string) {
-  return year?.match(/\b(?:18|19|20)\d{2}\b/)?.[0];
-}
-
 /** Never infer identity from a shared title alone, nor from missing year/type fields. */
 export function workResultStatus(item: SearchResultItem, plan: SearchPlan): 'match' | 'unconfirmed' | 'reject' {
-  if (!plan.strict) return 'match';
-  if (isDerivativeTitle(item.name + (item.typeName || ''))) return 'reject';
-  if (plan.work && ![plan.work.title, ...plan.work.aliases].some(name => workTitleKey(name) === workTitleKey(item.name))) return 'reject';
-  const year = resultYear(item.year), kind = classifyMediaType(item.typeName);
+  const identity = searchResultIdentity(item);
+  if (!plan.strict) return identity.reason ? 'unconfirmed' : 'match';
+  if (isDerivativeTitle(item.name + (item.typeName || '') + (item.identityDetails?.typeName || ''))) return 'reject';
+  if (plan.work && ![plan.work.title, ...plan.work.aliases].some(name => workTitleKey(name) === searchIdentityTitleKey(item.identityDetails?.title || item.name))) return 'reject';
+  const year = identity.year, kind = identity.mediaType;
   const expectedYear = plan.context.year || plan.work?.year;
   const expectedType = plan.context.mediaType && plan.context.mediaType !== 'unknown' ? plan.context.mediaType : plan.work?.mediaType;
   if ((year && expectedYear && year !== expectedYear)
     || (kind !== 'unknown' && expectedType && expectedType !== 'unknown' && kind !== expectedType)) return 'reject';
-  if (!year || !expectedYear || kind === 'unknown' || !expectedType || expectedType === 'unknown') return 'unconfirmed';
+  if (identity.reason || !year || !expectedYear || kind === 'unknown' || !expectedType || expectedType === 'unknown') return 'unconfirmed';
   return 'match';
 }
 
 /** Shared by source progress, final JSON/NDJSON, and client incremental rendering. */
 export function prepareWorkSearchResults(items: SearchResultItem[], plan: SearchPlan, filterAdult = true): SearchResultItem[] {
-  if (filterAdult) items = items.filter(item => !item.isAdult && !/情色/.test(item.typeName || ''));
+  if (filterAdult) items = items.filter(item => !item.isAdult && !isAdultContent(item.identityDetails?.typeName)
+    && !/情色/.test((item.typeName || '') + (item.identityDetails?.typeName || '')));
   const titles = plan.work ? [...new Set([plan.query, plan.work.title, ...plan.work.aliases])] : [plan.query];
   const matches = new Map<string, SearchResultItem>();
   for (const title of titles) for (const item of prepareSearchResults(items, title, filterAdult)) {
     const status = workResultStatus(item, plan);
     if (status === 'reject') continue;
     const key = JSON.stringify([item.sourceKey, item.vodId]);
-    const year = resultYear(item.year), mediaType = classifyMediaType(item.typeName);
-    const known = !isDerivativeTitle(item.name + (item.typeName || '')) && year && mediaType !== 'unknown'
-      ? resolveWork(item.name, year, mediaType) : undefined;
-    const confirmed = known && known.mediaType !== 'unknown' && known.mediaType === mediaType ? known : undefined;
-    matches.set(key, { ...item, workId: confirmed?.id, identityUnconfirmed: status === 'unconfirmed' || undefined });
+    const identity = searchResultIdentity(item);
+    matches.set(key, { ...item, workId: identity.work?.id, identityUnconfirmed: status === 'unconfirmed' || undefined,
+      identityReason: status === 'unconfirmed' ? identity.reason || '作品归属待确认' : undefined });
   }
   const exact = new Set(titles.map(searchTitleKey));
   const score = (item: SearchResultItem) => Number(Boolean(item.identityUnconfirmed)) * 20

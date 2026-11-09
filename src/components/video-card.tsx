@@ -34,6 +34,7 @@ export function AggregatedCard({
   const quality = useRankedSources(group.items, expanded);
 
   const multi = group.items.length > 1;
+  const sourceCount = new Set(group.items.map(item => item.sourceKey)).size;
   const adult = useMemo(() => group.items.some((i) => i.isAdult), [group.items]);
 
   const activate = () => {
@@ -70,7 +71,7 @@ export function AggregatedCard({
             <div className="absolute inset-0 bg-gradient-to-r from-black/30 to-transparent" />
             {multi && (
               <span className="absolute top-1.5 left-1.5 tag bg-black/70 text-accent font-medium">
-                {group.items.length} 源
+                {sourceCount} 源
               </span>
             )}
           </div>
@@ -81,7 +82,7 @@ export function AggregatedCard({
             </svg>
             {multi && (
               <span className="absolute top-1.5 left-1.5 tag bg-black/70 text-accent font-medium">
-                {group.items.length} 源
+                {sourceCount} 源
               </span>
             )}
           </div>
@@ -99,13 +100,17 @@ export function AggregatedCard({
               {group.typeName && <span className="tag bg-accent/15 text-accent">{group.typeName}</span>}
               {group.year && <span className="tag bg-purple-500/15 text-purple-600 dark:text-purple-300">{group.year}</span>}
               {adult && <span className="tag bg-pink-500/15 text-pink-600 dark:text-pink-400">(18+)</span>}
-              {group.identityUnconfirmed && <span className="tag bg-chip text-warning">年份或类型待确认</span>}
+              {group.identityUnconfirmed && <span className="tag bg-chip text-warning">归属待确认</span>}
             </div>
+            {group.identityReason && <p className="text-xs text-warning mb-2">{group.identityReason}</p>}
+            {(!multi && (group.identityUnconfirmed || group.items[0].identityDetails)) && (
+              <p className="text-xs text-faint mb-2 break-words">片源原始资料：{group.items[0].name} · {group.items[0].year || '年份未知'} · {group.items[0].typeName || '未分类'}</p>
+            )}
             <p className="text-xs text-muted line-clamp-2 mb-2">{group.remarks || '暂无介绍'}</p>
           </div>
           <div className="flex items-center justify-between mt-auto pt-1.5 border-t border-line">
             <span className="tag bg-chip text-muted truncate max-w-[80%]">
-              {multi ? `${group.items.length} 个来源` : group.items[0].sourceName}
+              {multi ? `${sourceCount} 个来源 · ${group.items.length} 条片源` : group.items[0].sourceName}
             </span>
             {multi && (
               <svg
@@ -149,7 +154,7 @@ export function AggregatedCard({
               >
                 <span className="min-w-0">
                   <span className="block font-medium text-content break-words">{item.sourceName}{quality.best === item ? ' · 推荐' : ''}</span>
-                  {item.name !== group.name && <span className="block text-faint">片源名：{item.name}</span>}
+                  <span className="block text-faint">片源原始资料：{item.name} · {item.year || '年份未知'} · {item.typeName || '未分类'}</span>
                   <span className="mt-1 block text-faint leading-5">{quality.labelOf(item)}</span>
                 </span>
                 <svg

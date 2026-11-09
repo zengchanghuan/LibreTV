@@ -71,4 +71,31 @@ describe('one source across multiple titles', () => {
     await expect(searchWorkSource(source, plan, { signal: controller.signal })).rejects.toThrow();
     expect(searchSource).not.toHaveBeenCalled();
   });
+
+  it('enriches manual single-title searches, retaining the raw listing and a usable pending entry on failure', async () => {
+    const manual = buildSearchPlan('未收录剧集');
+    vi.mocked(searchSource).mockResolvedValue({ sourceKey: 'a', ok: true,
+      list: [item('未收录剧集', 'good'), item('未收录剧集', 'failed')] });
+    vi.mocked(readSourceVideoDetails).mockImplementation(async (_source, id) => {
+      if (id === 'failed') throw new Error('timeout');
+      return { sourceKey: 'a', sourceName: 'A', title: '未收录剧集', year: '2020', typeName: '电视剧' };
+    });
+    const result = await searchWorkSource(source, manual);
+    expect(result.list).toHaveLength(2);
+    expect(result.list.find(i => i.vodId === 'good')).toMatchObject({
+      year: undefined, identityUnconfirmed: undefined, identityDetails: { year: '2020', typeName: '电视剧' },
+    });
+    expect(result.list.find(i => i.vodId === 'failed')?.identityUnconfirmed).toBe(true);
+    expect(readSourceVideoDetails).toHaveBeenCalledTimes(2);
+  });
+
+  it('checks conflicts on manual searches and preserves raw values after a staff-supported correction', async () => {
+    vi.mocked(searchSource).mockResolvedValue({ sourceKey: 'a', ok: true, list: [item('双面君王', '1', '2013', '电影')] });
+    vi.mocked(readSourceVideoDetails).mockResolvedValue({ sourceKey: 'a', sourceName: 'A', title: '双面君王',
+      year: '2013', typeName: '电影', director: '秋昌民', actor: '李秉宪,柳承龙' });
+    const result = await searchWorkSource(source, buildSearchPlan('双面君王'));
+    expect(result.list[0]).toMatchObject({ year: '2013', workId: 'tmdb:movie:133200' });
+    expect(result.list[0].identityUnconfirmed).toBeUndefined();
+    expect(readSourceVideoDetails).toHaveBeenCalledTimes(1);
+  });
 });

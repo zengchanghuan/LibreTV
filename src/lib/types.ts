@@ -16,6 +16,9 @@ export interface SearchResultItem {
   /** Set only after title, year and type agree with the local work catalog. */
   workId?: string;
   identityUnconfirmed?: boolean;
+  identityReason?: string;
+  /** Detail evidence is separate from the original search listing. */
+  identityDetails?: Pick<VideoInfo, 'title' | 'year' | 'typeName' | 'director' | 'actor'>;
   sourceKey: string;
   sourceName: string;
   vodId: string;

@@ -97,7 +97,7 @@ function HomeContent() {
   );
 
   const searchQuery = useQuery({
-    queryKey: ['work-search-v1', section, urlQuery, searchContext, selectedSources, yellowFilter],
+    queryKey: ['work-search-v2', section, urlQuery, searchContext, selectedSources, yellowFilter],
     // 与 runSearch 的截断规则保持一致：顶栏搜索 / 手动构造长链接不会绕过上限
     queryFn: ({ signal }) => {
       setStreamedOutcomes([]);
@@ -169,11 +169,15 @@ function HomeContent() {
       .map((o) => ({ sourceKey: o.sourceKey, error: o.error || '请求失败', timedOut: o.timedOut, partial: o.partial }));
   // 跨源同名聚合：同名影片合并为一张卡片，展开后可选择具体来源
   const groups = useMemo(() => aggregateResults(list), [list]);
+  const confirmedGroups = useMemo(() => groups.filter(group => !group.identityUnconfirmed), [groups]);
+  const pendingGroups = useMemo(() => groups.filter(group => group.identityUnconfirmed), [groups]);
 
   // 分批渲染：新一次搜索（groups 变化）时重置回首批
   const [visibleCount, setVisibleCount] = useState(RESULT_PAGE_SIZE);
-  const visibleGroups = useMemo(() => groups.slice(0, visibleCount), [groups, visibleCount]);
+  const [pendingVisibleCount, setPendingVisibleCount] = useState(RESULT_PAGE_SIZE);
+  const visibleGroups = useMemo(() => confirmedGroups.slice(0, visibleCount), [confirmedGroups, visibleCount]);
   useEffect(() => setVisibleCount(RESULT_PAGE_SIZE), [groups]);
+  useEffect(() => setPendingVisibleCount(RESULT_PAGE_SIZE), [groups]);
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -333,7 +337,7 @@ function HomeContent() {
                 ) : (
                   searchQuery.data && (
                     <span className="text-faint">
-                      （{groups.length} 部影片 · {list.length} 条结果{failures.length > 0 && `，${failures.length} 个源失败`}）
+                      （{confirmedGroups.length} 部作品 · {list.length} 条片源{pendingGroups.length > 0 && ` · ${pendingGroups.length} 条待确认`}{failures.length > 0 && `，${failures.length} 个源查询未完成`}）
                     </span>
                   )
                 )}
@@ -390,15 +394,31 @@ function HomeContent() {
                     />
                   ))}
                 </div>
-                {groups.length > visibleCount && (
+                {confirmedGroups.length > visibleCount && (
                   <div className="flex justify-center mt-4">
                     <button
                       className="btn-ghost btn-sm"
                       onClick={() => setVisibleCount((v) => v + RESULT_PAGE_SIZE)}
                     >
-                      加载更多（还有 {groups.length - visibleCount} 部）
+                      加载更多（还有 {confirmedGroups.length - visibleCount} 部）
                     </button>
                   </div>
+                )}
+                {pendingGroups.length > 0 && (
+                  <details key={`${section}:${urlQuery}:${JSON.stringify(searchContext)}`} className="mt-4 rounded-lg border border-line bg-surface-raised p-3">
+                    <summary className="cursor-pointer text-sm text-muted">待确认片源（{pendingGroups.length} 条）</summary>
+                    <p className="mt-2 mb-3 text-xs text-faint">以下片源的年份、类型缺失或存在冲突，暂未计入作品数。保留原始资料，点击卡片仍可查看详情和播放。</p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 items-start mt-3">
+                      {pendingGroups.slice(0, pendingVisibleCount).map(group => (
+                        <AggregatedCard key={group.key} group={group} onOpen={setDetailItem} />
+                      ))}
+                    </div>
+                    {pendingGroups.length > pendingVisibleCount && (
+                      <button className="btn-ghost btn-sm mt-3" onClick={() => setPendingVisibleCount(v => v + RESULT_PAGE_SIZE)}>
+                        加载更多待确认片源（还有 {pendingGroups.length - pendingVisibleCount} 条）
+                      </button>
+                    )}
+                  </details>
                 )}
               </>
             ) : isSearching ? (

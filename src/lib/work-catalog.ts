@@ -82,7 +82,7 @@ export function createWorkCatalog(metadata: Record<string, FilmPosterMetadata>, 
   };
   const works = [...byId.values()];
   for (const [legacy, canonical] of legacyIds) if (canonical && !byId.has(legacy)) byId.set(legacy, byId.get(canonical)!);
-  return { works, byId, resolve };
+  return { works, byId, resolve, findByTitle: (title: string) => byTitle.get(workTitleKey(title)) || [] };
 }
 
 // Curated award films participate in the same identity/alias search as other collections.

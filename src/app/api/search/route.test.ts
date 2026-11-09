@@ -68,6 +68,9 @@ describe('POST /api/search', () => {
     const original = '光海，成为王的男人';
     const fetchSpy = vi.fn(async (input: RequestInfo | URL) => {
       const url = new URL(String(input));
+      if (url.searchParams.get('ids')) return new Response(cmsList([
+        { vod_id: 4, vod_name: '双面君王', vod_year: '2019', type_name: '电影' },
+      ]));
       const common = url.searchParams.get('wd') === '双面君王';
       return new Response(cmsList([
         { vod_id: common ? 2 : 1, vod_name: common ? '双面君王' : original, vod_year: '2012', type_name: '电影' },
@@ -94,8 +97,10 @@ describe('POST /api/search', () => {
     expect(cachedEvents).toHaveLength(1); expect(cachedEvents[0].list).toEqual(data.list);
     expect(fetchSpy).not.toHaveBeenCalled();
     const broad = await POST(makeRequest({ wd: original, sources: [source] }));
-    expect((await broad.json()).list.some((i: { vodId: string }) => i.vodId === '3')).toBe(true);
-    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    const broadData = await broad.json();
+    expect(broadData.list.some((i: { vodId: string }) => i.vodId === '3')).toBe(true);
+    expect(broadData.list.find((i: { vodId: string }) => i.vodId === '4').identityUnconfirmed).toBe(true);
+    expect(fetchSpy).toHaveBeenCalledTimes(3); // Two titles plus one conflicting metadata lookup.
   });
 
   it('keeps one successful name when the other fails and does not cache an incomplete response', async () => {
@@ -128,6 +133,9 @@ describe('POST /api/search', () => {
   it.each([false, true])('季数查询以系列名召回，分页和流式结果均排除错误季数（stream=%s）', async stream => {
     const fetchSpy = vi.fn(async (input: RequestInfo | URL) => {
       const url = new URL(String(input));
+      if (url.searchParams.get('ids')) return new Response(cmsList([
+        { vod_id: Number(url.searchParams.get('ids')), vod_name: '鱿鱼游戏第二季', vod_year: '2024', type_name: '韩国剧' },
+      ]));
       expect(url.searchParams.get('wd')).toBe('鱿鱼游戏');
       return new Response(cmsList(url.searchParams.get('pg') === '1' ? [
         { vod_id: 11, vod_name: '鱿鱼游戏第一季' },
@@ -145,7 +153,7 @@ describe('POST /api/search', () => {
       const data = await res.json();
       expect(data.list.map((i: { vodId: string }) => i.vodId).sort()).toEqual(['12', '14']);
     }
-    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    expect(fetchSpy).toHaveBeenCalledTimes(4); // Two pages plus two missing metadata lookups.
   });
 
   it('聚合多源结果：同源去重、成人内容过滤、失败源进 failures', async () => {
