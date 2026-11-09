@@ -7,6 +7,7 @@ import { PLAYER_LOADING_ICON } from '@/lib/brand';
 import Hls, { type HlsConfig, type FragmentLoaderContext } from 'hls.js';
 
 import { PlaybackTracker } from '@/lib/playback-quality';
+import { PlaybackResolution } from '@/components/playback-resolution';
 import { usePlaybackQuality } from '@/lib/playback-quality-store';
 import { PlaybackRecovery, describeHlsError } from '@/lib/playback-recovery';
 import { playbackLoaders, type PlaybackFragmentObserver } from '@/lib/hls-loader';
@@ -684,6 +685,7 @@ export function PlayerShell({
     <div className={`relative w-full h-full${showPoster && !error ? ' hometv-starting' : ''}`}>
       <div ref={containerRef} className="w-full h-full" style={{ WebkitTouchCallout: 'none' }} />
       {player && createPortal(<span className="hometv-progress-time" aria-label="播放进度" aria-live="off">{progressTime}</span>, player.template.$player)}
+      {player && createPortal(<PlaybackResolution key={url} video={player.video} />, player.template.$player)}
       {player && createPortal(<PlaybackTools player={player} count={episodeCount} index={episodeIndex} onEpisode={onEpisode} onSleep={() => {
         sleeping.current = true;
         getVideoPrefetcher().stop(); getNextEpisodePrefetcher().stop();

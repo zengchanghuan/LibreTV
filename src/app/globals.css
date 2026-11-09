@@ -77,6 +77,7 @@ header.sticky { top: env(safe-area-inset-top, 0px); }
 .pwa-update { display: flex; gap: 12px; align-items: center; justify-content: center; padding: 10px 16px; border-bottom: 1px solid rgb(var(--c-line)); background: rgb(var(--c-surface)); font-size: 13px; }
 .pwa-update > span { min-width: 0; }
 .playback-tools-button { background: transparent; color: white; border: 0; padding: 4px; font-size: 12px; white-space: nowrap; cursor: pointer; }
+.playback-resolution { position: absolute; z-index: 20; top: max(10px, env(safe-area-inset-top)); right: max(10px, env(safe-area-inset-right)); padding: 3px 7px; border: 1px solid #ffffff30; border-radius: 5px; background: #0009; color: #fff; font-size: 11px; font-weight: 600; line-height: 1.4; font-variant-numeric: tabular-nums; pointer-events: none; }
 .playback-speed-menu-button { border: 0; padding: 0; background: transparent; color: inherit; font: inherit; cursor: pointer; }
 .art-has-playback-tools { container-type: inline-size; }
 .playback-tools-panel { position: absolute; z-index: 110; right: max(8px, env(safe-area-inset-right)); top: max(8px, env(safe-area-inset-top)); max-height: calc(100% - max(8px, env(safe-area-inset-top)) - 46px); width: min(310px, calc(100% - 16px)); overflow: auto; padding: 12px; color: white; background: #101827f5; border: 1px solid #526078; border-radius: 12px; font-size: 13px; }
