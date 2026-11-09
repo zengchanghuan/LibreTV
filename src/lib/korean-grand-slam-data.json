@@ -1,0 +1,1668 @@
+{
+  "asOf": "2026-11-09",
+  "actors": [
+    {
+      "name": "宋康昊",
+      "gender": "male",
+      "sources": [
+        "https://www.koreanfilm.or.kr/eng/films/index/peopleView.jsp?peopleCd=10037018"
+      ],
+      "awards": [
+        {
+          "filmId": "kofic-20162869",
+          "award": "青龙",
+          "year": 2017
+        },
+        {
+          "filmId": "kofic-20030046",
+          "award": "大钟",
+          "year": 2003
+        },
+        {
+          "filmId": "kofic-20159646",
+          "award": "百想",
+          "year": 2017
+        }
+      ]
+    },
+    {
+      "name": "崔岷植",
+      "gender": "male",
+      "sources": [
+        "https://www.koreanfilm.or.kr/eng/films/index/peopleView.jsp?peopleCd=10072251"
+      ],
+      "awards": [
+        {
+          "filmId": "kofic-20030350",
+          "award": "青龙",
+          "year": 2003
+        },
+        {
+          "filmId": "kofic-20030350",
+          "award": "大钟",
+          "year": 2004
+        },
+        {
+          "filmId": "kofic-20030350",
+          "award": "百想",
+          "year": 2004
+        }
+      ]
+    },
+    {
+      "name": "李秉宪",
+      "gender": "male",
+      "sources": [
+        "https://www.koreanfilm.or.kr/eng/films/index/peopleView.jsp?peopleCd=10055626"
+      ],
+      "awards": [
+        {
+          "filmId": "kofic-20149314",
+          "award": "青龙",
+          "year": 2016
+        },
+        {
+          "filmId": "kofic-20149314",
+          "award": "大钟",
+          "year": 2016
+        },
+        {
+          "filmId": "kofic-20149314",
+          "award": "百想",
+          "year": 2016
+        }
+      ]
+    },
+    {
+      "name": "黄政民",
+      "gender": "male",
+      "sources": [
+        "https://www.koreanfilm.or.kr/eng/films/index/peopleView.jsp?peopleCd=10090290",
+        "https://isplus.com/article/view/isp202405070336"
+      ],
+      "awards": [
+        {
+          "filmId": "kofic-20124401",
+          "award": "青龙",
+          "year": 2013
+        },
+        {
+          "filmId": "kofic-20137048",
+          "award": "大钟",
+          "year": 2015
+        },
+        {
+          "filmId": "kofic-20212866",
+          "award": "百想",
+          "year": 2024
+        }
+      ]
+    },
+    {
+      "name": "薛景求",
+      "gender": "male",
+      "sources": [
+        "https://www.koreanfilm.or.kr/eng/films/index/peopleView.jsp?peopleCd=10035772"
+      ],
+      "awards": [
+        {
+          "filmId": "kofic-19990050",
+          "award": "青龙",
+          "year": 2000
+        },
+        {
+          "filmId": "kofic-20164844",
+          "award": "大钟",
+          "year": 2017
+        },
+        {
+          "filmId": "kofic-20134582",
+          "award": "百想",
+          "year": 2014
+        }
+      ]
+    },
+    {
+      "name": "金允石",
+      "gender": "male",
+      "sources": [
+        "https://www.koreanfilm.or.kr/eng/films/index/peopleView.jsp?peopleCd=10005276"
+      ],
+      "awards": [
+        {
+          "filmId": "kofic-20080046",
+          "award": "青龙",
+          "year": 2008
+        },
+        {
+          "filmId": "kofic-20080046",
+          "award": "大钟",
+          "year": 2008
+        },
+        {
+          "filmId": "kofic-20170590",
+          "award": "百想",
+          "year": 2018
+        }
+      ]
+    },
+    {
+      "name": "安圣基",
+      "gender": "male",
+      "sources": [
+        "https://www.koreanfilm.or.kr/eng/films/index/peopleView.jsp?peopleCd=10043371"
+      ],
+      "awards": [
+        {
+          "filmId": "kofic-20060284",
+          "award": "青龙",
+          "year": 2006
+        },
+        {
+          "filmId": "kofic-20060284",
+          "award": "大钟",
+          "year": 2007
+        },
+        {
+          "filmId": "kofic-20113535",
+          "award": "百想",
+          "year": 2012
+        }
+      ]
+    },
+    {
+      "name": "韩石圭",
+      "gender": "male",
+      "sources": [
+        "https://www.koreanfilm.or.kr/eng/films/index/peopleView.jsp?peopleCd=10087518"
+      ],
+      "awards": [
+        {
+          "filmId": "kofic-19970048",
+          "award": "青龙",
+          "year": 1997
+        },
+        {
+          "filmId": "kofic-19970048",
+          "award": "大钟",
+          "year": 1997
+        },
+        {
+          "filmId": "kofic-19970048",
+          "award": "百想",
+          "year": 1997
+        }
+      ]
+    },
+    {
+      "name": "朴重勋",
+      "gender": "male",
+      "sources": [
+        "https://www.koreanfilm.or.kr/eng/films/index/peopleView.jsp?peopleCd=10029293"
+      ],
+      "awards": [
+        {
+          "filmId": "kofic-19940020",
+          "award": "青龙",
+          "year": 1994
+        },
+        {
+          "filmId": "kofic-19930041",
+          "award": "大钟",
+          "year": 1994
+        },
+        {
+          "filmId": "kofic-19990070",
+          "award": "百想",
+          "year": 2000
+        }
+      ]
+    },
+    {
+      "name": "崔民秀",
+      "gender": "male",
+      "sources": [
+        "https://www.koreanfilm.or.kr/eng/films/index/peopleView.jsp?peopleCd=10072250"
+      ],
+      "awards": [
+        {
+          "filmId": "kofic-19950027",
+          "award": "青龙",
+          "year": 1995
+        },
+        {
+          "filmId": "kofic-19950027",
+          "award": "大钟",
+          "year": 1996
+        },
+        {
+          "filmId": "kofic-20000055",
+          "award": "百想",
+          "year": 2001
+        }
+      ]
+    },
+    {
+      "name": "申荣均",
+      "gender": "male",
+      "sources": [
+        "https://shinyoungkyun.com/founder"
+      ],
+      "awards": [
+        {
+          "filmId": "kofic-20156391",
+          "award": "青龙",
+          "year": 1966
+        },
+        {
+          "filmId": "kofic-20110014",
+          "award": "大钟",
+          "year": 1962
+        },
+        {
+          "filmId": "kofic-19688044",
+          "award": "百想",
+          "year": 1969
+        }
+      ]
+    },
+    {
+      "name": "金振奎",
+      "gender": "male",
+      "sources": [
+        "https://encykorea.aks.ac.kr/Article/E0010636",
+        "https://en.wikipedia.org/wiki/Baeksang_Arts_Award_for_Best_Actor_%E2%80%93_Film"
+      ],
+      "awards": [
+        {
+          "filmId": "cine21-14657",
+          "award": "青龙",
+          "year": 1964
+        },
+        {
+          "filmId": "cine21-14659",
+          "award": "大钟",
+          "year": 1966
+        },
+        {
+          "filmId": "cine21-14659",
+          "award": "百想",
+          "year": 1967
+        }
+      ]
+    },
+    {
+      "name": "孙艺珍",
+      "gender": "female",
+      "sources": [
+        "https://www.koreanfilm.or.kr/eng/films/index/peopleView.jsp?peopleCd=10036883"
+      ],
+      "awards": [
+        {
+          "filmId": "kofic-20081395",
+          "award": "青龙",
+          "year": 2008
+        },
+        {
+          "filmId": "kofic-20150979",
+          "award": "大钟",
+          "year": 2016
+        },
+        {
+          "filmId": "kofic-20150979",
+          "award": "百想",
+          "year": 2017
+        }
+      ]
+    },
+    {
+      "name": "全度妍",
+      "gender": "female",
+      "sources": [
+        "https://www.koreanfilm.or.kr/eng/films/index/peopleView.jsp?peopleCd=10061252"
+      ],
+      "awards": [
+        {
+          "filmId": "kofic-19990077",
+          "award": "青龙",
+          "year": 1999
+        },
+        {
+          "filmId": "kofic-19990077",
+          "award": "大钟",
+          "year": 2000
+        },
+        {
+          "filmId": "kofic-19980012",
+          "award": "百想",
+          "year": 1999
+        }
+      ]
+    },
+    {
+      "name": "金惠秀",
+      "gender": "female",
+      "sources": [
+        "https://www.koreanfilm.or.kr/eng/films/index/peopleView.jsp?peopleCd=10006380"
+      ],
+      "awards": [
+        {
+          "filmId": "kofic-20060277",
+          "award": "青龙",
+          "year": 2006
+        },
+        {
+          "filmId": "kofic-20040625",
+          "award": "大钟",
+          "year": 2005
+        },
+        {
+          "filmId": "kofic-20040625",
+          "award": "百想",
+          "year": 2005
+        }
+      ]
+    },
+    {
+      "name": "金荷娜",
+      "gender": "female",
+      "sources": [
+        "https://www.koreanfilm.or.kr/eng/films/index/peopleView.jsp?peopleCd=10006171"
+      ],
+      "awards": [
+        {
+          "filmId": "kofic-20110297",
+          "award": "青龙",
+          "year": 2011
+        },
+        {
+          "filmId": "kofic-20110297",
+          "award": "大钟",
+          "year": 2011
+        },
+        {
+          "filmId": "kofic-20040446",
+          "award": "百想",
+          "year": 2004
+        }
+      ]
+    },
+    {
+      "name": "罗文姬",
+      "gender": "female",
+      "sources": [
+        "https://www.koreanfilm.or.kr/eng/films/index/peopleView.jsp?peopleCd=10006877"
+      ],
+      "awards": [
+        {
+          "filmId": "kofic-20174142",
+          "award": "青龙",
+          "year": 2017
+        },
+        {
+          "filmId": "kofic-20174142",
+          "award": "大钟",
+          "year": 2018
+        },
+        {
+          "filmId": "kofic-20174142",
+          "award": "百想",
+          "year": 2018
+        }
+      ]
+    },
+    {
+      "name": "沈银河",
+      "gender": "female",
+      "sources": [
+        "https://www.koreanfilm.or.kr/eng/films/index/peopleView.jsp?peopleCd=10040878"
+      ],
+      "awards": [
+        {
+          "filmId": "kofic-19980036",
+          "award": "青龙",
+          "year": 1998
+        },
+        {
+          "filmId": "kofic-19980001",
+          "award": "大钟",
+          "year": 1999
+        },
+        {
+          "filmId": "kofic-19980036",
+          "award": "百想",
+          "year": 1998
+        }
+      ]
+    },
+    {
+      "name": "沈惠珍",
+      "gender": "female",
+      "sources": [
+        "https://www.koreanfilm.or.kr/eng/films/index/peopleView.jsp?peopleCd=10040919"
+      ],
+      "awards": [
+        {
+          "filmId": "kofic-19960018",
+          "award": "青龙",
+          "year": 1996
+        },
+        {
+          "filmId": "kofic-19970048",
+          "award": "大钟",
+          "year": 1997
+        },
+        {
+          "filmId": "kofic-19970048",
+          "award": "百想",
+          "year": 1997
+        }
+      ]
+    },
+    {
+      "name": "姜受延",
+      "gender": "female",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Blue_Dragon_Film_Award_for_Best_Actress",
+        "https://www.koreanfilm.or.kr/eng/films/index/peopleView.jsp?peopleCd=10000709"
+      ],
+      "awards": [
+        {
+          "filmId": "kofic-19910059",
+          "award": "青龙",
+          "year": 1992
+        },
+        {
+          "filmId": "kofic-19890011",
+          "award": "大钟",
+          "year": 1989
+        },
+        {
+          "filmId": "kofic-19910059",
+          "award": "百想",
+          "year": 1992
+        }
+      ]
+    },
+    {
+      "name": "崔明吉",
+      "gender": "female",
+      "sources": [
+        "https://www.koreanfilm.or.kr/eng/films/index/peopleView.jsp?peopleCd=10072206",
+        "https://en.wikipedia.org/wiki/Grand_Bell_Award_for_Best_Actress"
+      ],
+      "awards": [
+        {
+          "filmId": "kofic-19940034",
+          "award": "青龙",
+          "year": 1994
+        },
+        {
+          "filmId": "cine21-1789",
+          "award": "大钟",
+          "year": 1986
+        },
+        {
+          "filmId": "kofic-19940034",
+          "award": "百想",
+          "year": 1995
+        }
+      ]
+    },
+    {
+      "name": "张美姬",
+      "gender": "female",
+      "sources": [
+        "https://www.naa.go.kr/member/view?memb_id=580"
+      ],
+      "awards": [
+        {
+          "filmId": "kofic-19910080",
+          "award": "青龙",
+          "year": 1991
+        },
+        {
+          "filmId": "kofic-20080690",
+          "award": "大钟",
+          "year": 1983
+        },
+        {
+          "filmId": "kofic-19890047",
+          "award": "百想",
+          "year": 1990
+        }
+      ]
+    },
+    {
+      "name": "元美京",
+      "gender": "female",
+      "sources": [
+        "https://en.wikipedia.org/wiki/Won_Mi-kyung"
+      ],
+      "awards": [
+        {
+          "filmId": "kofic-19900076",
+          "award": "青龙",
+          "year": 1990
+        },
+        {
+          "filmId": "kofic-19900076",
+          "award": "大钟",
+          "year": 1991
+        },
+        {
+          "filmId": "kofic-19840015",
+          "award": "百想",
+          "year": 1984
+        }
+      ]
+    },
+    {
+      "name": "尹静姬",
+      "gender": "female",
+      "sources": [
+        "https://www.koreanfilm.or.kr/eng/films/index/peopleView.jsp?peopleCd=10054490",
+        "https://en.wikipedia.org/wiki/Grand_Bell_Award_for_Best_Actress"
+      ],
+      "awards": [
+        {
+          "filmId": "kofic-20100191",
+          "award": "青龙",
+          "year": 2010
+        },
+        {
+          "filmId": "kofic-20100191",
+          "award": "大钟",
+          "year": 2010
+        },
+        {
+          "filmId": "cine21-5031",
+          "award": "百想",
+          "year": 1973
+        }
+      ]
+    },
+    {
+      "name": "金芝美",
+      "gender": "female",
+      "sources": [
+        "https://www.naa.go.kr/member/view?memb_id=476"
+      ],
+      "awards": [
+        {
+          "filmId": "cine21-6881",
+          "award": "青龙",
+          "year": 1970
+        },
+        {
+          "filmId": "cine21-14128",
+          "award": "大钟",
+          "year": 1974
+        },
+        {
+          "filmId": "kofic-19688044",
+          "award": "百想",
+          "year": 1969
+        }
+      ]
+    },
+    {
+      "name": "文贞淑",
+      "gender": "female",
+      "sources": [
+        "https://encykorea.aks.ac.kr/Article/E0056425",
+        "https://en.wikipedia.org/wiki/Baeksang_Arts_Award_for_Best_Actress_%E2%80%93_Film"
+      ],
+      "awards": [
+        {
+          "filmId": "kofic-20156391",
+          "award": "青龙",
+          "year": 1966
+        },
+        {
+          "filmId": "kofic-20136333",
+          "award": "大钟",
+          "year": 1967
+        },
+        {
+          "filmId": "kofic-20156391",
+          "award": "百想",
+          "year": 1966
+        }
+      ]
+    }
+  ],
+  "films": [
+    {
+      "id": "kofic-20170590",
+      "title": "1987",
+      "year": 2017,
+      "aliases": [
+        "1987：黎明到来的那一天"
+      ],
+      "source": "https://www.koreanfilm.or.kr/eng/films/index/filmsView.jsp?movieCd=20170590",
+      "metadata": {
+        "director": "张俊焕",
+        "cast": "金允石 / 河正宇 / 柳海真",
+        "intro": "1987年，一名大学生在审讯中死亡，多方人士冒险揭露真相，推动公众反抗掩盖与压迫。",
+        "area": "韩国",
+        "mediaType": "movie",
+        "genre": "剧情",
+        "source": "https://www.koreanfilm.or.kr/eng/films/index/filmsView.jsp?movieCd=20170590",
+        "poster": "/posters/korean-grand-slam/kofic-20170590.jpg"
+      },
+      "referenceTitle": "1987: When the Day Comes"
+    },
+    {
+      "id": "kofic-19970048",
+      "title": "绿鱼",
+      "year": 1997,
+      "aliases": [],
+      "source": "https://www.koreanfilm.or.kr/eng/films/index/filmsView.jsp?movieCd=19970048",
+      "metadata": {
+        "poster": "/posters/collections/79456aff26513fd6.jpg",
+        "genre": "剧情 / 爱情 / 动作",
+        "cast": "韩石圭 / 沈惠珍 / 文成根",
+        "source": "https://movie.douban.com/subject/1308206/",
+        "rating": "7.8",
+        "director": "李沧东",
+        "intro": "退伍青年回到物是人非的故乡，因结识歌女而卷入黑帮，寻找家庭归属的愿望渐渐破灭。",
+        "area": "韩国",
+        "mediaType": "movie"
+      },
+      "referenceTitle": "Green Fish"
+    },
+    {
+      "id": "kofic-20030350",
+      "title": "老男孩",
+      "year": 2003,
+      "aliases": [],
+      "source": "https://www.koreanfilm.or.kr/eng/films/index/filmsView.jsp?movieCd=20030350",
+      "metadata": {
+        "mediaType": "movie",
+        "director": "朴赞郁",
+        "poster": "/posters/collections/c26dee00dd70989f.jpg",
+        "genre": "惊悚",
+        "cast": "崔岷植 / 刘智泰 / 姜惠贞",
+        "source": "https://movie.douban.com/subject/1308865/",
+        "rating": "8.3",
+        "intro": "被囚禁十五年的男人突然获释，追查绑架者与失去自由的原因，却一步步落入复仇布局。",
+        "area": "韩国"
+      },
+      "referenceTitle": "Old Boy"
+    },
+    {
+      "id": "kofic-20149314",
+      "title": "局内人",
+      "year": 2015,
+      "aliases": [],
+      "source": "https://www.koreanfilm.or.kr/eng/films/index/filmsView.jsp?movieCd=20149314",
+      "metadata": {
+        "poster": "/posters/korean/inside.jpg",
+        "genre": "犯罪 / 剧情",
+        "cast": "李秉宪 / 曹承佑 / 白润植",
+        "intro": "被权势集团抛弃的政治打手与追求晋升的检察官联手，揭开政商媒体之间的利益网络。",
+        "doubanId": "25862354",
+        "rating": "8.1",
+        "director": "禹民镐",
+        "area": "韩国",
+        "mediaType": "movie",
+        "source": "https://www.koreanfilm.or.kr/eng/films/index/filmsView.jsp?movieCd=20149314"
+      },
+      "referenceTitle": "Inside Men"
+    },
+    {
+      "id": "kofic-20174142",
+      "title": "我能说",
+      "year": 2017,
+      "aliases": [
+        "花漾奶奶秀英文",
+        "不能说的故事"
+      ],
+      "source": "https://www.koreanfilm.or.kr/eng/films/index/filmsView.jsp?movieCd=20174142",
+      "metadata": {
+        "director": "金炫锡",
+        "cast": "罗文姬 / 李帝勋 / 朴哲民",
+        "intro": "热衷投诉的老人缠上精通英语的年轻公务员，请他教自己英语，两人由争执逐渐走向理解。",
+        "area": "韩国",
+        "mediaType": "movie",
+        "genre": "喜剧",
+        "source": "https://cine21.com/movie/info/?movie_id=51372",
+        "poster": "/posters/korean-grand-slam/kofic-20174142.jpg",
+        "rating": "7.43",
+        "ratingSource": "Cine21观众"
+      },
+      "referenceTitle": "I Can Speak"
+    },
+    {
+      "id": "kofic-20020065",
+      "title": "公共之敌",
+      "year": 2002,
+      "aliases": [
+        "人民公敌"
+      ],
+      "source": "https://www.koreanfilm.or.kr/eng/films/index/filmsView.jsp?movieCd=20020065",
+      "metadata": {
+        "poster": "/posters/collections/8f3b26ef025b3aad.jpg",
+        "genre": "犯罪 / 动作",
+        "cast": "薛景求 / 李成宰 / 姜信日",
+        "director": "康佑硕",
+        "source": "https://movie.douban.com/subject/1295889/",
+        "rating": "7.2",
+        "intro": "作风粗暴的刑警追查一宗谋杀案，与外表体面、行事冷酷的基金经理展开较量。",
+        "area": "韩国",
+        "mediaType": "movie"
+      },
+      "referenceTitle": "Public Enemy"
+    },
+    {
+      "id": "kofic-20162869",
+      "title": "出租车司机",
+      "year": 2017,
+      "aliases": [],
+      "source": "https://www.koreanfilm.or.kr/eng/films/index/filmsView.jsp?movieCd=20162869",
+      "metadata": {
+        "poster": "/posters/korean/taxi.jpg",
+        "genre": "剧情",
+        "cast": "宋康昊 / 托马斯·克莱舒曼 / 柳海真",
+        "intro": "1980年，一名首尔出租车司机载着德国记者前往光州，意外成为历史事件的见证人。",
+        "source": "https://www.imdb.com/title/tt6878038/",
+        "rating": "7.9",
+        "ratingSource": "IMDb",
+        "director": "张勋",
+        "area": "韩国",
+        "mediaType": "movie"
+      },
+      "referenceTitle": "A Taxi Driver"
+    },
+    {
+      "id": "kofic-20030046",
+      "title": "杀人回忆",
+      "year": 2003,
+      "aliases": [],
+      "source": "https://www.koreanfilm.or.kr/eng/films/index/filmsView.jsp?movieCd=20030046",
+      "metadata": {
+        "poster": "/posters/collections/3af4d726d515790a.jpg",
+        "genre": "惊悚",
+        "cast": "宋康昊 / 金相庆 / 金雷夏",
+        "source": "https://movie.douban.com/subject/1300299/",
+        "rating": "8.9",
+        "director": "奉俊昊",
+        "intro": "连环命案打破小镇平静，本地刑警与首尔来的警察追寻凶手，却在屡次挫败中陷入困境。",
+        "area": "韩国",
+        "mediaType": "movie"
+      },
+      "referenceTitle": "Memories of Murder"
+    },
+    {
+      "id": "kofic-20159646",
+      "title": "密探",
+      "year": 2016,
+      "aliases": [],
+      "source": "https://www.koreanfilm.or.kr/eng/films/index/filmsView.jsp?movieCd=20159646",
+      "metadata": {
+        "poster": "/posters/korean/shadows.jpg",
+        "genre": "动作",
+        "cast": "宋康昊 / 孔刘 / 韩志旼",
+        "intro": "日本占领时期，为日方效力的朝鲜警察奉命追查抵抗组织，在身份与立场之间动摇。",
+        "director": "金知云",
+        "area": "韩国",
+        "mediaType": "movie",
+        "source": "https://www.koreanfilm.or.kr/eng/films/index/filmsView.jsp?movieCd=20159646"
+      },
+      "referenceTitle": "The Age of Shadows"
+    },
+    {
+      "id": "kofic-20124401",
+      "title": "新世界",
+      "year": 2013,
+      "aliases": [],
+      "source": "https://www.koreanfilm.or.kr/eng/films/index/filmsView.jsp?movieCd=20124401",
+      "metadata": {
+        "poster": "/posters/collections/32d7ac18342ce6e8.jpg",
+        "genre": "犯罪 / 动作",
+        "cast": "李政宰 / 崔岷植 / 黄政民",
+        "source": "https://movie.douban.com/subject/10437779/",
+        "rating": "8.9",
+        "director": "朴勋政",
+        "area": "韩国",
+        "ratingSource": "豆瓣",
+        "doubanId": "10437779",
+        "mediaType": "movie",
+        "intro": "黑帮首领意外身亡，潜伏多年的警察卷入继任之争，在警方任务与帮派情义之间挣扎。"
+      },
+      "referenceTitle": "New World"
+    },
+    {
+      "id": "kofic-20137048",
+      "title": "国际市场",
+      "year": 2014,
+      "aliases": [],
+      "source": "https://www.koreanfilm.or.kr/eng/films/index/filmsView.jsp?movieCd=20137048",
+      "metadata": {
+        "poster": "/posters/collections/850a2e4b398e2798.jpg",
+        "genre": "剧情",
+        "cast": "黄政民 / 金允珍 / 吴达洙",
+        "source": "https://movie.douban.com/subject/21937450/",
+        "rating": "8.6",
+        "director": "尹济均",
+        "intro": "一名男子在战争中与家人失散，此后辗转异国谋生，用一生履行照顾家庭的承诺。",
+        "area": "韩国",
+        "mediaType": "movie"
+      },
+      "referenceTitle": "Ode to My Father"
+    },
+    {
+      "id": "kofic-20212866",
+      "title": "首尔之春",
+      "year": 2023,
+      "aliases": [],
+      "source": "https://www.koreanfilm.or.kr/eng/films/index/filmsView.jsp?movieCd=20212866",
+      "metadata": {
+        "poster": "/posters/korean/seoul.jpg",
+        "genre": "剧情",
+        "cast": "黄政民 / 郑雨盛 / 李星民",
+        "intro": "1979年12月，军中集团发动政变，首都防卫司令在混乱之夜竭力阻止军队夺权。",
+        "doubanId": "35712804",
+        "rating": "8.8",
+        "director": "金性洙",
+        "area": "韩国",
+        "mediaType": "movie",
+        "source": "https://www.koreanfilm.or.kr/eng/films/index/filmsView.jsp?movieCd=20212866"
+      },
+      "referenceTitle": "12.12: THE DAY"
+    },
+    {
+      "id": "kofic-19990050",
+      "title": "薄荷糖",
+      "year": 1999,
+      "aliases": [],
+      "source": "https://www.koreanfilm.or.kr/eng/films/index/filmsView.jsp?movieCd=19990050",
+      "metadata": {
+        "poster": "/posters/collections/8b628e6c48e0a052.jpg",
+        "genre": "剧情",
+        "cast": "薛景求 / 文素利 / 金汝珍",
+        "source": "https://movie.douban.com/subject/1303145/",
+        "rating": "8.6",
+        "director": "李沧东",
+        "intro": "影片从一个男人的崩溃倒溯二十年人生，呈现个人创伤与韩国社会变迁的交织。",
+        "area": "韩国",
+        "mediaType": "movie"
+      },
+      "referenceTitle": "Peppermint Candy"
+    },
+    {
+      "id": "kofic-20164844",
+      "title": "不汗党",
+      "year": 2017,
+      "aliases": [],
+      "source": "https://www.koreanfilm.or.kr/eng/films/index/filmsView.jsp?movieCd=20164844",
+      "metadata": {
+        "director": "卞成贤",
+        "cast": "薛景求 / 任时完 / 金熙元",
+        "intro": "年轻囚犯与黑帮人物在监狱中结盟，出狱后进入权力争斗，彼此隐藏的身份动摇了信任。",
+        "area": "韩国",
+        "mediaType": "movie",
+        "genre": "犯罪 / 动作 / 剧情",
+        "source": "https://www.koreanfilm.or.kr/eng/films/index/filmsView.jsp?movieCd=20164844",
+        "poster": "/posters/korean-grand-slam/kofic-20164844.jpg"
+      },
+      "referenceTitle": "The Merciless"
+    },
+    {
+      "id": "kofic-20134582",
+      "title": "素媛",
+      "year": 2013,
+      "aliases": [],
+      "source": "https://www.koreanfilm.or.kr/eng/films/index/filmsView.jsp?movieCd=20134582",
+      "metadata": {
+        "director": "李濬益",
+        "cast": "薛景求 / 严志媛 / 李来",
+        "intro": "女孩遭受严重伤害后，一家人在亲友陪伴下努力走出创痛，重新建立生活的安全感。",
+        "area": "韩国",
+        "mediaType": "movie",
+        "genre": "剧情",
+        "source": "https://www.koreanfilm.or.kr/eng/films/index/filmsView.jsp?movieCd=20134582",
+        "poster": "/posters/korean-grand-slam/kofic-20134582.jpg"
+      },
+      "referenceTitle": "Hope"
+    },
+    {
+      "id": "kofic-20080046",
+      "title": "追击者",
+      "year": 2008,
+      "aliases": [],
+      "source": "https://www.koreanfilm.or.kr/eng/films/index/filmsView.jsp?movieCd=20080046",
+      "metadata": {
+        "poster": "/posters/collections/dadf9cfc00c3835c.jpg",
+        "genre": "犯罪 / 惊悚 / 动作",
+        "cast": "金允石 / 河正宇 / 徐英姬",
+        "source": "https://movie.douban.com/subject/3006309/",
+        "rating": "8.4",
+        "director": "罗泓轸",
+        "intro": "昔日刑警发现手下女子接连失踪，追踪可疑客人，试图在时间耗尽前救出受害者。",
+        "area": "韩国",
+        "mediaType": "movie"
+      },
+      "referenceTitle": "The Chaser"
+    },
+    {
+      "id": "kofic-20060284",
+      "title": "广播明星",
+      "year": 2006,
+      "aliases": [],
+      "source": "https://www.koreanfilm.or.kr/eng/films/index/filmsView.jsp?movieCd=20060284",
+      "metadata": {
+        "director": "李濬益",
+        "cast": "朴重勋 / 安圣基 / 申正根",
+        "intro": "过气歌手在经纪人陪伴下来到地方电台主持节目，在与听众的交流中重新找回自己。",
+        "area": "韩国",
+        "mediaType": "movie",
+        "genre": "剧情",
+        "source": "https://www.koreanfilm.or.kr/eng/films/index/filmsView.jsp?movieCd=20060284",
+        "poster": "/posters/korean-grand-slam/kofic-20060284.jpg"
+      },
+      "referenceTitle": "Radio Star"
+    },
+    {
+      "id": "kofic-20113535",
+      "title": "断箭",
+      "year": 2012,
+      "aliases": [
+        "停职的代价"
+      ],
+      "source": "https://www.koreanfilm.or.kr/eng/films/index/filmsView.jsp?movieCd=20113535",
+      "metadata": {
+        "director": "郑智泳",
+        "cast": "安圣基 / 朴元尚 / 罗映姬",
+        "intro": "被解聘的教授卷入持弩伤人案件，他与律师在法庭上挑战审判程序和权力的不公。",
+        "area": "韩国",
+        "mediaType": "movie",
+        "genre": "剧情",
+        "source": "https://www.koreanfilm.or.kr/eng/films/index/filmsView.jsp?movieCd=20113535",
+        "poster": "/posters/korean-grand-slam/kofic-20113535.jpg"
+      },
+      "referenceTitle": "Unbowed"
+    },
+    {
+      "id": "kofic-19940020",
+      "title": "游戏规则",
+      "year": 1994,
+      "aliases": [],
+      "source": "https://www.koreanfilm.or.kr/eng/films/index/filmsView.jsp?movieCd=19940020",
+      "metadata": {
+        "director": "张贤洙",
+        "cast": "朴重勋 / 李璟荣 / 吴妍秀",
+        "intro": "怀抱出人头地梦想的青年投身黑帮，却在组织的残酷规则和背叛中逐渐失去退路。",
+        "area": "韩国",
+        "mediaType": "movie",
+        "genre": "剧情 / 动作",
+        "source": "https://www.koreanfilm.or.kr/eng/films/index/filmsView.jsp?movieCd=19940020",
+        "poster": "/posters/korean-grand-slam/kofic-19940020.jpg"
+      },
+      "referenceTitle": "The Rules Of The Game",
+      "posterLandscape": true,
+      "coverKind": "still",
+      "coverSource": "https://www.koreanfilm.or.kr/eng/films/index/filmsView.jsp?movieCd=19940020"
+    },
+    {
+      "id": "kofic-19930041",
+      "title": "特警冤家",
+      "year": 1993,
+      "aliases": [
+        "两个警察"
+      ],
+      "source": "https://www.koreanfilm.or.kr/eng/films/index/filmsView.jsp?movieCd=19930041",
+      "metadata": {
+        "director": "康佑硕",
+        "cast": "安圣基 / 朴重勋 / 池秀媛",
+        "intro": "老练圆滑的刑警与刚毕业的正直新人组成搭档，两种办案方式不断碰撞。",
+        "area": "韩国",
+        "mediaType": "movie",
+        "genre": "喜剧 / 动作 / 剧情",
+        "source": "https://www.koreanfilm.or.kr/eng/films/index/filmsView.jsp?movieCd=19930041",
+        "poster": "/posters/korean-grand-slam/kofic-19930041.jpg"
+      },
+      "referenceTitle": "Two Cops",
+      "coverSource": "https://en.wikipedia.org/wiki/Two_Cops"
+    },
+    {
+      "id": "kofic-19990070",
+      "title": "无处藏身",
+      "year": 1999,
+      "aliases": [],
+      "source": "https://www.koreanfilm.or.kr/eng/films/index/filmsView.jsp?movieCd=19990070",
+      "metadata": {
+        "director": "李明世",
+        "cast": "朴重勋 / 安圣基 / 张东健",
+        "intro": "一名刑警追捕狡猾的杀人嫌疑人，在城市街巷和漫长追踪中展开意志较量。",
+        "area": "韩国",
+        "mediaType": "movie",
+        "genre": "动作",
+        "source": "https://www.koreanfilm.or.kr/eng/films/index/filmsView.jsp?movieCd=19990070",
+        "poster": "/posters/korean-grand-slam/kofic-19990070.jpg"
+      },
+      "referenceTitle": "Nowhere To Hide",
+      "coverSource": "https://en.wikipedia.org/wiki/Nowhere_to_Hide_(1999_film)"
+    },
+    {
+      "id": "kofic-19950027",
+      "title": "怒火",
+      "year": 1995,
+      "aliases": [
+        "怒火风云"
+      ],
+      "source": "https://www.koreanfilm.or.kr/eng/films/index/filmsView.jsp?movieCd=19950027",
+      "metadata": {
+        "director": "金永彬",
+        "cast": "崔民秀 / 李璟荣 / 廉晶雅",
+        "intro": "兄弟二人走上不同人生道路，警察与暴力世界的冲突让他们陷入悲剧。",
+        "area": "韩国",
+        "mediaType": "movie",
+        "genre": "动作",
+        "source": "https://www.koreanfilm.or.kr/eng/films/index/filmsView.jsp?movieCd=19950027",
+        "poster": "/posters/korean-grand-slam/kofic-19950027.jpg"
+      },
+      "referenceTitle": "The Terrorist"
+    },
+    {
+      "id": "kofic-20000055",
+      "title": "烈火焚城",
+      "year": 2000,
+      "aliases": [],
+      "source": "https://www.koreanfilm.or.kr/eng/films/index/filmsView.jsp?movieCd=20000055",
+      "metadata": {
+        "director": "梁允豪",
+        "cast": "崔民秀 / 车胜元 / 刘智泰",
+        "intro": "一连串蓄意纵火案件威胁城市，消防员与危险纵火者展开争分夺秒的对抗。",
+        "area": "韩国",
+        "mediaType": "movie",
+        "genre": "剧情 / Mystery / 犯罪 / 动作",
+        "source": "https://www.koreanfilm.or.kr/eng/films/index/filmsView.jsp?movieCd=20000055",
+        "poster": "/posters/korean-grand-slam/kofic-20000055.jpg"
+      },
+      "referenceTitle": "Libera Me"
+    },
+    {
+      "id": "kofic-20081395",
+      "title": "妻子结婚了",
+      "year": 2008,
+      "aliases": [],
+      "source": "https://www.koreanfilm.or.kr/eng/films/index/filmsView.jsp?movieCd=20081395",
+      "metadata": {
+        "poster": "/posters/collections/400270c83abb7d42.jpg",
+        "genre": "爱情 / 剧情",
+        "cast": "孙艺珍 / 金柱赫 / 朱相昱",
+        "source": "https://movie.douban.com/subject/3318473/",
+        "rating": "6.5",
+        "director": "郑允秀",
+        "intro": "一名男子与心爱的女人结婚后，妻子却提出再与另一个男人组建婚姻。",
+        "area": "韩国",
+        "mediaType": "movie"
+      },
+      "referenceTitle": "My Wife Got Married"
+    },
+    {
+      "id": "kofic-20150979",
+      "title": "德惠翁主",
+      "year": 2016,
+      "aliases": [],
+      "source": "https://www.koreanfilm.or.kr/eng/films/index/filmsView.jsp?movieCd=20150979",
+      "metadata": {
+        "poster": "/posters/collections/cdf5fd17348ee592.jpg",
+        "genre": "历史 / 剧情",
+        "cast": "孙艺珍 / 朴海日 / 尹宰文",
+        "source": "https://movie.douban.com/subject/10774104/",
+        "rating": "7.6",
+        "director": "许秦豪",
+        "intro": "朝鲜王朝末代公主被迫迁往日本，在动荡年代中坚持寻找返回故乡的机会。",
+        "area": "韩国",
+        "mediaType": "movie"
+      },
+      "referenceTitle": "The Last Princess"
+    },
+    {
+      "id": "kofic-19990077",
+      "title": "记忆中的风琴",
+      "year": 1999,
+      "aliases": [],
+      "source": "https://www.koreanfilm.or.kr/eng/films/index/filmsView.jsp?movieCd=19990077",
+      "metadata": {
+        "director": "李荣宰",
+        "cast": "全度妍 / 李秉宪 / 李美妍",
+        "intro": "乡村学校的少女暗恋年轻老师，而老师心仪另一位女教师，青春心事在日记与课堂间展开。",
+        "area": "韩国",
+        "mediaType": "movie",
+        "genre": "爱情 / 剧情",
+        "source": "https://www.koreanfilm.or.kr/eng/films/index/filmsView.jsp?movieCd=19990077",
+        "poster": "/posters/korean-grand-slam/kofic-19990077.jpg"
+      },
+      "referenceTitle": "The Harmonium In My Memory",
+      "coverSource": "https://en.wikipedia.org/wiki/The_Harmonium_in_My_Memory"
+    },
+    {
+      "id": "kofic-19980012",
+      "title": "约定",
+      "year": 1998,
+      "aliases": [],
+      "source": "https://www.koreanfilm.or.kr/eng/films/index/filmsView.jsp?movieCd=19980012",
+      "metadata": {
+        "director": "金裕珍",
+        "cast": "全度妍 / 朴信阳 / 郑镇荣",
+        "intro": "女医生与受伤入院的黑帮首领相爱，暴力世界却使两人的承诺面临考验。",
+        "area": "韩国",
+        "mediaType": "movie",
+        "genre": "爱情 / 动作",
+        "source": "https://www.koreanfilm.or.kr/eng/films/index/filmsView.jsp?movieCd=19980012",
+        "poster": "/posters/korean-grand-slam/kofic-19980012.jpg"
+      },
+      "referenceTitle": "A Promise"
+    },
+    {
+      "id": "kofic-20060277",
+      "title": "老千",
+      "year": 2006,
+      "aliases": [],
+      "source": "https://www.koreanfilm.or.kr/eng/films/index/filmsView.jsp?movieCd=20060277",
+      "metadata": {
+        "poster": "/posters/collections/fe4dacf2c8fc3774.jpg",
+        "genre": "剧情",
+        "cast": "曹承佑 / 金惠秀 / 白润植",
+        "source": "https://movie.douban.com/subject/1915180/",
+        "rating": "7.6",
+        "director": "崔东勋",
+        "intro": "输光积蓄的青年拜师学习赌术，进入职业赌徒的世界，陷入利益与骗局交织的较量。",
+        "area": "韩国",
+        "mediaType": "movie"
+      },
+      "referenceTitle": "Tazza: The High Rollers"
+    },
+    {
+      "id": "kofic-20040625",
+      "title": "无颜美女",
+      "year": 2004,
+      "aliases": [],
+      "source": "https://www.koreanfilm.or.kr/eng/films/index/filmsView.jsp?movieCd=20040625",
+      "metadata": {
+        "poster": "/posters/collections/cf0fda6022b43fb7.jpg",
+        "genre": "惊悚",
+        "cast": "金惠秀 / 金太祐 / 韩正洙",
+        "source": "https://movie.douban.com/subject/1830192/",
+        "rating": "5.8",
+        "director": "金仁植",
+        "intro": "心理医生与曾经的女病人再次相遇，治疗关系演变为纠缠而危险的感情。",
+        "area": "韩国",
+        "mediaType": "movie"
+      },
+      "referenceTitle": "Hypnotized"
+    },
+    {
+      "id": "kofic-20110297",
+      "title": "盲证",
+      "year": 2011,
+      "aliases": [],
+      "source": "https://www.koreanfilm.or.kr/eng/films/index/filmsView.jsp?movieCd=20110297",
+      "metadata": {
+        "director": "安相勋",
+        "cast": "金荷娜 / 俞承豪 / 曹熙奉",
+        "intro": "失明的前警校学生与另一名目击者协助警方追查案件，也因此成为凶手的目标。",
+        "area": "韩国",
+        "mediaType": "movie",
+        "genre": "惊悚",
+        "source": "https://www.koreanfilm.or.kr/eng/films/index/filmsView.jsp?movieCd=20110297",
+        "poster": "/posters/korean-grand-slam/kofic-20110297.jpg"
+      },
+      "referenceTitle": "Blind"
+    },
+    {
+      "id": "kofic-20040446",
+      "title": "不要相信她",
+      "year": 2004,
+      "aliases": [],
+      "source": "https://www.koreanfilm.or.kr/eng/films/index/filmsView.jsp?movieCd=20040446",
+      "metadata": {
+        "director": "裴炯俊",
+        "cast": "金荷娜 / 姜栋元 / 金智英",
+        "intro": "刚获假释的女骗子意外拿到一枚戒指，寻找失物时被误认成小镇青年的未婚妻。",
+        "area": "韩国",
+        "mediaType": "movie",
+        "genre": "喜剧",
+        "source": "https://www.koreanfilm.or.kr/eng/films/index/filmsView.jsp?movieCd=20040446",
+        "poster": "/posters/korean-grand-slam/kofic-20040446.jpg"
+      },
+      "referenceTitle": "Too Beautiful to Lie"
+    },
+    {
+      "id": "kofic-19980036",
+      "title": "八月照相馆",
+      "year": 1998,
+      "aliases": [],
+      "source": "https://www.koreanfilm.or.kr/eng/films/index/filmsView.jsp?movieCd=19980036",
+      "metadata": {
+        "director": "许秦豪",
+        "cast": "韩石圭 / 沈银河 / 申久",
+        "intro": "身患重病的照相馆主人与前来冲洗照片的女交警相识，在平静日常中体会告别与爱意。",
+        "area": "韩国",
+        "mediaType": "movie",
+        "genre": "爱情 / 剧情",
+        "source": "https://www.koreanfilm.or.kr/eng/films/index/filmsView.jsp?movieCd=19980036",
+        "poster": "/posters/korean-grand-slam/kofic-19980036.jpg"
+      },
+      "referenceTitle": "Christmas in August"
+    },
+    {
+      "id": "kofic-19980001",
+      "title": "美术馆旁边的动物园",
+      "year": 1998,
+      "aliases": [],
+      "source": "https://www.koreanfilm.or.kr/eng/films/index/filmsView.jsp?movieCd=19980001",
+      "metadata": {
+        "director": "李廷香",
+        "cast": "沈银河 / 李成宰 / 安圣基",
+        "intro": "休假的士兵误住进陌生女子的公寓，两人在争吵中共同创作剧本，也逐渐了解彼此。",
+        "area": "韩国",
+        "mediaType": "movie",
+        "genre": "剧情 / 爱情",
+        "source": "https://www.koreanfilm.or.kr/eng/films/index/filmsView.jsp?movieCd=19980001",
+        "poster": "/posters/korean-grand-slam/kofic-19980001.jpg"
+      },
+      "referenceTitle": "Art Museum By The Zoo"
+    },
+    {
+      "id": "kofic-19960018",
+      "title": "朴峰坤离家事件",
+      "year": 1996,
+      "aliases": [],
+      "source": "https://www.koreanfilm.or.kr/eng/films/index/filmsView.jsp?movieCd=19960018",
+      "metadata": {
+        "director": "金泰均",
+        "cast": "沈惠珍 / 安圣基 / 明桂南",
+        "intro": "不甘困于婚姻的主妇离家追寻歌唱梦想，受丈夫委托寻找她的侦探却被她的日记打动。",
+        "area": "韩国",
+        "mediaType": "movie",
+        "genre": "爱情 / 喜剧",
+        "source": "https://www.koreanfilm.or.kr/eng/films/index/filmsView.jsp?movieCd=19960018",
+        "poster": "/posters/korean-grand-slam/kofic-19960018.jpg"
+      },
+      "referenceTitle": "The Adventure of Mrs. Park",
+      "posterLandscape": true,
+      "coverKind": "still",
+      "coverSource": "https://www.koreanfilm.or.kr/eng/films/index/filmsView.jsp?movieCd=19960018"
+    },
+    {
+      "id": "kofic-19940034",
+      "title": "玫瑰色人生",
+      "year": 1994,
+      "aliases": [],
+      "source": "https://www.koreanfilm.or.kr/eng/films/index/filmsView.jsp?movieCd=19940034",
+      "metadata": {
+        "director": "金弘准",
+        "cast": "崔明吉 / 崔宰诚 / 李知勋",
+        "intro": "深夜营业的漫画店成为几个逃避现实的男人的避难所，女店主与他们的命运交织。",
+        "area": "韩国",
+        "mediaType": "movie",
+        "genre": "剧情",
+        "source": "https://www.koreanfilm.or.kr/eng/films/index/filmsView.jsp?movieCd=19940034",
+        "poster": "/posters/korean-grand-slam/kofic-19940034.jpg"
+      },
+      "referenceTitle": "Rosy Life",
+      "coverKind": "still",
+      "coverSource": "https://www.koreanfilm.or.kr/eng/films/index/filmsView.jsp?movieCd=19940034"
+    },
+    {
+      "id": "kofic-20080690",
+      "title": "赤道之花",
+      "year": 1983,
+      "aliases": [],
+      "source": "https://www.koreanfilm.or.kr/eng/films/index/filmsView.jsp?movieCd=20080690",
+      "metadata": {
+        "director": "裴昶浩",
+        "cast": "张美姬 / 安圣基",
+        "intro": "独居男子迷恋对面公寓的女人，试图以自己的方式拯救她，却让关系走向失控。",
+        "area": "韩国",
+        "mediaType": "movie",
+        "genre": "剧情",
+        "source": "https://www.koreanfilm.or.kr/eng/films/index/filmsView.jsp?movieCd=20080690",
+        "poster": "/posters/korean-grand-slam/kofic-20080690.jpg"
+      },
+      "referenceTitle": "The Flower on the Equator",
+      "posterLandscape": true,
+      "coverKind": "still",
+      "coverSource": "https://www.koreanfilm.or.kr/eng/films/index/filmsView.jsp?movieCd=20080690"
+    },
+    {
+      "id": "kofic-20100191",
+      "title": "诗",
+      "year": 2010,
+      "aliases": [],
+      "source": "https://www.koreanfilm.or.kr/eng/films/index/filmsView.jsp?movieCd=20100191",
+      "metadata": {
+        "director": "李沧东",
+        "cast": "尹静姬 / 李大卫 / 金熙罗",
+        "intro": "与外孙相依为命的老人开始学习写诗，在寻找日常之美时不得不面对残酷的现实。",
+        "area": "韩国",
+        "mediaType": "movie",
+        "genre": "剧情",
+        "source": "https://www.koreanfilm.or.kr/eng/films/index/filmsView.jsp?movieCd=20100191",
+        "poster": "/posters/korean-grand-slam/kofic-20100191.jpg"
+      },
+      "referenceTitle": "Poetry"
+    },
+    {
+      "id": "kofic-20156391",
+      "title": "市场",
+      "year": 1965,
+      "aliases": [],
+      "source": "https://www.koreanfilm.or.kr/eng/films/index/filmsView.jsp?movieCd=20156391",
+      "metadata": {
+        "director": "李晚熙",
+        "cast": "申荣均 / 文贞淑 / 许长江",
+        "intro": "在市场卖苹果的女人独力支撑家庭，丈夫的抛弃引发了一场悲剧。",
+        "area": "韩国",
+        "mediaType": "movie",
+        "genre": "剧情",
+        "source": "https://www.koreanfilm.or.kr/eng/films/index/filmsView.jsp?movieCd=20156391",
+        "poster": "/posters/korean-grand-slam/kofic-20156391.jpg"
+      },
+      "referenceTitle": "The Market Place"
+    },
+    {
+      "id": "kofic-19688044",
+      "title": "大院君",
+      "year": 1968,
+      "aliases": [],
+      "source": "https://www.koreanfilm.or.kr/eng/films/index/filmsView.jsp?movieCd=19688044",
+      "metadata": {
+        "director": "申相玉",
+        "cast": "申荣均 / 金芝美 / 崔南铉",
+        "intro": "以朝鲜王朝晚期为背景，描绘大院君所处的宫廷权力斗争。",
+        "area": "韩国",
+        "mediaType": "movie",
+        "genre": "历史",
+        "source": "https://www.koreanfilm.or.kr/eng/films/index/filmsView.jsp?movieCd=19688044",
+        "poster": "/posters/korean-grand-slam/kofic-19688044.jpg"
+      },
+      "referenceTitle": "Prince Daewon"
+    },
+    {
+      "id": "kofic-19910059",
+      "title": "情场如马场",
+      "year": 1991,
+      "aliases": [
+        "去赛马场的路"
+      ],
+      "source": "https://www.koreanfilm.or.kr/eng/films/index/filmsView.jsp?movieCd=19910059",
+      "metadata": {
+        "director": "张善宇",
+        "cast": "姜受延 / 文成根 / 金宝妍",
+        "intro": "旅法归来的学者试图重续与情人的关系，却在家庭责任与欲望之间不断拉扯。",
+        "area": "韩国",
+        "mediaType": "movie",
+        "genre": "剧情 / 爱情",
+        "source": "https://www.koreanfilm.or.kr/eng/films/index/filmsView.jsp?movieCd=19910059",
+        "poster": "/posters/korean-grand-slam/kofic-19910059.jpg"
+      },
+      "referenceTitle": "The Road to Race Track"
+    },
+    {
+      "id": "kofic-19910080",
+      "title": "死的赞美",
+      "year": 1991,
+      "aliases": [
+        "死之咏赞"
+      ],
+      "source": "https://www.koreanfilm.or.kr/eng/films/index/filmsView.jsp?movieCd=19910080",
+      "metadata": {
+        "director": "金镐善",
+        "cast": "张美姬 / 林成敏 / 李璟荣",
+        "intro": "以歌唱家尹心悳与剧作家金祐镇的关系为线索，描绘艺术追求与爱情的悲剧。",
+        "area": "韩国",
+        "mediaType": "movie",
+        "genre": "剧情 / 爱情",
+        "source": "https://www.koreanfilm.or.kr/eng/films/index/filmsView.jsp?movieCd=19910080",
+        "poster": "/posters/korean-grand-slam/kofic-19910080.jpg"
+      },
+      "referenceTitle": "Death Song",
+      "posterLandscape": true,
+      "coverKind": "still",
+      "coverSource": "https://www.koreanfilm.or.kr/eng/films/index/filmsView.jsp?movieCd=19910080"
+    },
+    {
+      "id": "kofic-20136333",
+      "title": "归路",
+      "year": 1967,
+      "aliases": [],
+      "source": "https://www.koreanfilm.or.kr/eng/films/index/filmsView.jsp?movieCd=20136333",
+      "metadata": {
+        "director": "李晚熙",
+        "cast": "文贞淑 / 金振奎",
+        "intro": "一名长期照顾瘫痪丈夫的女人遇见另一名男子，在责任、欲望与自由之间挣扎。",
+        "area": "韩国",
+        "mediaType": "movie",
+        "genre": "剧情",
+        "source": "https://www.koreanfilm.or.kr/eng/films/index/filmsView.jsp?movieCd=20136333",
+        "poster": "/posters/korean-grand-slam/kofic-20136333.jpg"
+      },
+      "referenceTitle": "Homebound",
+      "posterLandscape": true,
+      "coverKind": "still",
+      "coverSource": "https://www.koreanfilm.or.kr/eng/films/index/filmsView.jsp?movieCd=20136333"
+    },
+    {
+      "id": "kofic-19900076",
+      "title": "只因你是女子",
+      "year": 1990,
+      "aliases": [],
+      "source": "https://www.koreanfilm.or.kr/eng/films/index/filmsView.jsp?movieCd=19900076",
+      "metadata": {
+        "director": "金裕珍",
+        "cast": "元美京 / 李英河 / 孙淑",
+        "intro": "遭受侵犯的女人因反抗而面临审判，法庭上的偏见让她继续为自身尊严抗争。",
+        "area": "韩国",
+        "mediaType": "movie",
+        "genre": "剧情 / 爱情 / 犯罪",
+        "source": "https://www.koreanfilm.or.kr/eng/films/index/filmsView.jsp?movieCd=19900076",
+        "poster": "/posters/korean-grand-slam/kofic-19900076.jpg"
+      },
+      "referenceTitle": "Only Because You Are A Woman",
+      "posterLandscape": true,
+      "coverKind": "still",
+      "coverSource": "https://www.koreanfilm.or.kr/eng/films/index/filmsView.jsp?movieCd=19900076"
+    },
+    {
+      "id": "kofic-19840015",
+      "title": "女人残酷史",
+      "year": 1984,
+      "aliases": [
+        "女人残酷史：纺车，纺车"
+      ],
+      "source": "https://www.koreanfilm.or.kr/eng/films/index/filmsView.jsp?movieCd=19840015",
+      "metadata": {
+        "director": "李斗镛",
+        "cast": "元美京 / 申一龙 / 文贞淑",
+        "intro": "朝鲜时代的贫家女子被嫁给已死之人，在礼教和家族规训下承受压迫。",
+        "area": "韩国",
+        "mediaType": "movie",
+        "genre": "历史",
+        "source": "https://www.koreanfilm.or.kr/eng/films/index/filmsView.jsp?movieCd=19840015",
+        "poster": "/posters/korean-grand-slam/kofic-19840015.jpg"
+      },
+      "referenceTitle": "Spinning The Tales Of Cruelty Towards Women"
+    },
+    {
+      "id": "kofic-19890047",
+      "title": "火之国",
+      "year": 1989,
+      "aliases": [],
+      "source": "https://www.koreanfilm.or.kr/eng/films/index/filmsView.jsp?movieCd=19890047",
+      "metadata": {
+        "director": "张吉秀",
+        "cast": "张美姬 / 李德华 / 李淑姬",
+        "intro": "来首尔谋生的乡村青年爱上一名女子，两人在财富与地位的诱惑中经历欺骗和幻灭。",
+        "area": "韩国",
+        "mediaType": "movie",
+        "genre": "爱情",
+        "source": "https://www.koreanfilm.or.kr/eng/films/index/filmsView.jsp?movieCd=19890047",
+        "poster": "/posters/korean-grand-slam/kofic-19890047.jpg"
+      },
+      "referenceTitle": "Country Of Fire"
+    },
+    {
+      "id": "kofic-19890011",
+      "title": "揭谛，揭谛，婆罗揭谛",
+      "year": 1989,
+      "aliases": [],
+      "source": "https://www.koreanfilm.or.kr/eng/films/index/filmsView.jsp?movieCd=19890011",
+      "metadata": {
+        "director": "林权泽",
+        "cast": "姜受延 / 柳仁村 / 崔钟元",
+        "intro": "两名女尼沿不同道路寻求信仰与觉悟，在寺院生活和尘世经历中面对自身困惑。",
+        "area": "韩国",
+        "mediaType": "movie",
+        "genre": "剧情",
+        "source": "https://www.koreanfilm.or.kr/eng/films/index/filmsView.jsp?movieCd=19890011",
+        "poster": "/posters/korean-grand-slam/kofic-19890011.jpg"
+      },
+      "referenceTitle": "Come, Come, Come Upward"
+    },
+    {
+      "id": "kofic-20110014",
+      "title": "燕山君",
+      "year": 1962,
+      "aliases": [],
+      "source": "https://www.koreanfilm.or.kr/eng/films/index/filmsView.jsp?movieCd=20110014",
+      "metadata": {
+        "director": "申相玉",
+        "cast": "申荣均 / 崔银姬 / 都琴峰",
+        "intro": "燕山君得知生母被赐死的往事，宫廷恩怨与复仇逐渐将王权推向失控。",
+        "area": "韩国",
+        "mediaType": "movie",
+        "genre": "历史 / 剧情",
+        "source": "https://www.koreanfilm.or.kr/eng/films/index/filmsView.jsp?movieCd=20110014",
+        "poster": "/posters/korean-grand-slam/kofic-20110014.jpg"
+      },
+      "referenceTitle": "Prince Yeonsan",
+      "posterLandscape": true,
+      "coverKind": "still",
+      "coverSource": "https://www.koreanfilm.or.kr/eng/films/index/filmsView.jsp?movieCd=20110014"
+    },
+    {
+      "id": "cine21-14657",
+      "title": "剩余人间",
+      "year": 1964,
+      "aliases": [],
+      "source": "https://cine21.com/movie/info/?movie_id=14657",
+      "metadata": {
+        "director": "俞贤穆",
+        "cast": "金振奎 / 申荣均 / 都琴峰",
+        "intro": "一群被生活与战争创伤困住的人聚在牙科诊所，倾诉各自的困顿与情感纠葛。",
+        "area": "韩国",
+        "mediaType": "movie",
+        "genre": "剧情",
+        "source": "https://cine21.com/movie/info/?movie_id=14657",
+        "rating": "8.0",
+        "ratingSource": "Cine21观众",
+        "poster": "/posters/korean-grand-slam/cine21-14657.jpg"
+      },
+      "referenceTitle": "잉여인간",
+      "coverSource": "https://en.wikipedia.org/wiki/Ingyeo_ingan"
+    },
+    {
+      "id": "cine21-14659",
+      "title": "太阳再次升起",
+      "year": 1966,
+      "aliases": [],
+      "source": "https://cine21.com/movie/info/?movie_id=14659",
+      "metadata": {
+        "director": "俞贤穆",
+        "cast": "金振奎 / 严莺兰 / 许长江",
+        "intro": "饱受干旱之苦的村民对修建水库心怀疑虑，一名农民努力说服大家共同改变命运。",
+        "area": "韩国",
+        "mediaType": "movie",
+        "genre": "剧情",
+        "source": "https://cine21.com/movie/info/?movie_id=14659"
+      },
+      "referenceTitle": "태양은 다시 뜬다"
+    },
+    {
+      "id": "cine21-1789",
+      "title": "雾柱",
+      "year": 1987,
+      "aliases": [],
+      "source": "https://cine21.com/movie/info/?movie_id=1789",
+      "metadata": {
+        "director": "朴哲洙",
+        "cast": "崔明吉 / 李英河 / 朴正子",
+        "intro": "婚后放弃事业的女人在家庭关系中逐渐失去自我，最终重新工作，寻找独立的人生。",
+        "area": "韩国",
+        "mediaType": "movie",
+        "genre": "剧情",
+        "source": "https://cine21.com/movie/info/?movie_id=1789",
+        "rating": "4.5",
+        "ratingSource": "Cine21观众",
+        "poster": "/posters/korean-grand-slam/cine21-1789.jpg"
+      },
+      "referenceTitle": "안개기둥",
+      "coverSource": "https://en.wikipedia.org/wiki/Pillar_of_Mist"
+    },
+    {
+      "id": "cine21-5031",
+      "title": "石花村",
+      "year": 1972,
+      "aliases": [],
+      "source": "https://cine21.com/movie/info/?movie_id=5031",
+      "metadata": {
+        "director": "郑镇宇",
+        "cast": "尹静姬 / 金熙罗 / 尹一峰",
+        "intro": "偏远渔村笃信海难亡魂必须由另一条生命接替，年轻女子的婚姻与爱情被迷信左右。",
+        "area": "韩国",
+        "mediaType": "movie",
+        "genre": "剧情",
+        "source": "https://cine21.com/movie/info/?movie_id=5031",
+        "rating": "5.3",
+        "ratingSource": "Cine21观众",
+        "poster": "/posters/korean-grand-slam/cine21-5031.jpg"
+      },
+      "referenceTitle": "석화촌",
+      "coverSource": "https://en.wikipedia.org/wiki/Oyster_Village"
+    },
+    {
+      "id": "cine21-6881",
+      "title": "你的名字是女人",
+      "year": 1969,
+      "aliases": [],
+      "source": "https://cine21.com/movie/info/?movie_id=6881",
+      "metadata": {
+        "director": "李炯杓",
+        "cast": "金芝美 / 金振奎 / 白英民",
+        "intro": "丈夫因事故受伤后，孤独的妻子与年轻大学生相恋，又为婚姻责任而备受煎熬。",
+        "area": "韩国",
+        "mediaType": "movie",
+        "genre": "剧情",
+        "source": "https://cine21.com/movie/info/?movie_id=6881"
+      },
+      "referenceTitle": "너의 이름은 여자"
+    },
+    {
+      "id": "cine21-14128",
+      "title": "土地",
+      "year": 1974,
+      "aliases": [],
+      "source": "https://cine21.com/movie/info/?movie_id=14128",
+      "metadata": {
+        "director": "金洙容",
+        "cast": "金芝美 / 李顺载 / 许长江",
+        "intro": "十九世纪末，地主家族在情感纠葛、疫病与饥荒中走向变故，一部分人离乡谋生。",
+        "area": "韩国",
+        "mediaType": "movie",
+        "genre": "剧情",
+        "source": "https://cine21.com/movie/info/?movie_id=14128",
+        "rating": "7.0",
+        "ratingSource": "Cine21观众",
+        "poster": "/posters/korean-grand-slam/cine21-14128.jpg"
+      },
+      "referenceTitle": "토지",
+      "coverSource": "https://en.wikipedia.org/wiki/The_Land_(1974_film)"
+    }
+  ]
+}

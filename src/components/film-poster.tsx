@@ -4,9 +4,9 @@ import { SmartImage } from './smart-image';
 import { useEffect, useRef, useState } from 'react';
 
 /** A useful card face remains visible while loading and after every image candidate fails. */
-export function FilmPoster({ title, year, url, mode, customProxy, onExhausted }: {
+export function FilmPoster({ title, year, url, mode, customProxy, onExhausted, imageAlt }: {
   title: string; year?: string; url?: string; mode: 'direct' | 'proxy' | 'custom';
-  customProxy?: string; onExhausted?: () => void;
+  customProxy?: string; onExhausted?: () => void; imageAlt?: string;
 }) {
   const imageKey = JSON.stringify([url, mode, customProxy]);
   const [loadedKey, setLoadedKey] = useState('');
@@ -24,7 +24,7 @@ export function FilmPoster({ title, year, url, mode, customProxy, onExhausted }:
     {url && <div ref={imageRoot} className={`absolute inset-0 ${loadedKey === imageKey ? 'opacity-100' : 'opacity-0'}`}
       onLoadCapture={() => setLoadedKey(imageKey)} onErrorCapture={() => setLoadedKey('')}>
       <SmartImage key={url} url={url} mode={url.startsWith('/') ? 'direct' : mode} customProxy={customProxy}
-        alt={`${title}海报`} onExhausted={onExhausted} className="h-full w-full object-cover" />
+        alt={imageAlt || `${title}海报`} onExhausted={onExhausted} className="h-full w-full object-cover" />
     </div>}
   </div>;
 }
