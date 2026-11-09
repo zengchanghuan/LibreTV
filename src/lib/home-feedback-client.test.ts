@@ -27,6 +27,16 @@ describe('immediate home feedback', () => {
     expect(visibleHomeRecommendationBatch({ ...daily, batches: [[target], [target]] }, next.items, 0)).toEqual([]);
     expect(visibleHomeRecommendationBatch(undefined, next.items, 0)).toEqual([]);
   });
+  it('applies a second format dislike before saving, skips that format in refill, and restores the old pool on rollback', () => {
+    const first = { ...target, id: 'short-1', mediaType: 'short' as const }, second = { ...first, id: 'short-2' }, third = { ...first, id: 'short-3' };
+    const previous: HomeFeedbackResponse = { items: [{ workId: first.id, vote: 'dislike', updatedAt: 1, contentKinds: ['short'] }] };
+    const pool = { ...daily, batches: [[second, target], [third, daily.batches[0][1]]] };
+    expect(visibleHomeRecommendationBatch(pool, previous.items, 0)[0]).toBe(second);
+    const pending = optimisticHomeFeedback(previous, second.id, 'dislike', 2, ['short']);
+    expect(visibleHomeRecommendationBatch(pool, pending.items, 0)).toEqual([target, daily.batches[0][1]]);
+    expect(visibleHomeRecommendationBatch(pool, previous.items, 0)).toEqual([second, target]);
+    expect(previous.items).toHaveLength(1);
+  });
   it('isolates cache entries by account, filter, date and saved revision', () => {
     const key = homeRecommendationQueryKey('alice', true, original.items, daily.day);
     expect(homeRecommendationQueryKey('alice', true, original.items, daily.day)).toEqual(key);

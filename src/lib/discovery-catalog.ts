@@ -33,7 +33,7 @@ export function parseDiscoveryItem(raw: Record<string, unknown>, source: SourceC
     director: clean(raw.vod_director), actor: clean(raw.vod_actor), sourceKey: source.key, sourceName: source.name });
   const known = catalogIdentity(seed);
   // TV identities require a matching season/title, not just a third-party subject ID.
-  const work = { ...seed, ...(known || {}), mediaType, id: known?.id || `discovery:${createHash('sha256').update(JSON.stringify([resourceTitleKey(title), year, mediaType])).digest('hex').slice(0, 24)}` };
+  const work = { ...seed, ...(known || {}), mediaType, genres: [...new Set([...known?.genres || [], ...seed.genres])], id: known?.id || `discovery:${createHash('sha256').update(JSON.stringify([resourceTitleKey(title), year, mediaType])).digest('hex').slice(0, 24)}` };
   work.metadata = { ...work.metadata, genre: work.metadata?.genre || typeName, area: clean(raw.vod_area),
     intro: work.metadata?.intro || clean(raw.vod_content, 1200), poster: work.poster };
   const episodes = [...new Set(extractEpisodesFromPlayUrl(String(raw.vod_play_url || ''))

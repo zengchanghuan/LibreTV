@@ -4,6 +4,7 @@ import { buildHomeRecommendations } from './home-recommendations';
 import { recommendationCatalog } from './recommendation-catalog';
 import type { HomePreference, HomeVote } from './home-feedback-types';
 import type { RecommendedWork } from './recommendations';
+import { homeContentKinds } from './home-content-preferences';
 
 const known = recommendationCatalog.find(work => work.title === '精武英雄')!;
 const preference = (vote: HomeVote, work = known): HomePreference => ({ workId: work.id, work, vote, updatedAt: 1 });
@@ -25,6 +26,21 @@ describe('personal recommendation signals', () => {
     expect(samePreferenceWork(known, vote)).toBe(true);
     expect(samePreferenceWork({ ...known, year: '2000' }, vote)).toBe(false);
     expect(samePreferenceWork({ ...known, mediaType: 'tv' }, preference('dislike', { ...known, id: 'other', mediaType: 'movie' }))).toBe(false);
+  });
+  it('learns from different source labels even when credits and genre strings do not overlap', () => {
+    const seed = { ...candidate, id: 'anime-a', mediaType: 'animation' as const, genres: ['国产动漫'], directors: [], cast: [] };
+    const other = { ...seed, id: 'anime-b', title: '另一部动漫', genres: ['日韩动漫'] };
+    expect(homePreferenceScore(other, [preference('dislike', seed)]).score).toBe(-30);
+    expect(homePreferenceScore({ ...other, mediaType: 'short', genres: ['短剧'] }, [preference('dislike', seed)]).score).toBe(0);
+  });
+  it('excludes repeatedly rejected formats from every batch, AI and diversity refill using existing stored metadata', () => {
+    const anime = recommendationCatalog.filter(work => homeContentKinds(work).includes('animation'));
+    expect(anime.length).toBeGreaterThan(2);
+    const preferences = [preference('dislike', { ...anime[0], id: 'source:anime-1', genres: ['国产动漫'] }),
+      preference('dislike', { ...anime[1], id: 'source:anime-2', genres: ['日韩动漫'] })];
+    const result = buildHomeRecommendations(true, [{ ...anime[2], origin: 'ai', aiReason: '热门动画' }], Date.parse('2026-11-09'), preferences);
+    expect(result.batches.map(batch => batch.length)).toEqual([12, 12, 12]);
+    expect(result.batches.flat().some(work => homeContentKinds(work).includes('animation'))).toBe(false);
   });
   it('changes recommendations across the full catalog, excludes dislikes even from AI, and preserves diversity', () => {
     const now = Date.parse('2026-11-09T00:00:00Z');

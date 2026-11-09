@@ -41,7 +41,7 @@ export function HomePersonalRecommendations({ sources, feedback, onPick }: {
     {query.isError ? <p role="status" className="rounded-xl bg-chip p-4 text-sm text-muted">推荐暂时加载失败。<button type="button" className="btn-ghost btn-sm" onClick={() => void query.refetch()}>重试</button></p>
       : works.length ? <div className="grid grid-cols-2 gap-x-3 gap-y-6 sm:grid-cols-3 lg:grid-cols-6">{works.map(work => <div key={work.id} className="relative min-w-0">
         <RecommendedWorkCard work={work} sources={sources} filterAdult={store.yellowFilter} enabled={false} hideUnknownType imageMode={store.imageProxyMode} customProxy={store.customImageProxy} onPick={onPick} />
-        <HomeFeedbackButtons title={work.title} value={feedback.voteFor(work.id)} disabled={feedback.disabled} pending={feedback.pendingId === work.id} onVote={vote => feedback.vote(work.id, vote)} />
+        <HomeFeedbackButtons title={work.title} value={feedback.voteFor(work.id)} disabled={feedback.disabled} pending={feedback.pendingId === work.id} onVote={vote => feedback.vote(work, vote)} />
       </div>)}</div> : <p role="status" className="rounded-xl bg-chip p-4 text-sm text-muted">{feedback.unavailable ? '读取喜好后即可为你选片。' : query.isPending ? '正在为你挑选影片…' : '暂时没有合适的影片，稍后再来看看。'}</p>}
   </section>;
 }

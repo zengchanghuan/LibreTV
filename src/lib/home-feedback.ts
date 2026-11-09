@@ -4,6 +4,7 @@ import { emptyDiscovery } from './discovery-catalog';
 import { recommendationCatalog } from './recommendation-catalog';
 import type { HomeFeedbackResponse, HomePreference, HomeVote } from './home-feedback-types';
 import type { RecommendedWork } from './recommendations';
+import { homeContentKinds } from './home-content-preferences';
 
 interface FeedbackStore { version: 1; items: HomePreference[] }
 const emptyFeedback = (): FeedbackStore => ({ version: 1, items: [] });
@@ -19,15 +20,20 @@ export function readHomeFeedback(account: string | null): Promise<HomePreference
   return discoveryTransaction(feedbackFile(account), emptyFeedback, data => data.items);
 }
 export function publicHomeFeedback(items: HomePreference[]): HomeFeedbackResponse {
-  return { items: items.map(({ workId, vote, updatedAt }) => ({ workId, vote, updatedAt })) };
+  return { items: items.map(({ workId, vote, updatedAt, work }) => {
+    const contentKinds = homeContentKinds(work);
+    return { workId, vote, updatedAt, ...(contentKinds.length ? { contentKinds } : {}) };
+  }) };
 }
 
 /** Resolve identities/credits on the server; clients submit only an ID and a vote. */
 export async function saveHomeFeedback(account: string | null, workId: string, vote: HomeVote | null, now = Date.now()) {
   let work: RecommendedWork | undefined;
   if (vote) {
-    work = recommendationCatalog.find(item => item.id === workId)
-      || await discoveryTransaction('catalog', emptyDiscovery, data => data.works.find(item => item.work.id === workId)?.work);
+    const known = recommendationCatalog.find(item => item.id === workId);
+    const observed = await discoveryTransaction('catalog', emptyDiscovery, data => data.works.find(item => item.work.id === workId)?.work);
+    work = known ? { ...known, mediaType: observed?.mediaType || known.mediaType,
+      genres: [...new Set([...known.genres, ...observed?.genres || []])] } : observed;
   }
   return discoveryTransaction(feedbackFile(account), emptyFeedback, data => {
     const previous = data.items.find(item => item.workId === workId);

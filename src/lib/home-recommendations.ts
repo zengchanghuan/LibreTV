@@ -9,7 +9,7 @@ import { seriesQuery } from './related-videos';
 import type { RecommendedWork } from './recommendations';
 import { homeDay, type HomeRecommendations } from './home-discovery-types';
 import type { HomePreference } from './home-feedback-types';
-import { homePreferenceScore, samePreferenceWork } from './home-preferences';
+import { homePreferenceScore, homePreferenceFilter } from './home-preferences';
 
 export const homeCatalogVersion = createHash('sha256').update(JSON.stringify(recommendationCatalog)).digest('hex').slice(0, 12) + '-v2';
 const collections = [koreanBoxOfficeCollection, chungmuroCollection, koreanModernHistory, ...filmCollections, ...peopleCollections];
@@ -41,8 +41,7 @@ export function verifiedHomeAI(items: RecommendedWork[], filterAdult: boolean) {
 
 export function buildHomeRecommendations(filterAdult: boolean, ai: RecommendedWork[] = [], now = Date.now(), preferences: HomePreference[] = []): HomeRecommendations {
   const day = homeDay(now), seed = `${day}:${homeCatalogVersion}:${filterAdult}`;
-  const disliked = preferences.filter(item => item.vote === 'dislike');
-  const allowed = (work: RecommendedWork) => !disliked.some(item => samePreferenceWork(work, item));
+  const allowed = homePreferenceFilter(preferences);
   const scores = new Map<string, ReturnType<typeof homePreferenceScore>>();
   const preferenceFor = (work: RecommendedWork) => {
     if (!scores.has(work.id)) scores.set(work.id, homePreferenceScore(work, preferences));

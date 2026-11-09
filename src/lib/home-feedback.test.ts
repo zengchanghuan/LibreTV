@@ -2,7 +2,7 @@ import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { readHomeFeedback, saveHomeFeedback } from './home-feedback';
+import { publicHomeFeedback, readHomeFeedback, saveHomeFeedback } from './home-feedback';
 import { recommendationCatalog } from './recommendation-catalog';
 import { discoveryTransaction } from './discovery-storage';
 import { emptyDiscovery } from './discovery-catalog';
@@ -60,5 +60,15 @@ describe('persistent home feedback', () => {
     expect(await saveHomeFeedback('alice', work.id, 'dislike')).toMatchObject({ items: [{ vote: 'dislike' }] });
     await saveHomeFeedback('alice', work.id, null);
     expect(await readHomeFeedback('alice')).toEqual([]);
+  });
+  it('derives format signals from old stored feedback and keeps observed source labels when saving known films', async () => {
+    const old = [{ workId: 'old-anime', vote: 'dislike' as const, updatedAt: 1, work: { ...works[0], id: 'old-anime', mediaType: 'movie' as const, genres: ['国产动漫'] } }];
+    expect(publicHomeFeedback(old).items[0].contentKinds).toEqual(['animation']);
+    const observed = { ...works[0], genres: [...works[0].genres, '日本动漫'] };
+    await discoveryTransaction('catalog', emptyDiscovery, data => { data.works.push({ work: observed, resources: [], firstSeenAt: 1 }); }, true);
+    const result = await saveHomeFeedback('alice', observed.id, 'dislike');
+    expect(result?.items[0].contentKinds).toEqual(['animation']);
+    expect(publicHomeFeedback(await readHomeFeedback('alice'))).toEqual(result);
+    expect(publicHomeFeedback(await readHomeFeedback('bob'))).toEqual({ items: [] });
   });
 });

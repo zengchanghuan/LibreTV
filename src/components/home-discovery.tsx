@@ -15,6 +15,7 @@ import { SmartImage } from './smart-image';
 import { FilmPoster } from './film-poster';
 import { HomeFeedbackButtons, useHomeFeedback } from './home-feedback';
 import { HomePersonalRecommendations } from './home-personal-recommendations';
+import { homeFeedbackRevision } from '@/lib/home-feedback-client';
 
 const tabs: { id: RecentTab; label: string }[] = [{ id: 'new', label: '新片上线' }, { id: 'series', label: '剧集更新' }, { id: 'added', label: '最近收录' }];
 const dateLabel = (value: string) => new Date(value).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
@@ -22,7 +23,7 @@ export function HomeDiscovery({ sources, section, onCollection, charts }: {
   sources: SourceConfig[]; section?: 'hd'; onCollection: (id: string) => void; charts: React.ReactNode;
 }) {
   const store = useAppStore();
-  const { verified } = useAuth();
+  const { verified, username } = useAuth();
   const feedback = useHomeFeedback();
   const [chosenTab, setTab] = useState<RecentTab | null>(null), [expanded, setExpanded] = useState(false);
   const [issueIndex, setIssueIndex] = useState(0), [showIssue, setShowIssue] = useState(false);
@@ -33,26 +34,29 @@ export function HomeDiscovery({ sources, section, onCollection, charts }: {
   const sourceKeys = [...new Set(sources.map(s => s.key))].sort().join(',');
   useEffect(() => { setTab(null); setExpanded(false); }, [sourceKeys]);
   const query = useQuery({
-    queryKey: ['home-discovery-v2', sourceKeys, store.yellowFilter], enabled: verified,
+    queryKey: ['home-discovery-v2', username, sourceKeys, store.yellowFilter, homeFeedbackRevision(feedback.items)],
+    enabled: verified && feedback.ready && !feedback.saving,
     queryFn: async ({ signal }) => {
       const response = await fetch(`/api/home/discovery?${new URLSearchParams({ sources: sourceKeys })}`, { signal, credentials: 'same-origin' });
       if (!response.ok) throw new Error('首页内容暂不可用');
       return await response.json() as DiscoveryResponse;
     }, staleTime: 60_000, retry: 1,
+    placeholderData: (previous, previousQuery) => previousQuery?.queryKey[1] === username
+      && previousQuery.queryKey[2] === sourceKeys && previousQuery.queryKey[3] === store.yellowFilter ? previous : undefined,
     refetchInterval: q => q.state.data?.refreshedAt ? 60_000 : 5000,
     refetchIntervalInBackground: false,
   });
   const data = query.data;
   const tab = chosenTab || (data?.recent.new.length ? 'new' : data?.recent.series.length ? 'series' : 'added');
-  const cards = (data?.recent[tab] || []).filter(card => feedback.voteFor(card.work.id) !== 'dislike');
+  const cards = (data?.recent[tab] || []).filter(card => feedback.allows(card.work));
   const issue = data?.editorial[issueIndex % (data?.editorial.length || 1)] || starterEditorial;
-  const starterCards = (works: RecommendedWork[], compact = false) => <div className={compact ? 'grid grid-cols-3 gap-3' : 'grid grid-cols-2 gap-x-3 gap-y-5 sm:grid-cols-3 lg:grid-cols-6'}>{works.filter(work => feedback.voteFor(work.id) !== 'dislike').slice(0, compact ? 3 : 6).map(work => <article key={work.id} className="relative min-w-0">
+  const starterCards = (works: RecommendedWork[], compact = false) => <div className={compact ? 'grid grid-cols-3 gap-3' : 'grid grid-cols-2 gap-x-3 gap-y-5 sm:grid-cols-3 lg:grid-cols-6'}>{works.filter(feedback.allows).slice(0, compact ? 3 : 6).map(work => <article key={work.id} className="relative min-w-0">
     <button className="block w-full text-left" onClick={() => pick(work)} aria-label={`查看《${work.title}》的影片详情`}>
       <div className="relative aspect-[2/3] overflow-hidden rounded-xl bg-chip"><FilmPoster title={work.title} year={work.year} url={work.poster} mode={store.imageProxyMode} customProxy={store.customImageProxy} /><span className="absolute left-2 top-2 rounded bg-black/75 px-2 py-1 text-[10px] text-white">精选推荐</span></div>
       <h3 className="mt-2 truncate text-sm font-semibold">{work.title}</h3>
     </button><p className="mt-1 truncate text-xs text-faint">{work.year} · {work.genres[0] || '电影'}</p>
     <button className="mt-2 py-1 text-xs text-accent" onClick={() => pick(work, 'sources')}>查找片源 →</button>
-    {!compact && <HomeFeedbackButtons title={work.title} value={feedback.voteFor(work.id)} disabled={feedback.disabled} pending={feedback.pendingId === work.id} onVote={vote => feedback.vote(work.id, vote)} />}
+    {!compact && <HomeFeedbackButtons title={work.title} value={feedback.voteFor(work.id)} disabled={feedback.disabled} pending={feedback.pendingId === work.id} onVote={vote => feedback.vote(work, vote)} />}
   </article>)}</div>;
   return <div>
     <HomeContinue />
@@ -76,7 +80,7 @@ export function HomeDiscovery({ sources, section, onCollection, charts }: {
           <p className="mt-1 truncate text-xs text-faint">{card.work.year} · {card.work.genres.slice(0, 2).join(' / ') || '影视'}</p>
           <p className="mt-1 text-xs text-muted">{tab === 'series' ? card.label : `${dateLabel(card.date).split(' ')[0]} ${tab === 'new' ? '上线' : '收录'}`}</p>
           <button className="mt-2 py-1 text-xs text-accent" onClick={() => pick(card.work, 'sources')}>已收录 {card.sourceCount} 个片源 →</button>
-          <HomeFeedbackButtons title={card.work.title} value={feedback.voteFor(card.work.id)} disabled={feedback.disabled} pending={feedback.pendingId === card.work.id} onVote={vote => feedback.vote(card.work.id, vote)} />
+          <HomeFeedbackButtons title={card.work.title} value={feedback.voteFor(card.work.id)} disabled={feedback.disabled} pending={feedback.pendingId === card.work.id} onVote={vote => feedback.vote(card.work, vote)} />
         </article>)}</div> : <div>
           <p className="mb-4 text-xs leading-6 text-muted" role="status">{!data && !query.isError ? '近期内容正在整理，先看这些精选影片。' : query.isError ? '近期内容暂时加载失败，仍可浏览以下精选影片。' : tab === 'new' ? '暂未找到日期核对通过的新片，先看看精选片单。' : tab === 'series' ? '暂未发现新增剧集，先看看精选片单。' : !sourceKeys ? '选择片源后可查看近期收录，现在可先浏览精选影片。' : '近期内容正在整理，先看这些精选影片。'}</p>
           {starterCards(discoveryStarters)}

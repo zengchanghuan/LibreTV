@@ -1,8 +1,10 @@
 'use client';
 
 import { useIsMutating, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { nextHomeVote, type HomeFeedbackResponse, type HomeFeedbackUpdateResponse, type HomeVote } from '@/lib/home-feedback-types';
+import { nextHomeVote, type HomeContentKind, type HomeFeedbackResponse, type HomeFeedbackUpdateResponse, type HomeVote } from '@/lib/home-feedback-types';
 import { homeRecommendationQueryKey, optimisticHomeFeedback } from '@/lib/home-feedback-client';
+import { homeContentKinds, homeFeedbackFilter } from '@/lib/home-content-preferences';
+import type { RecommendedWork } from '@/lib/recommendations';
 import { useAppStore } from '@/lib/store';
 import { useAuth } from './auth';
 import { useToast } from './toast';
@@ -24,7 +26,7 @@ export function useHomeFeedback() {
   const mutation = useMutation({
     mutationKey: queryKey,
     scope: { id: 'home-feedback' },
-    mutationFn: async ({ workId, vote }: { workId: string; vote: HomeVote | null }) => {
+    mutationFn: async ({ workId, vote }: { workId: string; vote: HomeVote | null; contentKinds?: HomeContentKind[] }) => {
       const response = await fetch('/api/home/feedback', { method: 'POST', credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ workId, vote, filterAdult }) });
       if (!response.ok) {
@@ -33,13 +35,13 @@ export function useHomeFeedback() {
       }
       return await response.json() as HomeFeedbackUpdateResponse;
     },
-    onMutate: async ({ workId, vote }) => {
-      await Promise.all([client.cancelQueries({ queryKey }), client.cancelQueries({ queryKey: ['home-personal-recommendations'] })]);
+    onMutate: async ({ workId, vote, contentKinds }) => {
+      await Promise.all([client.cancelQueries({ queryKey }), client.cancelQueries({ queryKey: ['home-personal-recommendations'] }), client.cancelQueries({ queryKey: ['home-discovery-v2'] })]);
       const snapshot = client.getQueryData<HomeFeedbackResponse>(queryKey) || { items: [] };
-      client.setQueryData(queryKey, optimisticHomeFeedback(snapshot, workId, vote));
+      client.setQueryData(queryKey, optimisticHomeFeedback(snapshot, workId, vote, Date.now(), contentKinds));
       return { snapshot, previous: snapshot.items.find(item => item.workId === workId)?.vote ?? null };
     },
-    onSuccess: async (data, { workId, vote }, context) => {
+    onSuccess: async (data, { workId, vote, contentKinds }, context) => {
       await client.cancelQueries({ queryKey: ['home-personal-recommendations'] });
       // Seed the confirmed revision before rendering it; no second network round trip is needed.
       if (data.recommendations) client.setQueryData(
@@ -47,7 +49,7 @@ export function useHomeFeedback() {
       client.setQueryData(queryKey, { items: data.items });
       toast(vote === 'like' ? data.recommendations ? '已点赞，推荐已更新' : '已点赞，正在更新推荐'
         : vote === 'dislike' ? '已点踩，已移除并更新列表' : '已取消反馈', 'success', {
-        action: { label: '撤销', onClick: () => mutation.mutate({ workId, vote: context?.previous ?? null }) },
+        action: { label: '撤销', onClick: () => mutation.mutate({ workId, vote: context?.previous ?? null, contentKinds }) },
       });
       if (!data.recommendations) await client.invalidateQueries({ queryKey: ['home-personal-recommendations'] });
     },
@@ -59,13 +61,13 @@ export function useHomeFeedback() {
   const items = verified ? query.data?.items || [] : [];
   const voteFor = (workId: string) => items.find(item => item.workId === workId)?.vote;
   return {
-    items, voteFor, saving: mutation.isPending, ready: verified && Boolean(query.data), unavailable: verified && query.isError, retry: () => void query.refetch(),
+    items, voteFor, allows: homeFeedbackFilter(items), saving: mutation.isPending, ready: verified && Boolean(query.data), unavailable: verified && query.isError, retry: () => void query.refetch(),
     disabled: !verified || !query.data || mutation.isPending,
     pendingId: mutation.isPending ? mutation.variables.workId : undefined,
-    vote: (workId: string, clicked: HomeVote) => {
+    vote: (work: RecommendedWork, clicked: HomeVote) => {
       if (!verified) { openLogin(); return; }
       if (mutation.isPending || !query.data) return;
-      mutation.mutate({ workId, vote: nextHomeVote(voteFor(workId), clicked) });
+      mutation.mutate({ workId: work.id, vote: nextHomeVote(voteFor(work.id), clicked), contentKinds: homeContentKinds(work) });
     },
   };
 }

@@ -16,6 +16,8 @@ import type { DiscoveryResponse, DiscoveryWork } from './discovery-types';
 import type { RecommendedWork } from './recommendations';
 import { discoveryDirectory } from './discovery-storage';
 import type { SourceConfig } from './types';
+import type { HomePreference } from './home-feedback-types';
+import { homePreferenceFilter } from './home-preferences';
 
 const shared = globalThis as typeof globalThis & { discoveryRefresh?: Promise<void>; discoveryTimer?: ReturnType<typeof setInterval>; discoveryLastAttempt?: number; discoveryPopular?: Map<string, RecommendedWork[]> };
 export function discoverySources() { return getEnvSources().filter(s => !s.isAdult && /\/provide\/vod(?:\/|$|\?)/.test(s.url)).slice(0, 20); }
@@ -83,12 +85,14 @@ export async function resolveObservedWork(sourceKey: string, vodId: string) {
   await discoveryTransaction('catalog', emptyDiscovery, d => { d.works = mergeDiscovery(d.works, [item], Date.now()); }, true);
   return item.work;
 }
-export async function readDiscovery(sourceKeys: string[], now = Date.now()): Promise<DiscoveryResponse> {
+export async function readDiscovery(sourceKeys: string[], now = Date.now(), preferences: HomePreference[] = []): Promise<DiscoveryResponse> {
   const sources = new Set(getEnvSources().filter(s => !s.isAdult && sourceKeys.includes(s.key)).map(s => sourceIdentity(s.url)));
   let catalogFailed = false;
   const store = await discoveryTransaction('catalog', emptyDiscovery, d => d).catch(() => { catalogFailed = true; return emptyDiscovery(); });
   const enabled = { recent: process.env.HOME_DISCOVERY_RECENT !== '0', popular: process.env.HOME_DISCOVERY_POPULAR !== '0', editorial: process.env.HOME_DISCOVERY_EDITORIAL !== '0' };
-  const recent = enabled.recent ? recentCards(store.works, sources, now) : { new: [], series: [], added: [] };
+  const allowed = homePreferenceFilter(preferences);
+  // Filter the full source catalog before the 48-card cap, so refill cannot bring rejected formats back.
+  const recent = enabled.recent ? recentCards(store.works.filter(entry => allowed(entry.work)), sources, now) : { new: [], series: [], added: [] };
   const works = store.works.filter(w => visibleResources(w, sources, now).length).map(w => w.work);
   let popularityFailed = false;
   const hour = Math.floor(now / 3600_000), cacheKey = JSON.stringify([hour, discoveryDirectory(), [...sources].sort()]);

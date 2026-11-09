@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, afterEach } from 'vitest';
-import { calendarDate, DAY, mergeDiscovery, parseDiscoveryItem, recentCards, sourceIdentity } from './discovery-catalog';
+import { calendarDate, DAY, emptyDiscovery, mergeDiscovery, parseDiscoveryItem, recentCards, sourceIdentity } from './discovery-catalog';
 import { creditWatch, emptyWatchState, rankPopular, startWatch } from './discovery-popularity';
 import { watchedSeconds } from './watch-sampling';
 import { publishedEditorial } from './discovery-editorial';
@@ -7,6 +7,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { discoveryTransaction } from './discovery-storage';
+import { homeContentKinds } from './home-content-preferences';
 
 const now = Date.parse('2026-11-08T12:00:00+08:00');
 const source = { key: 'env_0', name: 'test', url: 'https://one.example/api.php/provide/vod' };
@@ -124,6 +125,27 @@ describe('independent module failure', () => {
       await writeFile(join(dir, 'discovery', 'catalog.json'), 'broken');
       const degraded = await readDiscovery([], now);
       expect(degraded.partial).toBe(true); expect(degraded.editorial).toHaveLength(3);
+    } finally { await rm(dir, { recursive: true }); }
+  });
+});
+
+describe('personal recent candidates', () => {
+  it('filters the full catalog before the cap, keeps date ordering, and does not modify the shared catalog', async () => {
+    const { readDiscovery } = await import('./discovery-service');
+    const dir = await mkdtemp(join(tmpdir(), 'hometv-discovery-preferences-')); vi.stubEnv('LIBRETV_DATA_DIR', dir);
+    vi.stubEnv('DEFAULT_SOURCES', JSON.stringify([{ name: source.name, url: source.url }]));
+    try {
+      const shorts = Array.from({ length: 60 }, (_, i) => parseDiscoveryItem({ ...raw, vod_id: i + 1, vod_name: `短剧${i}`, type_name: '短剧' }, source, now)!);
+      const movies = Array.from({ length: 7 }, (_, i) => parseDiscoveryItem({ ...raw, vod_id: i + 100, vod_name: `电影${i}` }, source, now - 1000 - i)!);
+      await discoveryTransaction('catalog', emptyDiscovery, data => { data.works = [...shorts, ...movies]; data.refreshedAt = now; }, true);
+      const baseline = await readDiscovery(['env_0'], now);
+      expect(baseline.recent.added).toHaveLength(48);
+      expect(baseline.recent.added.every(card => card.work.mediaType === 'short')).toBe(true);
+      const preferences = shorts.slice(0, 2).map(({ work }) => ({ workId: work.id, work, vote: 'dislike' as const, updatedAt: now }));
+      const personal = await readDiscovery(['env_0'], now, preferences);
+      expect(personal.recent.added.map(card => card.work.title)).toEqual(movies.map(entry => entry.work.title));
+      expect(personal.recent.added.some(card => homeContentKinds(card.work).includes('short'))).toBe(false);
+      expect((await readDiscovery(['env_0'], now)).recent.added).toEqual(baseline.recent.added);
     } finally { await rm(dir, { recursive: true }); }
   });
 });

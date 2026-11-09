@@ -5,19 +5,21 @@ import type { DiscoveryResponse } from '@/lib/discovery-types';
 import { discoveryStarters } from '@/lib/discovery-starters';
 import { HomeDiscovery } from './home-discovery';
 import { FilmPoster } from './film-poster';
+import { homeFeedbackFilter } from '@/lib/home-content-preferences';
+import type { HomeFeedback } from '@/lib/home-feedback-types';
 
-const state = vi.hoisted(() => ({ data: undefined as DiscoveryResponse | undefined, isLoading: true, isError: false, dislikes: new Set<string>() }));
+const state = vi.hoisted(() => ({ data: undefined as DiscoveryResponse | undefined, isLoading: true, isError: false, dislikes: new Set<string>(), feedback: [] as HomeFeedback[] }));
 vi.mock('@tanstack/react-query', () => ({ useQuery: () => ({ ...state, refetch: vi.fn() }) }));
 vi.mock('@/lib/store', () => ({ useAppStore: () => ({ yellowFilter: true, imageProxyMode: 'direct', customImageProxy: '' }) }));
 vi.mock('./auth', () => ({ useAuth: () => ({ verified: true }) }));
 vi.mock('./home-continue', () => ({ HomeContinue: () => null }));
 vi.mock('./recommended-work-card', () => ({ RecommendedWorkCard: () => null }));
 vi.mock('./recommended-work-sources', () => ({ RecommendedWorkSources: () => null }));
-vi.mock('./home-feedback', async original => ({ ...await original<typeof import('./home-feedback')>(), useHomeFeedback: () => ({ voteFor: (id: string) => state.dislikes.has(id) ? 'dislike' : undefined, disabled: false, vote: vi.fn() }) }));
+vi.mock('./home-feedback', async original => ({ ...await original<typeof import('./home-feedback')>(), useHomeFeedback: () => ({ items: state.feedback, allows: homeFeedbackFilter([...state.feedback, ...[...state.dislikes].map(workId => ({ workId, vote: 'dislike' as const, updatedAt: 1 }))]), voteFor: (id: string) => state.dislikes.has(id) ? 'dislike' : undefined, disabled: false, vote: vi.fn() }) }));
 vi.mock('./home-personal-recommendations', () => ({ HomePersonalRecommendations: () => null }));
 const render = () => renderToStaticMarkup(createElement(HomeDiscovery, { sources: [], onCollection: () => {}, charts: null }));
 const empty = (): DiscoveryResponse => ({ recent: { new: [], series: [], added: [] }, refreshedAt: null, partial: false, stale: false, loading: false, popular: [], popularStatus: 'collecting', editorial: [], enabled: { recent: true, popular: true, editorial: true } });
-beforeEach(() => { state.data = undefined; state.isLoading = true; state.isError = false; state.dislikes.clear(); });
+beforeEach(() => { state.data = undefined; state.isLoading = true; state.isError = false; state.dislikes.clear(); state.feedback = []; });
 describe('home discovery cold start', () => {
   it('renders actionable real films before the first response, with no blank skeleton cards', () => {
     const html = render();
@@ -75,5 +77,15 @@ describe('home discovery cold start', () => {
     expect(html).toContain(tab === 'series' ? '更新至 12 集' : tab === 'new' ? '11/9 上线' : '11/9 收录');
     state.dislikes.clear();
     expect(recent()).toContain(`点踩《${discoveryStarters[0].title}》`);
+  });
+  it.each(['new', 'series', 'added'] as const)('filters a rejected format before selecting the six visible %s cards', tab => {
+    state.data = empty(); state.isLoading = false;
+    const anime = { ...discoveryStarters[0], id: 'new-anime', title: '未点踩过的新动漫', mediaType: 'animation' as const, genres: ['日韩动漫'] };
+    state.data.recent[tab] = [anime, ...discoveryStarters.slice(0, 6)].map(work => ({ work, sourceCount: 2, date: '2026-11-09T00:00:00Z', label: '更新至 12 集' }));
+    state.feedback = ['old-1', 'old-2'].map(workId => ({ workId, vote: 'dislike', updatedAt: 1, contentKinds: ['animation'] }));
+    const html = render().split('aria-label="近期内容"')[1].split('</section>')[0];
+    expect(html).not.toContain(anime.title);
+    expect(html.match(/<article /g)).toHaveLength(6);
+    expect(html).toContain(discoveryStarters[5].title);
   });
 });
