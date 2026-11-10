@@ -14,9 +14,12 @@ describe('current playback resolution', () => {
     [7680, 4320, '4320p', '8K'], [2560, 1440, '1440p', 'QHD'],
     [854, 480, '480p', null], [640, 360, '360p', null], [426, 240, '240p', null],
     [1080, 1920, '1080p', 'FHD'], [2160, 3840, '2160p', '4K'],
-    [1920, 800, '1920 × 800', null], [3840, 1600, '3840 × 1600', null],
-    [3440, 1440, '3440 × 1440', null], [1440, 1080, '1440 × 1080', null],
-    [1600, 900, '1600 × 900', null], [4096, 2160, '4096 × 2160', null],
+    [1920, 800, '1080p', 'FHD'], [3840, 1600, '2160p', '4K'],
+    [1280, 536, '720p', 'HD'], [2560, 1080, '1440p', 'QHD'],
+    [800, 1920, '1080p', 'FHD'], [1600, 3840, '2160p', '4K'],
+    [3440, 1440, '1440p', null], [1440, 1080, '1080p', null],
+    [1600, 900, '900p', null], [4096, 2160, '2160p', null],
+    [1920, 1200, '1200p', null], [1000, 1000, '1000p', null],
   ])('formats decoded %s × %s with a separate quality badge', (width, height, label, badge) => {
     expect(readVideoResolution(makeVideo(width, height))).toEqual({ label, badge, detail: `${width} × ${height}` });
   });

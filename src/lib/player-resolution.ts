@@ -1,6 +1,8 @@
 export type VideoResolution = { label: string; badge: 'HD' | 'FHD' | 'QHD' | '4K' | '8K' | null; detail: string };
 
-// Explicit 16:9 display tiers; these are not thresholds for arbitrary crops.
+// Standard 16:9 reference rasters. The UI also uses their nominal display tier
+// for wider crops with the same long edge; that is a display convention, not
+// a claim that the decoded video contains the reference raster's full height.
 // https://support.google.com/youtube/answer/6375112
 // FHD/QHD nomenclature: https://www.samsung.com/uk/monitors/monitor-buying-guide/how-to-select-by-resolution/
 const RESOLUTION_TIERS: Readonly<Record<string, Pick<VideoResolution, 'label' | 'badge'>>> = {
@@ -19,10 +21,16 @@ export function readVideoResolution(video: HTMLVideoElement): VideoResolution | 
   const { videoWidth: width, videoHeight: height } = video;
   if (!video.getAttribute('src') || video.readyState < 1 || !width || !height) return null;
   const detail = `${width} × ${height}`;
-  // Apply the same display tier to the rotated portrait raster. Preserve the
-  // actual dimensions for crops, ultrawide video, and other unlisted formats.
-  const tier = RESOLUTION_TIERS[`${Math.max(width, height)}x${Math.min(width, height)}`];
-  return { ...(tier ?? { label: detail, badge: null }), detail };
+  const longEdge = Math.max(width, height);
+  const shortEdge = Math.min(width, height);
+  const exact = RESOLUTION_TIERS[`${longEdge}x${shortEdge}`];
+  // For example, a 1920 × 800 widescreen movie belongs to the 1080p display
+  // tier. Do not round unrelated sizes (such as 1600 × 900) up to that tier.
+  const crop = Object.entries(RESOLUTION_TIERS).find(([raster]) => {
+    const [referenceWidth, referenceHeight] = raster.split('x').map(Number);
+    return longEdge === referenceWidth && shortEdge < referenceHeight;
+  })?.[1];
+  return { ...(exact ?? crop ?? { label: `${shortEdge}p`, badge: null }), detail };
 }
 
 export function observeVideoResolution(video: HTMLVideoElement, update: (value: VideoResolution | null) => void) {
