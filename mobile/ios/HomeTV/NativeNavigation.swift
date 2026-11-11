@@ -58,6 +58,13 @@ enum NativeNavigation {
         let parent: URL?
     }
 
+    /// Homepage owns its brand/search header; search results retain native Back.
+    static func usesWebHomeHeader(for url: URL, origin: URL) -> Bool {
+        guard sameOrigin(url, origin), ["", "/", "/hd", "/hd/"].contains(url.path),
+              let page = page(for: url, origin: origin), page.parent == nil else { return false }
+        return !(URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.contains(where: { $0.name == "s" && !($0.value ?? "").isEmpty }) ?? false)
+    }
+
     /// The watch page supplies its own compact navigation and playback actions.
     static func usesWatchLayout(for url: URL, origin: URL) -> Bool {
         sameOrigin(url, origin) && url.path.trimmingCharacters(in: CharacterSet(charactersIn: "/")) == "watch"

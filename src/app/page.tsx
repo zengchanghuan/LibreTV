@@ -183,7 +183,7 @@ function HomeContent() {
     <div className="min-h-screen flex flex-col">
       <Header />
 
-      <main className="relative flex-1 max-w-6xl w-full mx-auto px-4 py-6">
+      <main className="relative flex-1 max-w-6xl w-full mx-auto px-4 py-4 sm:py-6">
         {/* 首屏氛围渐变 */}
         {!urlQuery && (
           <div
@@ -197,9 +197,9 @@ function HomeContent() {
         )}
 
         {/* 搜索区 */}
-        <section className={cn('flex flex-col items-center', urlQuery ? 'mb-6' : 'mt-8 mb-8')}>
+        <section className={cn('flex flex-col items-center', urlQuery ? 'mb-6' : 'mt-0 mb-5 sm:mt-8 sm:mb-8')}>
           {!urlQuery && (
-            <header className="text-center mb-6">
+            <header className={section === 'hd' ? 'text-center mb-4 sm:mb-6' : 'sr-only sm:not-sr-only sm:text-center sm:mb-6'}>
               {section !== 'hd' && <p className="mb-3 text-xs tracking-widest text-muted">自己的家庭影院</p>}
               <h1 className="text-3xl sm:text-4xl font-semibold">{section === 'hd' ? '高清专区' : '今晚，想看点什么？'}</h1>
               {section === 'hd' && <p className="text-sm text-muted mt-3">精选高清播放源 · 实际画质以片源为准</p>}
@@ -234,7 +234,7 @@ function HomeContent() {
                 <input
                   ref={inputRef}
                   className="flex-1 min-w-0 pr-2 bg-transparent text-sm text-content placeholder:text-faint focus:outline-none"
-                  placeholder="输入影片名称..."
+                  placeholder="搜索影片、剧集"
                   value={input}
                   maxLength={100}
                   autoComplete="off"

@@ -3,8 +3,10 @@ import type Artplayer from 'artplayer';
 /** Measure the stationary player container, never the video moved into the popup. */
 export function bindAutoMini(art: Artplayer): () => void {
   let frame: number | undefined;
+  let disposed = false;
   const update = () => {
     frame = undefined;
+    if (disposed || art.isDestroy) return;
     // Scrolling/resizing must not exit a fullscreen or native picture-in-picture session.
     if (art.fullscreen || art.fullscreenWeb || art.pip) return;
     const rect = art.template.$container.getBoundingClientRect();
@@ -16,7 +18,7 @@ export function bindAutoMini(art: Artplayer): () => void {
   const schedule = () => {
     // Unlike a leading-only throttle, this reads the final position even if the
     // last scroll event arrives immediately after the previous measurement.
-    if (frame === undefined) frame = requestAnimationFrame(update);
+    if (!disposed && frame === undefined) frame = requestAnimationFrame(update);
   };
   window.addEventListener('scroll', schedule, { capture: true, passive: true });
   window.addEventListener('resize', schedule);
@@ -27,6 +29,8 @@ export function bindAutoMini(art: Artplayer): () => void {
   observer?.observe(art.template.$container);
   schedule();
   return () => {
+    if (disposed) return;
+    disposed = true;
     window.removeEventListener('scroll', schedule, true);
     window.removeEventListener('resize', schedule);
     art.off('fullscreen', schedule);
@@ -34,5 +38,11 @@ export function bindAutoMini(art: Artplayer): () => void {
     art.off('pip', schedule);
     observer?.disconnect();
     if (frame !== undefined) cancelAnimationFrame(frame);
+    // Artplayer mounts this popup directly in body; destroy() only clears its
+    // original container. Restore the video before destroy() resets its source,
+    // then remove this instance's detached popup, including an already hidden one.
+    if (art.mini) art.mini = false;
+    const template = art.template as typeof art.template & { $mini?: HTMLElement };
+    template.$mini?.remove();
   };
 }

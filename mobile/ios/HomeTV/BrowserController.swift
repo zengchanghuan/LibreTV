@@ -1,7 +1,7 @@
 import UIKit
 import WebKit
 
-final class BrowserController: UIViewController, WKScriptMessageHandler, WKNavigationDelegate, UITabBarDelegate {
+final class BrowserController: UIViewController, WKScriptMessageHandler, WKNavigationDelegate {
     private var web: WKWebView!
     private var origin: URL?
     private var player: PlayerController?
@@ -12,7 +12,8 @@ final class BrowserController: UIViewController, WKScriptMessageHandler, WKNavig
     private let bottomBackground = UIView()
     private var darkTheme = UserDefaults.standard.object(forKey: "native.theme.dark") as? Bool ?? true
     override var preferredStatusBarStyle: UIStatusBarStyle { darkTheme ? .lightContent : .darkContent }
-    private let tabBar = UITabBar()
+    private let tabBar = HomeTabBar()
+    private var collectionSheetOpen = false
     private var tabBarHeight: NSLayoutConstraint!
     private var navigationBarHeight: NSLayoutConstraint!
     private var webBottomToTabs: NSLayoutConstraint!
@@ -41,9 +42,7 @@ final class BrowserController: UIViewController, WKScriptMessageHandler, WKNavig
         web.isOpaque = false; web.backgroundColor = .black
         navigationBar.accessibilityIdentifier = "browser.navigation"
         navigationBar.items = [pageNavigationItem]
-        tabBar.delegate = self
-        tabBar.items = [UITabBarItem(title: "首页", image: UIImage(systemName: "house"), tag: 0), UITabBarItem(title: "直播", image: UIImage(systemName: "play.tv"), tag: 1), UITabBarItem(title: "高清", image: UIImage(systemName: "4k.tv"), tag: 2), UITabBarItem(title: "设置", image: UIImage(systemName: "gearshape"), tag: 3)]
-        tabBar.selectedItem = tabBar.items?.first
+        tabBar.onSelect = { [weak self] index in self?.selectTab(index) }
         status.textColor = .white; status.numberOfLines = 0; status.textAlignment = .center
         retry.setTitle("重试", for: .normal); retry.isHidden = true
         retry.heightAnchor.constraint(greaterThanOrEqualToConstant: 44).isActive = true
@@ -76,19 +75,23 @@ final class BrowserController: UIViewController, WKScriptMessageHandler, WKNavig
     }
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
-        // A system tab bar includes the home-indicator inset in its own height.
-        // Constraining it above that inset compresses its icon/title content.
-        let fitted = tabBar.sizeThatFits(CGSize(width: view.bounds.width, height: 0)).height
-        let height = watchLayout ? 0 : max(49 + view.safeAreaInsets.bottom, fitted)
+        let height = watchLayout || collectionSheetOpen ? 0 : 56 + view.safeAreaInsets.bottom
         if abs(tabBarHeight.constant - height) > 0.5 { tabBarHeight.constant = height }
     }
     private func setWatchLayout(_ enabled: Bool) {
         guard watchLayout != enabled else { return }
         watchLayout = enabled
-        navigationBar.isHidden = enabled; tabBar.isHidden = enabled; bottomBackground.isHidden = enabled
-        navigationBarHeight.constant = enabled ? 0 : 44
-        webBottomToTabs.isActive = !enabled
-        webBottomToSafeArea.isActive = enabled
+        updateChrome()
+        view.setNeedsLayout()
+    }
+    private func updateChrome() {
+        let hiddenTabs = watchLayout || collectionSheetOpen
+        let webHeader = navigationURL.flatMap { url in origin.map { NativeNavigation.usesWebHomeHeader(for: url, origin: $0) } } ?? false
+        let hiddenHeader = watchLayout || collectionSheetOpen || webHeader
+        navigationBar.isHidden = hiddenHeader; navigationBarHeight.constant = hiddenHeader ? 0 : 44
+        tabBar.isHidden = hiddenTabs; bottomBackground.isHidden = hiddenTabs
+        NSLayoutConstraint.deactivate([webBottomToTabs, webBottomToSafeArea])
+        (hiddenTabs ? webBottomToSafeArea : webBottomToTabs)?.isActive = true
         view.setNeedsLayout()
     }
     private func applyTheme(dark: Bool) {
@@ -100,15 +103,7 @@ final class BrowserController: UIViewController, WKScriptMessageHandler, WKNavig
         web.backgroundColor = theme.page; web.scrollView.backgroundColor = theme.page
         status.textColor = theme.content
         theme.apply(to: navigationBar)
-        tabBar.overrideUserInterfaceStyle = theme.style
-        let appearance = UITabBarAppearance(); appearance.configureWithOpaqueBackground()
-        appearance.backgroundColor = theme.surface; appearance.shadowColor = theme.line
-        for item in [appearance.stackedLayoutAppearance, appearance.inlineLayoutAppearance, appearance.compactInlineLayoutAppearance] {
-            item.normal.iconColor = theme.muted; item.normal.titleTextAttributes = [.foregroundColor: theme.muted]
-            item.selected.iconColor = theme.accent; item.selected.titleTextAttributes = [.foregroundColor: theme.accent]
-        }
-        tabBar.standardAppearance = appearance; tabBar.scrollEdgeAppearance = appearance
-        tabBar.tintColor = theme.accent; tabBar.unselectedItemTintColor = theme.muted
+        tabBar.apply(theme)
         setNeedsStatusBarAppearanceUpdate()
     }
     private func connect(_ url: URL) {
@@ -118,10 +113,10 @@ final class BrowserController: UIViewController, WKScriptMessageHandler, WKNavig
         status.text = "正在连接…"; web.load(URLRequest(url: url))
     }
     private func showHome() {
-        tabBar.selectedItem = tabBar.items?.first
+        tabBar.selectedIndex = 0
     }
-    func tabBar(_ tabBar: UITabBar, didSelect item: UITabBarItem) {
-        guard let origin, let url = NativeNavigation.url(forTab: item.tag, origin: origin, currentURL: web.url, retrying: !retry.isHidden) else { return }
+    private func selectTab(_ index: Int) {
+        guard let origin, let url = NativeNavigation.url(forTab: index, origin: origin, currentURL: web.url, retrying: !retry.isHidden) else { return }
         retry.isHidden = true; offlineButton.isHidden = false; status.text = "正在连接…"
         web.load(URLRequest(url: url))
     }
@@ -162,11 +157,12 @@ final class BrowserController: UIViewController, WKScriptMessageHandler, WKNavig
         flush()
     }
     private func updateSelectedTab(_ url: URL) {
-        guard let origin, let index = NativeNavigation.tabIndex(for: url, origin: origin),
-              let items = tabBar.items, items.indices.contains(index) else { return }
-        tabBar.selectedItem = items[index]
+        guard let origin, let index = NativeNavigation.tabIndex(for: url, origin: origin) else { return }
+        tabBar.selectedIndex = index
+        collectionSheetOpen = false
         navigationURL = url
         setWatchLayout(NativeNavigation.usesWatchLayout(for: url, origin: origin))
+        updateChrome()
         if let page = NativeNavigation.page(for: url, origin: origin) {
             pageNavigationItem.title = page.title
             if page.parent != nil {
@@ -181,7 +177,10 @@ final class BrowserController: UIViewController, WKScriptMessageHandler, WKNavig
         let failure = error as NSError
         if failure.domain == NSURLErrorDomain && failure.code == NSURLErrorCancelled { return }
         // Keep native navigation available if the web page cannot render its controls.
+        collectionSheetOpen = false
         setWatchLayout(false)
+        updateChrome()
+        navigationBar.isHidden = false; navigationBarHeight.constant = 44
         let detail = "\(failure.domain) (\(failure.code)): \(failure.localizedDescription)"
         UserDefaults.standard.set(detail, forKey: "lastConnectionError")
         status.text = "连接失败：\(failure.localizedDescription)\n错误码 \(failure.code)"
@@ -192,6 +191,9 @@ final class BrowserController: UIViewController, WKScriptMessageHandler, WKNavig
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
         guard message.frameInfo.isMainFrame, let origin, let frame = message.frameInfo.request.url, sameOrigin(frame, origin),
               let body = message.body as? [String: Any], let type = body["type"] as? String else { return }
+        if type == "collectionSheet", let open = body["open"] as? Bool {
+            collectionSheetOpen = open; updateChrome(); return
+        }
         if type == "theme", let dark = body["dark"] as? Bool { applyTheme(dark: dark); return }
         if type == "downloads" { showDownloads(); return }
         if type == "download", let text = body["url"] as? String, let url = URL(string: text, relativeTo: origin)?.absoluteURL, let title = body["title"] as? String { download(url: url, title: title); return }

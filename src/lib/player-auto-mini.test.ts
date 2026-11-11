@@ -9,16 +9,18 @@ describe('automatic floating player', () => {
   let changes: boolean[];
   let events: Map<string, () => void>;
   let player: Artplayer;
+  let removePopup: ReturnType<typeof vi.fn>;
   beforeEach(() => {
     vi.useFakeTimers();
     vi.stubGlobal('window', Object.assign(new EventTarget(), { innerHeight: 800, innerWidth: 1200 }));
     vi.stubGlobal('requestAnimationFrame', (fn: () => void) => setTimeout(fn, 16));
     vi.stubGlobal('cancelAnimationFrame', clearTimeout);
     top = 80; mini = false; changes = []; events = new Map();
+    removePopup = vi.fn();
     player = {
       get mini() { return mini; }, set mini(value: boolean) { mini = value; changes.push(value); },
       fullscreen: false, fullscreenWeb: false, pip: false,
-      template: { $container: { getBoundingClientRect: () => ({ top, bottom: top + 500, left: 0, right: 900, width: 900, height: 500 }) } },
+      template: { $mini: { remove: () => removePopup() }, $container: { getBoundingClientRect: () => ({ top, bottom: top + 500, left: 0, right: 900, width: 900, height: 500 }) } },
       on: (event: string, fn: () => void) => events.set(event, fn),
       off: (event: string) => events.delete(event),
     } as unknown as Artplayer;
@@ -53,12 +55,20 @@ describe('automatic floating player', () => {
     player[mode] = false; events.get(mode)!(); vi.advanceTimersByTime(16);
     expect(mini).toBe(true);
   });
+  it('removes an already hidden popup and makes cleanup idempotent', () => {
+    top = -600; scroll(); vi.advanceTimersByTime(16);
+    player.mini = false;
+    cleanup!(); cleanup!(); cleanup = undefined;
+    expect(removePopup).toHaveBeenCalledOnce();
+    expect(mini).toBe(false);
+  });
   it('rechecks resize and disconnects pending work/listeners when the player unmounts', () => {
     top = 900; window.dispatchEvent(new Event('resize')); vi.advanceTimersByTime(16);
     expect(mini).toBe(true);
     top = 80; scroll(); cleanup!(); cleanup = undefined;
     vi.runAllTimers(); scroll(); window.dispatchEvent(new Event('resize')); vi.runAllTimers();
-    expect(mini).toBe(true);
+    expect(mini).toBe(false);
+    expect(removePopup).toHaveBeenCalledOnce();
     expect(events.size).toBe(0);
   });
 });

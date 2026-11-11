@@ -20,6 +20,8 @@ import { FilmPosterGrid } from './film-poster-grid';
 import { KoreanThrillers } from './korean-thrillers';
 import { Spinner } from './states';
 import { DoubanCard } from './video-card';
+import { CollectionPicker } from './collection-picker';
+import { Icon } from './icon';
 
 const MOVIE_TAGS = ['热门', '最新', '经典', '豆瓣高分', '冷门佳片', '华语', '欧美', '韩国', '日本', '动画'];
 const TV_TAGS = ['热门', '美剧', '英剧', '韩剧', '日剧', '国产剧', '港剧', '日本动画', '综艺', '纪录片'];
@@ -57,6 +59,7 @@ export function RecommendSection({ visible, onPick, sources = [], section }: { v
   const [collection, setCollection] = useState('home');
   const [directory, setDirectory] = useState<keyof typeof directories>('topics');
   const [filter, setFilter] = useState('');
+  const [pickerOpen, setPickerOpen] = useState(false);
   if (!visible || !doubanEnabled) return null;
   const selected = allCollections.find(({ id }) => id === collection);
   const options = directories[directory];
@@ -65,7 +68,16 @@ export function RecommendSection({ visible, onPick, sources = [], section }: { v
   const showDiscovery = homeLayout === 'curated' && discovery;
   const charts = recommendSource === 'bangumi' ? <BangumiView onPick={onPick} /> : recommendSource === 'douban' ? <DoubanView onPick={onPick} /> : <HotListView onPick={onPick} />;
   return <>
-    <nav aria-label="必看片单" className="mb-5">
+    <nav aria-label="手机片单导航" className="mb-5 sm:hidden">
+      <div className="mb-4 flex gap-6 border-b border-line text-sm">
+        {homeLayout === 'curated' && <button type="button" className={cn('min-h-11 border-b-2 pb-2', showDiscovery ? 'border-accent font-semibold text-content' : 'border-transparent text-muted')} aria-pressed={showDiscovery} onClick={() => setDiscovery(true)}>为你精选</button>}
+        <button type="button" className={cn('min-h-11 border-b-2 pb-2', !showDiscovery ? 'border-accent font-semibold text-content' : 'border-transparent text-muted')} aria-pressed={!showDiscovery} onClick={() => setDiscovery(false)}>片单</button>
+      </div>
+      {!showDiscovery && <button type="button" data-collection-trigger aria-haspopup="dialog" aria-expanded={pickerOpen} aria-label="选择片单" onClick={() => setPickerOpen(true)} className="flex w-full min-h-14 items-center gap-3 rounded-xl border border-line bg-surface px-3 py-2 text-left">
+        <Icon name="filter" className="w-5 h-5 shrink-0 text-accent" /><span className="min-w-0 flex-1 text-sm font-medium [overflow-wrap:anywhere]">{options.find(option => option.id === collection)?.name || '选择片单'}</span><span className="flex shrink-0 items-center gap-1 text-xs text-muted">切换<Icon name="chevronDown" className="w-3.5 h-3.5" /></span>
+      </button>}
+    </nav>
+    <nav aria-label="必看片单" className="mb-5 hidden sm:block">
       <div className="mb-2 flex flex-wrap items-center gap-1">
         {homeLayout === 'curated' && <TypeButton active={showDiscovery} onClick={() => setDiscovery(true)}>为你精选</TypeButton>}
         {directoryLabels.map(([key, label]) => (
@@ -83,10 +95,6 @@ export function RecommendSection({ visible, onPick, sources = [], section }: { v
         <h2 className="text-lg font-bold">必看片单</h2>
         <span className="text-xs text-muted">{topicOptions.length - 1 + peopleCollections.length} 份片单</span>
       </div>
-      <select aria-label="选择片单" value={collection} onChange={(event) => setCollection(event.target.value)}
-        className="w-full rounded-lg bg-chip px-3 py-2 text-sm text-content sm:hidden">
-        {options.map(({ id, name }) => <option key={id} value={id}>{name}</option>)}
-      </select>
       {directory !== 'topics' && (
         <input type="search" aria-label="筛选人物" placeholder="输入人名" value={filter}
           onChange={event => setFilter(event.target.value)}
@@ -100,6 +108,7 @@ export function RecommendSection({ visible, onPick, sources = [], section }: { v
       </div>
       </>}
     </nav>
+    {pickerOpen && <CollectionPicker directories={directories} directory={directory} selected={collection} onClose={() => setPickerOpen(false)} onSelect={(key, id) => { setDirectory(key); setCollection(id); setFilter(''); setDiscovery(false); }} />}
     {showDiscovery ? <HomeDiscovery sources={sources} section={section} charts={charts} onCollection={id => {
       const person = peopleCollections.find(p => p.id === id);
       setDirectory(person ? person.role === 'actor' ? 'actors' : 'directors' : 'topics');
@@ -190,7 +199,7 @@ function DoubanView({ onPick }: { onPick: PickFilm }) {
       ) : items.length === 0 ? (
         <p className="text-center text-sm text-faint py-8">该分类暂无推荐内容</p>
       ) : (
-        <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2.5">
+        <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-x-3 gap-y-5">
           {items.map((item) => (
             <DoubanCard key={item.id} item={item}
               doubanId={type === 'movie' ? item.id : undefined}
@@ -237,7 +246,7 @@ function BangumiView({ onPick }: { onPick: PickFilm }) {
       ) : query.isLoading ? (
         <GridSkeleton />
       ) : (
-        <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2.5">
+        <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-x-3 gap-y-5">
           {items.map((item) => (
             <DoubanCard key={item.id} item={item} mediaType="animation" onClick={() => onPick(item.title, contextForFilm(item.title, undefined, 'animation'))} />
           ))}
@@ -284,7 +293,7 @@ function HotListView({ onPick }: { onPick: PickFilm }) {
       ) : query.isLoading ? (
         <GridSkeleton />
       ) : (
-        <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2.5">
+        <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-x-3 gap-y-5">
           {items.map((item) => (
             <DoubanCard key={item.id} item={item}
               doubanId={listId === 'douban_movie_weekly' ? item.id : undefined}
@@ -301,7 +310,7 @@ function GridSkeleton() {
   return (
     <div role="status" aria-label="正在加载推荐…">
       <div className="flex items-center justify-center gap-2 py-4 text-sm text-muted"><Spinner size="md" />正在加载推荐…</div>
-      <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2.5">
+      <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-x-3 gap-y-5">
         {Array.from({ length: 16 }).map((_, i) => (
           <div key={i}>
             <div className="aspect-[2/3] rounded-lg bg-chip animate-pulse" />

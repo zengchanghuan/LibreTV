@@ -46,9 +46,10 @@ export function Header({ showSearch = false }: { showSearch?: boolean }) {
       <header className="sticky top-0 z-40 bg-surface/90 backdrop-blur border-b border-line">
         <PwaUpdateBanner />
         <div className="max-w-6xl mx-auto px-4 h-14 flex items-center gap-3">
-          <Link href="/" aria-label="HomeTV 首页" className="flex items-center shrink-0">
+          <Link href="/" aria-label="HomeTV 首页" className="flex items-center gap-2 shrink-0">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/icons/icon-512.png" alt="HomeTV" className="w-7 h-7 rounded-lg" />
+            {native && <span className="text-lg font-semibold tracking-tight sm:hidden">HomeTV</span>}
           </Link>
 
           {showSearch && (
@@ -119,7 +120,8 @@ export function Header({ showSearch = false }: { showSearch?: boolean }) {
           <div className="flex-1 sm:hidden" />
 
           <nav className="flex items-center gap-1 ml-auto">
-            {!native && <><span className="hidden sm:contents"><InstallButton /></span><FamilyButton /></>}
+            {checked && !verified && <button type="button" className="min-h-11 px-2 text-sm text-accent sm:hidden" onClick={openLogin}>登录</button>}
+            {!native && <span className="hidden sm:contents"><InstallButton /><FamilyButton /></span>}
             {!native && <HeaderLink href="/hd" active={pathname === '/hd'}>高清</HeaderLink>}
             {!native && <HeaderLink href="/live" active={pathname === '/live'}>
               直播
@@ -132,16 +134,16 @@ export function Header({ showSearch = false }: { showSearch?: boolean }) {
               <Icon name="clock" />
               {native && <span className="text-sm">历史</span>}
             </IconButton>
-            {!native && <><IconButton label="下载管理" onClick={requestShowDownloadManager}>
+            {!native && <><span className="hidden sm:contents"><IconButton label="下载管理" onClick={requestShowDownloadManager}>
               <Icon name="download" />
-            </IconButton>
-            <IconButton label="设置" onClick={() => setSettingsOpen(true)}>
+            </IconButton></span>
+            <IconButton label="设置" onClick={() => window.matchMedia('(max-width: 639px)').matches ? router.push('/settings') : setSettingsOpen(true)}>
               <Icon name="gear" />
             </IconButton></>}
           </nav>
         </div>
-        {pathname === '/' && checked && (
-          <div className="max-w-6xl mx-auto px-4 pb-1 flex items-center justify-end gap-3 text-sm">
+        {pathname === '/' && checked && !native && (
+          <div className="max-w-6xl mx-auto px-4 pb-1 hidden sm:flex items-center justify-end gap-3 text-sm">
             {verified && <span className="truncate text-muted">当前账号 · {username || '共享访问'}</span>}
             <button type="button" className="btn-ghost shrink-0" onClick={verified ? logout : openLogin}>
               {verified ? '退出登录' : '账号登录'}

@@ -73,5 +73,11 @@ func runNativeNavigationTests() throws {
     try testCheck(NativeNavigation.usesWatchLayout(for: try url("/watch/?id=42"), origin: origin))
     try testCheck(!NativeNavigation.usesWatchLayout(for: hd, origin: origin))
     try testCheck(!NativeNavigation.usesWatchLayout(for: try url("https://other.example.com/watch"), origin: origin))
-    print("iOS native navigation: 32 regression scenarios passed")
+    for path in ["/", "/hd", "/hd/", "/hd?site=hdzone"] {
+        try testCheck(NativeNavigation.usesWebHomeHeader(for: try url(path), origin: origin), "Home roots use the compact web header")
+    }
+    for path in ["/?s=movie", "/hd?s=movie", "/settings", "/watch?id=42", "/hd/hdzone", "https://other.example.com/"] {
+        try testCheck(!NativeNavigation.usesWebHomeHeader(for: try url(path), origin: origin), "Search, detail and foreign pages must not hide native navigation as home")
+    }
+    print("iOS native navigation: 42 regression scenarios passed")
 }
