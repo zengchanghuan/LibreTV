@@ -25,6 +25,7 @@ import { loadCacheSettings } from '@/lib/video-cache';
 import { formatTime } from '@/lib/utils';
 import { bindAutoMini } from '@/lib/player-auto-mini';
 import { bindProgressSeek } from '@/lib/player-progress';
+import { bindPlaybackControls } from '@/lib/player-controls';
 import { bindEarlyFullscreen } from '@/lib/player-fullscreen';
 
 /**
@@ -423,14 +424,7 @@ export function PlayerShell({
       setProgressTime(`${formatTime(previewTime ?? (Number.isFinite(video.currentTime) ? video.currentTime : 0))} / ${formatTime(Number.isFinite(video.duration) ? video.duration : 0)}`);
     };
     const unbindProgressSeek = bindProgressSeek(art, time => { previewTime = time; updateProgressTime(); });
-    const revealControls = () => { art.controls.show = true; };
-    // Do not leave the user without seek/pause controls while playback is waiting.
-    art.on('control', visible => {
-      if (!visible && (art.video.paused || art.video.seeking || art.video.readyState < HTMLMediaElement.HAVE_FUTURE_DATA)) revealControls();
-    });
-    art.on('video:waiting', revealControls);
-    art.on('video:stalled', revealControls);
-    art.on('video:seeking', revealControls);
+    const unbindPlaybackControls = bindPlaybackControls(art);
     art.on('video:durationchange', updateProgressTime);
     art.on('video:emptied', updateProgressTime);
     art.on('video:loadedmetadata', async () => {
@@ -626,6 +620,7 @@ export function PlayerShell({
 
     return () => {
       unbindProgressSeek();
+      unbindPlaybackControls();
       unbindAutoMini();
       unbindEarlyFullscreen();
       clearInterval(qualityTimer); flushQuality(); qualityRef.current = null;

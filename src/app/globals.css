@@ -157,6 +157,15 @@ header.sticky { top: env(safe-area-inset-top, 0px); }
   font-size: 12px;
   font-variant-numeric: tabular-nums;
 }
+/* Keep the inline mini bar, but hide all bottom chrome in idle fullscreen.
+   Override ArtPlayer's mini-progress opacity without moving the seek hit area. */
+.art-video-player.hometv-vod-player:is(.art-fullscreen, .art-fullscreen-web):not(.art-control-show) .art-bottom {
+  opacity: 0;
+  pointer-events: none;
+}
+.art-video-player.hometv-vod-player:is(.art-fullscreen, .art-fullscreen-web):not(.art-control-show) .hometv-progress-time {
+  display: none;
+}
 @media (pointer: coarse) {
   input, select, textarea { font-size: 16px !important; }
   .btn, nav button { min-height: 40px; }
