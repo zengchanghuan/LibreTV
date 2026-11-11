@@ -102,11 +102,26 @@ export function parseDetail(
       director: str(vod.vod_director),
       actor: str(vod.vod_actor),
       remarks: str(vod.vod_remarks),
+      language: str(vod.vod_lang),
+      duration: durationText(vod.vod_duration),
+      releaseDate: releaseDateText(vod.vod_pubdate),
       sourceKey: source.key,
       sourceName: source.name,
       sourceUrl: source.url,
     },
   };
+}
+
+function durationText(value: unknown): string | undefined {
+  const text = typeof value === 'number' ? String(value) : str(value);
+  const minutes = text?.match(/^(\d{1,3})(?:\s*(?:分钟|分鐘|min(?:utes)?))?$/i)?.[1];
+  return minutes && Number(minutes) > 0 ? `${Number(minutes)} 分钟` : undefined;
+}
+
+function releaseDateText(value: unknown): string | undefined {
+  const text = str(value);
+  // Keep dates with optional release region, not CMS update timestamps.
+  return text && /^\d{4}-\d{2}-\d{2}(?:\s*[（(][^()（）<>]{1,30}[）)])?$/.test(text) ? text : undefined;
 }
 
 function str(v: unknown): string | undefined {

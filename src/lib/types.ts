@@ -43,6 +43,13 @@ export interface VideoInfo {
   director?: string;
   actor?: string;
   remarks?: string;
+  rating?: { value: string; source: string; url?: string };
+  genre?: string;
+  originalTitle?: string;
+  aliases?: string[];
+  language?: string;
+  duration?: string;
+  releaseDate?: string;
   sourceKey: string;
   sourceName: string;
   sourceUrl?: string;

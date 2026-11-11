@@ -5,6 +5,7 @@ import { cmsRequestHeaders, parseDetail, parseDetailPageHtml } from '@/lib/cms-p
 import { fetchUpstream, getCache, setCache } from '@/lib/fetch-utils';
 import { checkUpstreamAllowed } from '@/lib/ssrf';
 import type { SourceConfig, VideoDetail } from '@/lib/types';
+import { enrichVideoInfo } from '@/lib/video-info-metadata';
 
 export const runtime = 'nodejs';
 
@@ -59,6 +60,7 @@ export async function GET(req: Request) {
 
     if (siteAdapterFor(source.url)) {
       const detail = await detailSite(source, id, AbortSignal.any([req.signal, AbortSignal.timeout(30000)]));
+      detail.videoInfo = enrichVideoInfo(detail.videoInfo);
       setCache(cacheKey, detail, DETAIL_CACHE_TTL);
       return NextResponse.json(detail);
     }
@@ -102,6 +104,7 @@ export async function GET(req: Request) {
     if (!resolved || resolved.episodes.length === 0) {
       return NextResponse.json({ error: '未找到播放资源' }, { status: 404 });
     }
+    resolved.videoInfo = enrichVideoInfo(resolved.videoInfo);
     setCache(cacheKey, resolved, DETAIL_CACHE_TTL);
     return NextResponse.json(resolved);
   } catch (err) {

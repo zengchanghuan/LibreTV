@@ -9,6 +9,7 @@ export interface CatalogWork {
   id: string;
   title: string;
   aliases: string[];
+  originalTitle?: string;
   year: string;
   mediaType: MediaType;
   metadataKeys: string[];
@@ -58,7 +59,7 @@ export function createWorkCatalog(metadata: Record<string, FilmPosterMetadata>, 
     legacyIds.set(`title:${key}`, id);
     const previous = byId.get(id);
     const work: CatalogWork = previous || {
-      id, title: collected?.title || title, year, aliases: [], metadataKeys: [], metadata: {}, doubanIds: [],
+      id, title: collected?.title || title, originalTitle: collected?.originalTitle, year, aliases: [], metadataKeys: [], metadata: {}, doubanIds: [],
       mediaType: collected?.mediaType || meta.mediaType || (tmdb?.[1] as MediaType) || 'unknown',
     };
     // Preserve editorial metadata; a title refresh never replaces ratings or posters.

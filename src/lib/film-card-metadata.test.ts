@@ -36,5 +36,7 @@ describe('shared recommendation card metadata', () => {
     expect(filmRatingUrl({ ratingSource: '豆瓣', doubanId: '123' })).toBe('https://movie.douban.com/subject/123/');
     expect(filmRatingUrl({ ratingSource: 'IMDb', source: 'https://www.imdb.com/title/tt123/' })).toBe('https://www.imdb.com/title/tt123/');
     expect(filmRatingUrl({ ratingSource: '豆瓣', source: 'https://www.themoviedb.org/movie/123' })).toBeUndefined();
+    expect(filmRatingUrl({ ratingSource: 'Cine21观众', source: 'https://cine21.com/movie/info/?movie_id=51372' })).toBe('https://cine21.com/movie/info/?movie_id=51372');
+    expect(filmRatingUrl({ ratingSource: 'Cine21观众', source: 'https://cine21.com.evil.example/movie/info/?movie_id=51372' })).toBeUndefined();
   });
 });

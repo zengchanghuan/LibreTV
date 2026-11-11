@@ -26,6 +26,7 @@ export function filmRatingUrl(metadata: FilmPosterMetadata) {
     if (/^https:\/\/movie\.douban\.com\/subject\/\d+\/?$/.test(metadata.source || '')) return metadata.source;
   }
   if (source === 'IMDb' && /^https:\/\/www\.imdb\.com\/title\/tt\d+\/?$/.test(metadata.source || '')) return metadata.source;
+  if (source === 'Cine21观众' && /^https:\/\/(?:www\.)?cine21\.com\/movie\/info\/\?movie_id=\d+$/.test(metadata.source || '')) return metadata.source;
 }
 
 export function filmPosterUrl(value?: string, base?: string) {
