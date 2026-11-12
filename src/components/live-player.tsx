@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { LiveChannelName } from './live-channel-name';
 import Artplayer from 'artplayer';
+import { bindPlaybackVisibility } from '@/lib/player-visibility';
 import { PLAYER_LOADING_ICON } from '@/lib/brand';
 import Hls, { type HlsConfig } from 'hls.js';
 import { Spinner, PlayerLoadingState } from './states';
@@ -346,6 +347,7 @@ export function LivePlayer({ url, title, onPrevChannel, onNextChannel }: LivePla
       },
     });
     artRef.current = art;
+    const unbindPlaybackVisibility = bindPlaybackVisibility(art.video);
     // Keep the notice inside ArtPlayer's fullscreen root, rather than a sibling
     // that disappears behind web fullscreen or outside the fullscreen element.
     const noticeHost = document.createElement('div');
@@ -395,6 +397,7 @@ export function LivePlayer({ url, title, onPrevChannel, onNextChannel }: LivePla
       if (art.fullscreenWeb) art.fullscreenWeb = false;
       setOsdHost(null);
       noticeHost.remove();
+      unbindPlaybackVisibility();
       art.destroy();
       artRef.current = null;
       destroyed = true;

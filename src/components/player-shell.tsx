@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import Artplayer from 'artplayer';
+import { bindPlaybackVisibility } from '@/lib/player-visibility';
 import { PLAYER_LOADING_ICON } from '@/lib/brand';
 import Hls, { type HlsConfig, type FragmentLoaderContext } from 'hls.js';
 
@@ -415,6 +416,7 @@ export function PlayerShell({
     });
     art.template.$player.classList.add('hometv-vod-player');
     artRef.current = art;
+    const unbindPlaybackVisibility = bindPlaybackVisibility(art.video);
     const unbindEarlyFullscreen = bindEarlyFullscreen(art);
     const unbindAutoMini = bindAutoMini(art);
     setPlayer(art);
@@ -528,7 +530,7 @@ export function PlayerShell({
     art.on('video:ended', () => {
       qualityRef.current?.tracker.pause(performance.now()); flushQuality();
       endedRef.current = true;
-      if (!sleeping.current) activePropsRef.current.onEnded?.();
+      if (!sleeping.current && !document.hidden) activePropsRef.current.onEnded?.();
     });
 
     // —— 键盘快捷键（旧版 hotkey:false + 自定义逻辑的移植） ——
@@ -645,6 +647,7 @@ export function PlayerShell({
       recoveryRef.current?.dispose();
       getVideoPrefetcher().stop();
       getNextEpisodePrefetcher().stop();
+      unbindPlaybackVisibility();
       art.destroy();
       artRef.current = null;
     };
