@@ -58,13 +58,17 @@ class Handler(BaseHTTPRequestHandler):
             self.send_response(200); self.end_headers(); return
         if path.startswith('/offline-') and Handler.offline_blocked:
             self.send_error(503); return
-        if path.startswith('/offline-hls/'):
+        if path.startswith(('/offline-hls/', '/offline-slow-hls/')):
             fixture = project / 'ios/Tests/Fixtures/hls' / Path(path).name
             if not fixture.is_file(): self.send_error(404); return
             data = fixture.read_bytes()
             self.send_response(200)
             self.send_header('Content-Type', 'application/vnd.apple.mpegurl' if fixture.suffix == '.m3u8' else 'video/mp2t')
-            self.send_header('Content-Length', str(len(data))); self.end_headers(); self.wfile.write(data); return
+            self.send_header('Content-Length', str(len(data))); self.end_headers()
+            if path.startswith('/offline-slow-hls/') and fixture.suffix == '.ts': time.sleep(2)
+            try: self.wfile.write(data)
+            except (BrokenPipeError, ConnectionResetError): pass
+            return
         if path in ['/', '/hd', '/settings', '/live', '/about', '/watch'] or path.startswith('/hd/'):
             page = ('<html><head><meta name="viewport" content="width=device-width,initial-scale=1">'
                 '<script>document.documentElement.classList.toggle("dark",localStorage.getItem("fixture-theme")!=="light")</script>'

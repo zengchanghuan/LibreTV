@@ -13,6 +13,8 @@ final class OfflineDownloads: NSObject, AVAssetDownloadDelegate, URLSessionDownl
     private var tasks: [String: URLSessionTask] = [:]
     private var preparations: [String: Task<Void, Never>] = [:]
     private var retiredLocations: [String: URL] = [:]
+    // A replacement waits for cancellation to finish in the background daemon.
+    private var retiringTasks: [String: String] = [:]
     private var backgroundCompletions: [String: () -> Void] = [:]
     private var restoring = false, restored = false, scheduling = false
     private var networkReady = false, connected = false, wifi = false
@@ -45,12 +47,15 @@ final class OfflineDownloads: NSObject, AVAssetDownloadDelegate, URLSessionDownl
         monitor.pathUpdateHandler = { [weak self] path in
             DispatchQueue.main.async {
                 guard let self else { return }
-                self.networkReady = true; self.connected = path.status == .satisfied
-                self.wifi = path.usesInterfaceType(.wifi) || path.usesInterfaceType(.wiredEthernet)
-                self.schedule()
+                self.networkChanged(connected: path.status == .satisfied, wifi: path.usesInterfaceType(.wifi) || path.usesInterfaceType(.wiredEthernet))
             }
         }
         monitor.start(queue: DispatchQueue(label: "app.hometv.offline-network"))
+    }
+    // Shared entry point for NWPathMonitor and deterministic network-transition tests.
+    func networkChanged(connected: Bool, wifi: Bool) {
+        networkReady = true; self.connected = connected; self.wifi = wifi
+        schedule()
     }
     private func configuration(_ suffix: String, cellular: Bool) -> URLSessionConfiguration {
         let config = URLSessionConfiguration.background(withIdentifier: prefix + suffix)
@@ -107,12 +112,9 @@ final class OfflineDownloads: NSObject, AVAssetDownloadDelegate, URLSessionDownl
         schedule()
     }
     func setAllowsCellular(_ allowed: Bool) {
+        guard allowed != allowsCellular else { return }
         defaults.set(allowed, forKey: "offline.cellular")
-        // Session policy is immutable. Recreate incompatible tasks with the new policy.
-        for video in videos where video.state != .completed && video.state != .failed && (tasks[video.id] != nil || preparations[video.id] != nil) {
-            restart(video.id, state: video.state == .paused ? .paused : .queued)
-        }
-        schedule()
+        schedule(); notify()
     }
     @discardableResult func enqueue(url: URL, title: String, origin: URL, cookies: [HTTPCookie], identity: String? = nil, groupID: String? = nil, groupTitle: String? = nil, episodeTitle: String? = nil) throws -> String {
         guard let library else { throw DownloadError.message(storageError ?? "缓存存储不可用") }
@@ -150,27 +152,44 @@ final class OfflineDownloads: NSObject, AVAssetDownloadDelegate, URLSessionDownl
     }
     private func restart(_ id: String, state: OfflineVideo.State) {
         guard let video = library?.video(id) else { return }
-        if let file = library?.fileURL(for: video), tasks[id] != nil { retiredLocations[video.token] = file }
         guard update(id, { $0.attempt = UUID().uuidString; $0.state = state; $0.localPath = nil; $0.progress = 0; $0.bytes = 0; $0.error = nil; $0.detail = nil; $0.retries = 0; $0.retryAfter = nil; $0.note = video.progress > 0 ? "正在重新缓存" : nil }) else { return }
         preparations.removeValue(forKey: id)?.cancel()
-        tasks.removeValue(forKey: id)?.cancel()
-        if let file = library?.fileURL(for: video) { clean(file) }
+        retireTransfer(video)
+    }
+    private func retireTransfer(_ video: OfflineVideo) {
+        let file = library?.fileURL(for: video)
+        guard let task = tasks.removeValue(forKey: video.id) else {
+            if let file { clean(file) }; return
+        }
+        retiringTasks[video.token] = video.id
+        if let file { retiredLocations[video.token] = file }
+        task.cancel()
+        // HLS package files can still be owned by the retiring task. Clean them
+        // only after its completion callback, before starting the replacement.
+    }
+    private func needsNetworkMigration(_ video: OfflineVideo) -> Bool {
+        let taskAllowsCellular = video.cellular ?? true
+        // Relaxing the policy does not interrupt an existing Wi-Fi download.
+        // Migrate it only if Wi-Fi disappears and cellular is now permitted.
+        return allowsCellular ? (!taskAllowsCellular && !wifi) : taskAllowsCellular
     }
     private func schedule() {
         guard restored, !scheduling, library != nil, storageError == nil else { return }
         scheduling = true; defer { scheduling = false; armRetry() }
+        for video in videos where video.isScheduled && needsNetworkMigration(video) && (tasks[video.id] != nil || preparations[video.id] != nil) {
+            restart(video.id, state: .queued)
+        }
         if !mayDownload {
             for video in videos where video.isScheduled { suspend(video.id, state: .waitingForNetwork) }
             notify(); return
         }
         for video in videos where video.state == .waitingForNetwork { update(video.id) { $0.state = .queued } }
-        while storageError == nil, let video = OfflineQueue.candidates(videos, limit: concurrency).first {
+        while storageError == nil, let video = OfflineQueue.candidates(videos.filter { !retiringTasks.values.contains($0.id) }, limit: concurrency).first {
             if let space = availableBytes, space < 200 * 1024 * 1024 {
                 fail(video.id, DownloadError.message("手机空间不足，请先清理缓存")); continue
             }
             if let task = tasks[video.id] {
-                if video.cellular != allowsCellular { restart(video.id, state: .queued); start(video.id) }
-                else if update(video.id, { $0.state = .downloading }) { task.resume() }
+                if update(video.id, { $0.state = .downloading }) { task.resume() }
             } else { start(video.id) }
         }
     }
@@ -182,8 +201,8 @@ final class OfflineDownloads: NSObject, AVAssetDownloadDelegate, URLSessionDownl
     private func start(_ id: String) {
         guard let video = library?.video(id) else { return }
         guard let url = URL(string: video.sourceURL), let origin = URL(string: video.origin) else { fail(id, DownloadError.message("缓存地址无效，请重新选择来源")); return }
-        let attempt = UUID().uuidString
-        guard update(id, { $0.state = .preparing; $0.attempt = attempt; $0.cellular = allowsCellular; $0.error = nil; $0.detail = nil }) else { return }
+        let attempt = UUID().uuidString, cellular = allowsCellular
+        guard update(id, { $0.state = .preparing; $0.attempt = attempt; $0.cellular = cellular; $0.error = nil; $0.detail = nil }) else { return }
         preparations[id] = Task { @MainActor [weak self] in
             guard let self else { return }
             defer { if self.library?.video(id)?.attempt == attempt { self.preparations[id] = nil }; self.schedule() }
@@ -193,7 +212,7 @@ final class OfflineDownloads: NSObject, AVAssetDownloadDelegate, URLSessionDownl
                     WKWebsiteDataStore.default().httpCookieStore.getAllCookies { continuation.resume(returning: $0) }
                 }
                 guard !Task.isCancelled else { return }
-                let (media, kind) = try await self.prepare(url: url, origin: origin, cookies: cookies)
+                let (media, kind) = try await self.prepare(url: url, origin: origin, cookies: cookies, cellular: cellular)
                 guard !Task.isCancelled, let current = self.library?.video(id), current.attempt == attempt, current.state == .preparing else { return }
                 // Remove an interrupted partial only after the replacement source resolves.
                 try self.library?.removeFile(id)
@@ -202,9 +221,9 @@ final class OfflineDownloads: NSObject, AVAssetDownloadDelegate, URLSessionDownl
                 if kind == "hls" {
                     let options: [String: Any] = sameOrigin(media, origin) ? [AVURLAssetHTTPCookiesKey: cookies] : [:]
                     let asset = AVURLAsset(url: media, options: options)
-                    task = (self.allowsCellular ? self.hlsCellular : self.hlsWiFi).makeAssetDownloadTask(downloadConfiguration: AVAssetDownloadConfiguration(asset: asset, title: video.title))
+                    task = (cellular ? self.hlsCellular : self.hlsWiFi).makeAssetDownloadTask(downloadConfiguration: AVAssetDownloadConfiguration(asset: asset, title: video.title))
                 } else {
-                    task = (self.allowsCellular ? self.filesCellular : self.filesWiFi).downloadTask(with: self.request(media, origin: origin, cookies: cookies))
+                    task = (cellular ? self.filesCellular : self.filesWiFi).downloadTask(with: self.request(media, origin: origin, cookies: cookies, cellular: cellular))
                 }
                 task.taskDescription = current.token
                 guard self.update(id, { $0.state = .downloading }) else { task.cancel(); return }
@@ -214,8 +233,8 @@ final class OfflineDownloads: NSObject, AVAssetDownloadDelegate, URLSessionDownl
             }
         }
     }
-    private func request(_ url: URL, origin: URL, cookies: [HTTPCookie]) -> URLRequest {
-        var request = URLRequest(url: url); request.timeoutInterval = 30; request.allowsCellularAccess = allowsCellular
+    private func request(_ url: URL, origin: URL, cookies: [HTTPCookie], cellular: Bool) -> URLRequest {
+        var request = URLRequest(url: url); request.timeoutInterval = 30; request.allowsCellularAccess = cellular
         if sameOrigin(url, origin) {
             let matching = cookies.filter { cookie in
                 let domain = cookie.domain.trimmingCharacters(in: CharacterSet(charactersIn: "."))
@@ -225,17 +244,17 @@ final class OfflineDownloads: NSObject, AVAssetDownloadDelegate, URLSessionDownl
         }
         return request
     }
-    private func prepare(url: URL, origin: URL, cookies: [HTTPCookie]) async throws -> (URL, String) {
-        let config = URLSessionConfiguration.ephemeral; config.httpCookieStorage = nil; config.httpShouldSetCookies = false; config.allowsCellularAccess = allowsCellular
+    private func prepare(url: URL, origin: URL, cookies: [HTTPCookie], cellular: Bool) async throws -> (URL, String) {
+        let config = URLSessionConfiguration.ephemeral; config.httpCookieStorage = nil; config.httpShouldSetCookies = false; config.allowsCellularAccess = cellular
         let session = URLSession(configuration: config, delegate: DownloadRedirects(), delegateQueue: nil)
         defer { session.invalidateAndCancel() }
         var media = url
         if sameOrigin(media, origin), media.path == "/api/site-playback" {
-            let (data, response) = try await session.data(for: request(media, origin: origin, cookies: cookies))
+            let (data, response) = try await session.data(for: request(media, origin: origin, cookies: cookies, cellular: cellular))
             guard (response as? HTTPURLResponse)?.statusCode == 200, let object = try JSONSerialization.jsonObject(with: data) as? [String: Any], let raw = object["url"] as? String, let resolved = URL(string: raw), ["http", "https"].contains(resolved.scheme), resolved.host != nil, resolved.user == nil, resolved.password == nil else { throw DownloadError.message("无法取得缓存地址，请返回影片重新选择来源") }
             media = resolved
         }
-        let (stream, response) = try await session.bytes(for: request(media, origin: origin, cookies: cookies))
+        let (stream, response) = try await session.bytes(for: request(media, origin: origin, cookies: cookies, cellular: cellular))
         guard let response = response as? HTTPURLResponse, (200...299).contains(response.statusCode) else { throw DownloadError.message("片源拒绝缓存，请更换来源") }
         var prefix = Data()
         for try await byte in stream { prefix.append(byte); if prefix.count >= 256 { break } }
@@ -265,12 +284,10 @@ final class OfflineDownloads: NSObject, AVAssetDownloadDelegate, URLSessionDownl
         else if transient { message = "网络连接中断，可重试" }
         else { message = "缓存失败，请重试或更换来源" }
         // Invalidate first so cancellation/verification callbacks cannot change the new attempt.
-        if let file = library?.fileURL(for: video), tasks[id] != nil { retiredLocations[video.token] = file }
         let retries = (video.retries ?? 0) + 1
         guard update(id, { $0.attempt = UUID().uuidString; $0.state = retry ? .queued : .failed; $0.error = message; $0.detail = "\(e.domain) (\(e.code)): \(e.localizedDescription)"; $0.retries = retries; $0.retryAfter = retry ? Date().addingTimeInterval(pow(2, Double(retries))) : nil; $0.note = retry ? "网络中断，稍后自动重试" : nil; $0.localPath = nil; $0.progress = 0 }) else { return }
         preparations.removeValue(forKey: id)?.cancel()
-        tasks.removeValue(forKey: id)?.cancel()
-        if let file = library?.fileURL(for: video) { clean(file) }
+        retireTransfer(video)
         schedule()
     }
     func record(_ id: String, event: [String: Any]) {
@@ -309,7 +326,11 @@ final class OfflineDownloads: NSObject, AVAssetDownloadDelegate, URLSessionDownl
         } catch { fail(video.id, error) }
     }
     func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
-        if let token = task.taskDescription, let file = retiredLocations.removeValue(forKey: token) { clean(file) }
+        defer { schedule() }
+        if let token = task.taskDescription {
+            retiringTasks.removeValue(forKey: token)
+            if let file = retiredLocations.removeValue(forKey: token) { clean(file) }
+        }
         guard let video = current(task), video.state != .completed, video.state != .failed else { return }
         tasks[video.id] = nil
         if let error { fail(video.id, error); return }

@@ -5,7 +5,12 @@ final class OfflineDownloadsController: UITableViewController {
     private var groups: [(title: String, videos: [OfflineVideo])] = []
     private let summary = UILabel(), footer = UILabel()
     private let filter = UISegmentedControl(items: ["缓存中", "已缓存"])
-    private let policy = UIButton(type: .system), all = UIButton(type: .system)
+    private let concurrentTasks = UISegmentedControl(items: ["1", "2", "3"])
+    private let cellularSwitch = UISwitch()
+    private let all = UIButton(type: .system)
+    private var settingsRows: [UIStackView] = []
+    private let settings = UIStackView(), settingsDivider = UIView()
+    private var dividerHeight: NSLayoutConstraint!, dividerWidth: NSLayoutConstraint!, equalRowWidths: NSLayoutConstraint!
     private let header = UIStackView()
     private var selectedIDs = Set<String>()
     private var managementItem: UIBarButtonItem!
@@ -25,10 +30,28 @@ final class OfflineDownloadsController: UITableViewController {
         tableView.register(OfflineTaskCell.self, forCellReuseIdentifier: "download")
         summary.numberOfLines = 0; summary.font = .preferredFont(forTextStyle: .footnote); summary.textColor = .secondaryLabel
         summary.adjustsFontForContentSizeCategory = true
-        policy.contentHorizontalAlignment = .leading; policy.showsMenuAsPrimaryAction = true
-        policy.titleLabel?.font = .preferredFont(forTextStyle: .footnote); policy.titleLabel?.numberOfLines = 0
-        policy.heightAnchor.constraint(greaterThanOrEqualToConstant: 44).isActive = true
-        policy.accessibilityIdentifier = "offline.policy"
+        concurrentTasks.accessibilityIdentifier = "offline.concurrency"
+        concurrentTasks.accessibilityLabel = "同时缓存任务数"
+        concurrentTasks.widthAnchor.constraint(equalToConstant: 144).isActive = true
+        concurrentTasks.heightAnchor.constraint(equalToConstant: 44).isActive = true
+        concurrentTasks.addTarget(self, action: #selector(changeConcurrency), for: .valueChanged)
+        cellularSwitch.accessibilityIdentifier = "offline.cellular"
+        cellularSwitch.accessibilityLabel = "允许蜂窝网络"
+        cellularSwitch.addTarget(self, action: #selector(changeNetworkPolicy), for: .valueChanged)
+        let concurrencyRow = settingRow(title: "同时缓存", detail: "最多同时下载的任务数", control: concurrentTasks)
+        let networkRow = settingRow(title: "允许蜂窝网络", detail: "关闭后仅使用 Wi-Fi", control: cellularSwitch)
+        settingsRows = [concurrencyRow, networkRow]
+        settingsDivider.backgroundColor = .separator
+        dividerHeight = settingsDivider.heightAnchor.constraint(equalToConstant: 0.5)
+        dividerWidth = settingsDivider.widthAnchor.constraint(equalToConstant: 0.5)
+        equalRowWidths = concurrencyRow.widthAnchor.constraint(equalTo: networkRow.widthAnchor)
+        dividerHeight.isActive = true
+        [concurrencyRow, settingsDivider, networkRow].forEach(settings.addArrangedSubview)
+        settings.axis = .vertical; settings.spacing = 12
+        settings.isLayoutMarginsRelativeArrangement = true
+        settings.layoutMargins = UIEdgeInsets(top: 14, left: 16, bottom: 14, right: 16)
+        settings.backgroundColor = .secondarySystemGroupedBackground; settings.layer.cornerRadius = 14
+        settings.accessibilityIdentifier = "offline.settings"
         filter.selectedSegmentIndex = 0; filter.addTarget(self, action: #selector(changeFilter), for: .valueChanged)
         filter.accessibilityIdentifier = "offline.filter"
         all.addTarget(self, action: #selector(toggleAll), for: .touchUpInside)
@@ -36,9 +59,9 @@ final class OfflineDownloadsController: UITableViewController {
         all.accessibilityIdentifier = "offline.all"
         header.axis = .vertical; header.spacing = 8; header.isLayoutMarginsRelativeArrangement = true
         header.layoutMargins = UIEdgeInsets(top: 12, left: 20, bottom: 4, right: 20)
-        [summary, policy, filter, all].forEach(header.addArrangedSubview)
+        [summary, settings, filter, all].forEach(header.addArrangedSubview)
         tableView.tableHeaderView = header
-        footer.text = "缓存完成后可离线观看。强制退出 App 会中断任务。\n仅 Wi-Fi 模式下，网络切换后会等待 Wi-Fi。"
+        footer.text = "网络允许后任务会自动继续，手动暂停的任务保持暂停。\n使用蜂窝网络可能产生流量费用。强制退出 App 会中断任务。"
         footer.font = .preferredFont(forTextStyle: .footnote); footer.textColor = .secondaryLabel; footer.numberOfLines = 0
         footer.textAlignment = .center; tableView.tableFooterView = footer
         NotificationCenter.default.addObserver(self, selector: #selector(refresh), name: OfflineDownloads.changed, object: downloads)
@@ -46,7 +69,12 @@ final class OfflineDownloadsController: UITableViewController {
     }
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
+        let accessibility = traitCollection.preferredContentSizeCategory.isAccessibilityCategory
+        for row in settingsRows { row.axis = accessibility ? .vertical : .horizontal; row.alignment = accessibility ? .leading : .center }
         let width = tableView.bounds.width
+        let wide = width >= 700 && !accessibility
+        settings.axis = wide ? .horizontal : .vertical
+        dividerHeight.isActive = !wide; dividerWidth.isActive = wide; equalRowWidths.isActive = wide
         let height = header.systemLayoutSizeFitting(CGSize(width: width, height: 0), withHorizontalFittingPriority: .required, verticalFittingPriority: .fittingSizeLevel).height
         if header.frame.width != width || abs(header.frame.height - height) > 1 { header.frame = CGRect(x: 0, y: 0, width: width, height: height); tableView.tableHeaderView = header }
         let footerHeight = footer.sizeThatFits(CGSize(width: max(1, width - 40), height: .greatestFiniteMagnitude)).height + 36
@@ -62,10 +90,9 @@ final class OfflineDownloadsController: UITableViewController {
         summary.text = downloads.storageError ?? "已缓存 \(size)\(free)\n\(running) 个缓存中 · \(queued) 个等待\(failed > 0 ? " · \(failed) 个失败" : "")"
         filter.setTitle("缓存中 \(videos.filter { $0.state != .completed }.count)", forSegmentAt: 0)
         filter.setTitle("已缓存 \(videos.filter { $0.state == .completed }.count)", forSegmentAt: 1)
-        policy.setTitle("\(downloads.allowsCellular ? "允许蜂窝网络" : "仅 Wi-Fi 缓存") · 同时缓存 \(downloads.concurrency) 个  ⌄", for: .normal)
-        policy.menu = UIMenu(children: [UIMenu(title: "同时缓存", options: .displayInline, children: (1...3).map { count in
-            UIAction(title: "\(count) 个任务", state: downloads.concurrency == count ? .on : .off) { [weak self] _ in self?.downloads.setConcurrency(count); self?.refresh() }
-        }), UIAction(title: downloads.allowsCellular ? "改为仅 Wi-Fi" : "允许蜂窝网络") { [weak self] _ in self?.changeNetworkPolicy() }])
+        concurrentTasks.selectedSegmentIndex = downloads.concurrency - 1
+        concurrentTasks.accessibilityValue = "\(downloads.concurrency) 个任务"
+        cellularSwitch.setOn(downloads.allowsCellular, animated: false)
         all.setTitle(videos.contains(where: \.isScheduled) ? "全部暂停" : "全部继续", for: .normal)
         all.isHidden = filter.selectedSegmentIndex == 1 || isEditing
         all.isEnabled = videos.contains { $0.isScheduled || $0.state == .paused }
@@ -90,18 +117,26 @@ final class OfflineDownloadsController: UITableViewController {
     }
     private func sizeText(_ bytes: Int64) -> String {
         let formatter = ByteCountFormatter(); formatter.countStyle = .file; formatter.allowsNonnumericFormatting = false
-        return formatter.string(fromByteCount: bytes)
+        return bytes == 0 ? "0 KB" : formatter.string(fromByteCount: bytes)
     }
     @objc private func changeFilter() { selectedIDs.removeAll(); refresh() }
     @objc private func close() { dismiss(animated: true) }
     @objc private func toggleAll() { downloads.videos.contains(where: \.isScheduled) ? downloads.pauseAll() : downloads.resumeAll() }
-    private func changeNetworkPolicy() {
-        let allow = !downloads.allowsCellular
-        let prompt = UIAlertController(title: allow ? "允许使用蜂窝流量缓存？" : "改为仅 Wi-Fi 缓存？", message: "更改网络策略后，未完成的任务可能需要重新缓存。" + (allow ? "视频可能消耗较多流量。" : ""), preferredStyle: .alert)
-        prompt.addAction(UIAlertAction(title: "取消", style: .cancel))
-        prompt.addAction(UIAlertAction(title: "确定", style: .default) { [weak self] _ in self?.downloads.setAllowsCellular(allow); self?.refresh() })
-        present(prompt, animated: true)
+    private func settingRow(title: String, detail: String, control: UIView) -> UIStackView {
+        let label = UILabel(), note = UILabel()
+        label.text = title; label.font = .preferredFont(forTextStyle: .subheadline)
+        note.text = detail; note.font = .preferredFont(forTextStyle: .caption1); note.textColor = .secondaryLabel
+        for item in [label, note] { item.numberOfLines = 0; item.adjustsFontForContentSizeCategory = true }
+        let text = UIStackView(arrangedSubviews: [label, note]); text.axis = .vertical; text.spacing = 4
+        text.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        control.setContentCompressionResistancePriority(.required, for: .horizontal)
+        let row = UIStackView(arrangedSubviews: [text, control]); row.spacing = 12; row.alignment = .center
+        row.heightAnchor.constraint(greaterThanOrEqualToConstant: 44).isActive = true
+        text.widthAnchor.constraint(lessThanOrEqualTo: row.widthAnchor).isActive = true
+        return row
     }
+    @objc private func changeConcurrency() { downloads.setConcurrency(concurrentTasks.selectedSegmentIndex + 1) }
+    @objc private func changeNetworkPolicy() { downloads.setAllowsCellular(cellularSwitch.isOn) }
     override func numberOfSections(in tableView: UITableView) -> Int { groups.count }
     override func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int { groups[section].videos.count }
     override func tableView(_ tableView: UITableView, titleForHeaderInSection section: Int) -> String? { groups[section].title }
