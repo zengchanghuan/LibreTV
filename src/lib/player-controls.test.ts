@@ -3,6 +3,7 @@ import type Artplayer from 'artplayer';
 import { bindPlaybackControls } from './player-controls';
 
 class TestElement extends EventTarget {
+  dataset: Record<string, string> = {};
   parent: TestElement | null = null;
   isControl = false;
   focusVisible = false;
@@ -12,11 +13,12 @@ class TestElement extends EventTarget {
 }
 
 const cleanups: Array<() => void> = [];
-function player() {
-  const win = new EventTarget();
+function player({ finePointer = true, holdProgress = false } = {}) {
+  const win = Object.assign(new EventTarget(), { matchMedia: () => ({ matches: finePointer }) });
   let hit: TestElement | null = null;
   const doc = Object.assign(new EventTarget(), {
     defaultView: win, activeElement: null as TestElement | null, elementFromPoint: () => hit,
+    fullscreenElement: null as TestElement | null, webkitFullscreenElement: null as TestElement | null,
   });
   let panel: TestElement | null = null;
   const root = Object.assign(new TestElement(), { ownerDocument: doc, querySelector: () => panel });
@@ -33,8 +35,9 @@ function player() {
   const emit = (event: string, value = false) => [...listeners.get(event) ?? []].forEach(fn => fn(value));
   const art = {
     template: { $player: root },
-    video: { paused: false, seeking: false, readyState: 4 },
-    fullscreen: false,
+    video: Object.assign(new TestElement(), { parent: root, paused: false, seeking: false, readyState: 4, webkitDisplayingFullscreen: false }),
+    get fullscreen() { return doc.fullscreenElement === root; },
+    set fullscreen(value: boolean) { doc.fullscreenElement = value ? root : null; },
     fullscreenWeb: false,
     setting: { show: false },
     controls: {
@@ -47,6 +50,8 @@ function player() {
     },
     off(event: string, fn: (visible: boolean) => void) { listeners.get(event)?.delete(fn); },
   };
+  // Progress seeking registers before the visibility binding in PlayerShell.
+  if (holdProgress) art.on('control', visible => { if (!visible) art.controls.show = true; });
   const dispose = bindPlaybackControls(art as unknown as Artplayer);
   cleanups.push(dispose);
   const pointer = (type: string, target = root as TestElement, pointerType = 'mouse', pointerId = 1) => {
@@ -87,7 +92,7 @@ describe('playback control visibility', () => {
   });
 
   it.each(['fullscreen', 'fullscreenWeb'] as const)('hides after 3 seconds of inactivity in %s', mode => {
-    const { art, pointer } = player();
+    const { art, pointer, root } = player();
     art[mode] = true;
     pointer('pointerenter');
     vi.advanceTimersByTime(2500);
@@ -96,8 +101,103 @@ describe('playback control visibility', () => {
     expect(art.controls.show).toBe(true);
     vi.advanceTimersByTime(1);
     expect(art.controls.show).toBe(false);
+    expect(root.dataset.hometvControls).toBe('hidden');
     pointer('pointerenter');
     expect(art.controls.show).toBe(true);
+    expect(root.dataset.hometvControls).toBe('visible');
+  });
+
+  it.each(['fullscreenElement', 'webkitFullscreenElement'] as const)('uses %s even when ArtPlayer misses the mode change', async property => {
+    const { art, root, doc, pointer } = player();
+    Object.defineProperty(art, 'fullscreen', { value: false });
+    pointer('pointerenter');
+    doc[property] = root;
+    doc.dispatchEvent(new Event(property === 'fullscreenElement' ? 'fullscreenchange' : 'webkitfullscreenchange'));
+    await Promise.resolve();
+    expect(root.dataset.hometvFullscreen).toBe('true');
+    vi.advanceTimersByTime(3000);
+    expect(root.dataset.hometvControls).toBe('hidden');
+    pointer('pointermove');
+    expect(root.dataset.hometvControls).toBe('visible');
+
+    doc[property] = null;
+    doc.dispatchEvent(new Event(property === 'fullscreenElement' ? 'fullscreenchange' : 'webkitfullscreenchange'));
+    await Promise.resolve();
+    expect(root.dataset.hometvFullscreen).toBe('false');
+    vi.advanceTimersByTime(4000);
+    expect(root.dataset.hometvControls).toBe('visible'); // Cursor is still inside the inline player.
+    pointer('pointerleave');
+    expect(root.dataset.hometvControls).toBe('mini');
+  });
+
+  it('ignores stale ArtPlayer fullscreen state and fullscreen on another player', async () => {
+    const { art, doc, root, pointer } = player();
+    Object.defineProperty(art, 'fullscreen', { value: true });
+    doc.fullscreenElement = new TestElement();
+    doc.dispatchEvent(new Event('fullscreenchange'));
+    await Promise.resolve();
+    expect(root.dataset.hometvControls).toBe('mini');
+    pointer('pointerenter');
+    vi.advanceTimersByTime(4000);
+    expect(root.dataset.hometvControls).toBe('visible');
+    expect(root.dataset.hometvFullscreen).toBe('false');
+  });
+
+  it('handles Safari video presentation and returning to inline playback', async () => {
+    const { art, root } = player();
+    art.video.webkitDisplayingFullscreen = true;
+    art.video.dispatchEvent(new Event('webkitbeginfullscreen'));
+    await Promise.resolve();
+    vi.advanceTimersByTime(3000);
+    expect(root.dataset.hometvControls).toBe('hidden');
+    art.video.webkitDisplayingFullscreen = false;
+    art.video.dispatchEvent(new Event('webkitendfullscreen'));
+    await Promise.resolve();
+    expect(root.dataset.hometvControls).toBe('visible');
+    vi.advanceTimersByTime(3000);
+    expect(root.dataset.hometvControls).toBe('mini');
+  });
+
+  it('recognizes fullscreen on the video descendant', async () => {
+    const { art, root, doc } = player();
+    doc.fullscreenElement = art.video;
+    doc.dispatchEvent(new Event('fullscreenchange'));
+    await Promise.resolve();
+    vi.advanceTimersByTime(3000);
+    expect(root.dataset.hometvControls).toBe('hidden');
+  });
+
+  it('recovers mouse-only entry and movement after fullscreen, without pointer events', () => {
+    const { art, root } = player();
+    art.fullscreen = true;
+    const mouse = (type: string) => root.dispatchEvent(Object.assign(new Event(type), { clientX: 100, clientY: 100 }));
+    mouse('mouseenter');
+    expect(root.dataset.hometvControls).toBe('visible');
+    vi.advanceTimersByTime(3000);
+    expect(root.dataset.hometvControls).toBe('hidden');
+    mouse('mousemove');
+    expect(root.dataset.hometvControls).toBe('visible');
+    art.fullscreen = false;
+    mouse('mouseleave');
+    expect(root.dataset.hometvControls).toBe('mini');
+  });
+
+  it('ignores compatibility mouse events on a touch device', () => {
+    const { art, root, pointer } = player({ finePointer: false });
+    pointer('pointerenter', undefined, 'touch');
+    root.dispatchEvent(Object.assign(new Event('mouseenter'), { clientX: 100, clientY: 100 }));
+    root.dispatchEvent(Object.assign(new Event('mousemove'), { clientX: 100, clientY: 100 }));
+    art.controls.show = true;
+    vi.advanceTimersByTime(3000);
+    expect(root.dataset.hometvControls).toBe('mini');
+  });
+
+  it('renders the final state when a preceding progress listener cancels a hide', () => {
+    const { art, root } = player({ holdProgress: true });
+    art.fullscreen = true;
+    art.controls.show = false;
+    expect(art.controls.show).toBe(true);
+    expect(root.dataset.hometvControls).toBe('visible');
   });
 
   it('keeps fullscreen controls visible under the pointer, then starts a fresh idle period', () => {
@@ -163,6 +263,24 @@ describe('playback control visibility', () => {
     await Promise.resolve();
     vi.advanceTimersByTime(3000);
     expect(art.controls.show).toBe(false);
+  });
+
+  it('rechecks a stationary cursor on resize without flashing already hidden controls', async () => {
+    const { art, root, button, pointer, win, setHit } = player();
+    art.fullscreen = true;
+    pointer('pointermove', button);
+    win.dispatchEvent(new Event('resize'));
+    await Promise.resolve();
+    vi.advanceTimersByTime(4000);
+    expect(root.dataset.hometvControls).toBe('visible');
+    setHit(root); // The button moved away as Safari completed its fullscreen layout.
+    win.dispatchEvent(new Event('resize'));
+    await Promise.resolve();
+    vi.advanceTimersByTime(3000);
+    expect(root.dataset.hometvControls).toBe('hidden');
+    win.dispatchEvent(new Event('resize'));
+    await Promise.resolve();
+    expect(root.dataset.hometvControls).toBe('hidden');
   });
 
   it('pins built-in settings and custom panels until closed', () => {
@@ -260,8 +378,8 @@ describe('playback control visibility', () => {
     expect(art.controls.show).toBe(false);
   });
 
-  it('removes timers, DOM listeners and observers when destroyed', () => {
-    const { art, emit, dispose, pointer, disconnect } = player();
+  it('removes timers, DOM listeners and observers when destroyed', async () => {
+    const { art, emit, dispose, pointer, disconnect, root, doc, win } = player();
     art.fullscreenWeb = true;
     pointer('pointerenter');
     expect(vi.getTimerCount()).toBe(1);
@@ -272,6 +390,14 @@ describe('playback control visibility', () => {
     pointer('pointerenter');
     art.video.paused = true;
     emit('video:seeking');
+    doc.dispatchEvent(new Event('fullscreenchange'));
+    doc.dispatchEvent(new Event('webkitfullscreenchange'));
+    art.video.dispatchEvent(new Event('webkitbeginfullscreen'));
+    root.dispatchEvent(new Event('mousemove'));
+    win.dispatchEvent(new Event('resize'));
+    await Promise.resolve();
     expect(art.controls.show).toBe(false);
+    expect(root.dataset).toEqual({});
+    expect(vi.getTimerCount()).toBe(0);
   });
 });

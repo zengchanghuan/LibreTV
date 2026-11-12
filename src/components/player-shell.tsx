@@ -399,7 +399,7 @@ export function PlayerShell({
       aspectRatio: true,
       fullscreen: !isAppleMobile(),
       fullscreenWeb: true,
-      miniProgressBar: true,
+      miniProgressBar: false, // bindPlaybackControls owns the inline bar and fullscreen chrome together.
       mutex: true,
       backdrop: true,
       playsInline: true,

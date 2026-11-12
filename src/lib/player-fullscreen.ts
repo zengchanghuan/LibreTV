@@ -9,6 +9,17 @@ type FullscreenElement = HTMLElement & {
   webkitRequestFullscreen?: () => void | Promise<void>;
 };
 
+/** Use the browser's fullscreen element, not ArtPlayer's event-driven classes.
+ * Safari can also present the video itself through its native fullscreen API. */
+export function isPlaybackFullscreen(art: Artplayer): boolean {
+  const root = art.template.$player;
+  const doc = root.ownerDocument as FullscreenDocument;
+  const element = doc.fullscreenElement ?? doc.webkitFullscreenElement;
+  const video = art.video as HTMLVideoElement & { webkitDisplayingFullscreen?: boolean };
+  return !!art.fullscreenWeb || !!video.webkitDisplayingFullscreen
+    || !!element && (element === root || root.contains(element));
+}
+
 /** ArtPlayer 5 waits for loadedmetadata to define fullscreen, even though
  * element fullscreen does not need a playable video. Bridge that startup gap;
  * its normal accessor and listeners take over as soon as metadata arrives. */
