@@ -77,6 +77,12 @@ header.sticky { top: env(safe-area-inset-top, 0px); }
 .pwa-update { display: flex; gap: 12px; align-items: center; justify-content: center; padding: 10px 16px; border-bottom: 1px solid rgb(var(--c-line)); background: rgb(var(--c-surface)); font-size: 13px; }
 .pwa-update > span { min-width: 0; }
 .playback-tools-button { background: transparent; color: white; border: 0; padding: 4px; font-size: 12px; white-space: nowrap; cursor: pointer; }
+.art-video-player .hometv-episode-button { display: flex; align-items: center; justify-content: center; width: 40px; height: 100%; padding: 0; border: 0; border-radius: 6px; color: white; background: transparent; cursor: pointer; }
+.art-video-player .hometv-episode-button svg { fill: currentColor; }
+.hometv-episode-button:hover:not(:disabled) { background: rgb(255 255 255 / .12); }
+.hometv-episode-button:disabled { opacity: .3; cursor: default; }
+.hometv-episode-button:focus-visible { outline: 2px solid #93c5fd; outline-offset: -4px; }
+.art-video-player.hometv-has-episodes .art-control-playAndPause { min-width: 40px; }
 .playback-resolution { position: absolute; z-index: 20; top: max(10px, env(safe-area-inset-top)); right: max(10px, env(safe-area-inset-right)); padding: 3px 7px; border: 1px solid #ffffff30; border-radius: 5px; background: #0009; color: #fff; font-size: 11px; font-weight: 600; line-height: 1.4; font-variant-numeric: tabular-nums; pointer-events: none; }
 .playback-resolution-badge { position: static; margin-left: 3px; font-size: .7em; font-weight: 600; line-height: 0; vertical-align: super; color: #d1d5db; }
 .playback-speed-menu-button { border: 0; padding: 0; background: transparent; color: inherit; font: inherit; cursor: pointer; }
@@ -103,6 +109,7 @@ header.sticky { top: env(safe-area-inset-top, 0px); }
 /* Use the player's width, including in fullscreen and beside the episode list. */
 @container (max-width: 640px) {
   .art-video-player.art-has-playback-tools .art-controls .art-control { min-width: 36px; }
+  .art-video-player .hometv-episode-button { width: 36px; }
   .art-has-playback-tools .art-control-time { padding: 0 4px !important; font-size: 11px; }
   .art-video-player.art-has-playback-tools .art-controls .art-control-volume,
   .art-video-player.art-has-playback-tools .art-controls .art-control-screenshot,
@@ -187,6 +194,24 @@ header.sticky { top: env(safe-area-inset-top, 0px); }
 .art-video-player.hometv-vod-player[data-hometv-controls="hidden"] .art-bottom .art-controls,
 .art-video-player.hometv-vod-player[data-hometv-controls="hidden"] .art-bottom .art-progress {
   pointer-events: none;
+}
+/* Make room for the three transport buttons on narrow screens. The clock stays
+   visible above the seek bar, in the same position as the existing mini clock. */
+@container (max-width: 420px) {
+  .hometv-has-episodes .art-control-time { display: none !important; }
+  .hometv-vod-player.hometv-has-episodes[data-hometv-controls="visible"] .hometv-progress-time {
+    display: block;
+    position: absolute;
+    left: max(12px, env(safe-area-inset-left));
+    bottom: calc(var(--art-control-height) + env(safe-area-inset-bottom) + 32px);
+    z-index: 61;
+    padding: 2px 6px;
+    border-radius: 4px;
+    color: white;
+    background: rgb(0 0 0 / .7);
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+  }
 }
 @media (pointer: coarse) {
   input, select, textarea { font-size: 16px !important; }

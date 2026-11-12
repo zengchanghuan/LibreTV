@@ -28,6 +28,7 @@ import { bindAutoMini } from '@/lib/player-auto-mini';
 import { bindProgressSeek } from '@/lib/player-progress';
 import { bindPlaybackControls } from '@/lib/player-controls';
 import { bindEarlyFullscreen } from '@/lib/player-fullscreen';
+import { bindEpisodeControls } from '@/lib/player-episode-controls';
 
 /**
  * 播放器外壳：ArtPlayer + hls.js（旧版 player.js 的 React 化）。
@@ -88,6 +89,9 @@ export function PlayerShell({
   const nativeRetryPosition = useRef(0);
   const sleeping = useRef(false);
   const [player, setPlayer] = useState<Artplayer | null>(null);
+  const episodeControls = useRef<ReturnType<typeof bindEpisodeControls> | null>(null);
+  const episodeState = useRef({ count: episodeCount, index: episodeIndex, onEpisode });
+  episodeState.current = { count: episodeCount, index: episodeIndex, onEpisode };
   const mediaTypeRef = useRef<'m3u8' | 'mp4'>('m3u8');
   const resolveControllerRef = useRef<AbortController | null>(null);
   const [error, setError] = useState('');
@@ -107,6 +111,11 @@ export function PlayerShell({
     getRestorePosition, onTimeUpdate, onEnded, onPause, onRequestSwitchSource,
   };
   const activePropsRef = useRef(propsRef.current);
+  // Keep preferences/callbacks current within an episode, while retaining the old
+  // episode's progress callback until setupMedia saves it during a source change.
+  if (activePropsRef.current.url === url && activePropsRef.current.episodeKey === episodeKey) {
+    activePropsRef.current = propsRef.current;
+  }
   const changingMedia = useRef(false);
 
   // 跨集共享、每次换集重置的播放链路状态
@@ -416,6 +425,8 @@ export function PlayerShell({
     });
     art.template.$player.classList.add('hometv-vod-player');
     artRef.current = art;
+    const transport = bindEpisodeControls(art, episodeState.current);
+    episodeControls.current = transport;
     const unbindPlaybackVisibility = bindPlaybackVisibility(art.video);
     const unbindEarlyFullscreen = bindEarlyFullscreen(art);
     const unbindAutoMini = bindAutoMini(art);
@@ -621,6 +632,8 @@ export function PlayerShell({
     document.addEventListener('visibilitychange', saveOnHide);
 
     return () => {
+      transport.destroy();
+      episodeControls.current = null;
       unbindProgressSeek();
       unbindPlaybackControls();
       unbindAutoMini();
@@ -653,6 +666,10 @@ export function PlayerShell({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    episodeControls.current?.update({ count: episodeCount, index: episodeIndex, onEpisode });
+  }, [episodeCount, episodeIndex, onEpisode]);
 
   // —— 换集：仅切换 HLS 源，不重建播放器（保留网页全屏等状态） ——
   const firstUrlRef = useRef(true);

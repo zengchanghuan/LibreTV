@@ -38,6 +38,7 @@ import { RelatedVideos } from '@/components/related-videos';
 import { VideoInfoPanel, videoInfoSummary } from '@/components/video-info-panel';
 import { PwaUpdateBanner } from '@/components/pwa';
 import { WatchTelemetry } from '@/components/watch-telemetry';
+import { PlayerAutoNext } from '@/lib/player-auto-next';
 
 /**
  * 播放页（唯一入口，替代旧版 watch.html → player.html 跳转链）。
@@ -119,16 +120,29 @@ function WatchContent() {
     return indexParam;
   }, [episodes, indexParam]);
 
+  const autoNext = useMemo(() => new PlayerAutoNext(), []);
+  // A queued transition belongs only to this episode and autoplay preference.
+  useEffect(() => {
+    autoNext.cancel();
+    return () => autoNext.cancel();
+  }, [autoNext, currentIndex, currentUrl, episodes.length, store.autoplayNext]);
+
   const goEpisode = useCallback(
     (index: number) => {
+      autoNext.cancel();
       const sp = new URLSearchParams(searchParams.toString());
       sp.set('index', String(index));
       sp.set('url', episodes[index] || directUrl);
       sp.delete('position');
       router.replace(`/watch?${sp.toString()}`, { scroll: false });
     },
-    [router, searchParams, episodes, directUrl]
+    [autoNext, router, searchParams, episodes, directUrl]
   );
+
+  const setAutoplayNext = (enabled: boolean) => {
+    autoNext.cancel();
+    store.updateSettings({ autoplayNext: enabled });
+  };
 
   // 进度恢复优先级：URL position 参数 > IndexedDB 记录
   const getRestorePosition = useCallback(async () => {
@@ -173,18 +187,10 @@ function WatchContent() {
     [sourceKey, vodId, currentIndex, currentUrl]
   );
 
-  // 自动连播的 800ms 延迟切集要在卸载时取消，避免离开页面后跳转
-  const autoNextTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => () => {
-    if (autoNextTimer.current) clearTimeout(autoNextTimer.current);
-  }, []);
-
   const handleEnded = useCallback(() => {
     if (vodId) clearProgress(sourceKey, vodId, currentIndex).catch(() => {});
-    if (store.autoplayNext && currentIndex < episodes.length - 1) {
-      autoNextTimer.current = setTimeout(() => goEpisode(currentIndex + 1), 800);
-    }
-  }, [store.autoplayNext, currentIndex, episodes.length, goEpisode, sourceKey, vodId]);
+    autoNext.schedule({ enabled: store.autoplayNext, index: currentIndex, count: episodes.length, onEpisode: goEpisode });
+  }, [autoNext, store.autoplayNext, currentIndex, episodes.length, goEpisode, sourceKey, vodId]);
 
   // Alt+←/→ 集数切换快捷键
   useEffect(() => {
@@ -285,7 +291,7 @@ function WatchContent() {
                   vodId={vodId || currentUrl} episodes={episodes.length ? episodes : [currentUrl]} index={episodes.length ? currentIndex : 0}
                   ready={!vodId || detailQuery.isSuccess || detailQuery.isError}
                   autoplayNext={multipleEpisodes && store.autoplayNext} getPosition={getRestorePosition} onEpisode={goEpisode}
-                  onSleep={() => store.updateSettings({ autoplayNext: false })} onProgress={position => { latestPosition.current = position; }}
+                  onSleep={() => setAutoplayNext(false)} onProgress={position => { latestPosition.current = position; }}
                 /> : <PlayerShell
                   url={currentUrl}
                   qualitySource={source.url}
@@ -295,10 +301,7 @@ function WatchContent() {
                   episodeCount={episodes.length}
                   episodeIndex={currentIndex}
                   onEpisode={goEpisode}
-                  onSleep={() => {
-                    if (autoNextTimer.current) clearTimeout(autoNextTimer.current);
-                    store.updateSettings({ autoplayNext: false });
-                  }}
+                  onSleep={() => setAutoplayNext(false)}
                   episodeKey={`${sourceKey}:${vodId}:${currentIndex}`}
                   nextUrl={currentIndex + 1 < episodes.length ? episodes[currentIndex + 1] : undefined}
                   nextEpisodeKey={currentIndex + 1 < episodes.length ? `${sourceKey}:${vodId}:${currentIndex + 1}` : undefined}
@@ -328,26 +331,28 @@ function WatchContent() {
 
             {/* Single-film pages have no episode navigation or auto-next setting. */}
             {multipleEpisodes && <div className="flex flex-wrap items-center gap-2 mt-3">
-              <button
-                className="btn-ghost btn-sm !min-h-11"
-                disabled={currentIndex <= 0}
-                onClick={() => goEpisode(currentIndex - 1)}
-              >
-                上一集
-              </button>
-              <button
-                className="btn-ghost btn-sm !min-h-11"
-                disabled={episodes.length === 0 || currentIndex >= episodes.length - 1}
-                onClick={() => goEpisode(currentIndex + 1)}
-              >
-                下一集
-              </button>
+              {nativeApp ? <>
+                <button
+                  className="btn-ghost btn-sm !min-h-11"
+                  disabled={currentIndex <= 0}
+                  onClick={() => goEpisode(currentIndex - 1)}
+                >
+                  上一集
+                </button>
+                <button
+                  className="btn-ghost btn-sm !min-h-11"
+                  disabled={episodes.length === 0 || currentIndex >= episodes.length - 1}
+                  onClick={() => goEpisode(currentIndex + 1)}
+                >
+                  下一集
+                </button>
+              </> : <span className="text-xs text-muted">第 {currentIndex + 1} / {episodes.length} 集</span>}
               <label className="flex min-h-11 items-center gap-2 text-xs text-muted ml-auto cursor-pointer">
                 <input
                   type="checkbox"
                   className="h-4 w-4 accent-[rgb(var(--c-accent))]"
                   checked={store.autoplayNext}
-                  onChange={(e) => store.updateSettings({ autoplayNext: e.target.checked })}
+                  onChange={(e) => setAutoplayNext(e.target.checked)}
                 />
                 自动连播
               </label>
