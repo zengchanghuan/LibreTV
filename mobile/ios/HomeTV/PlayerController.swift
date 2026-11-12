@@ -29,6 +29,7 @@ final class PlayerController: UIViewController, AVPictureInPictureControllerDele
     private var playbackRateObservation: NSKeyValueObservation?
     private var restoringPiP = false, startingPiP = false
     private var minimized = false, appInBackground = false
+    private var deviceLocked = !UIApplication.shared.isProtectedDataAvailable
     private var audioInterrupted = false, resumeAfterInterruption = false
     private var remoteTargets: [(MPRemoteCommand, Any)] = []
     var hasStopped: Bool { closed }
@@ -72,7 +73,7 @@ final class PlayerController: UIViewController, AVPictureInPictureControllerDele
                     "appState": "\(UIApplication.shared.applicationState.rawValue)"]
         }
         engine.canPlay = { [weak self] in
-            guard let self, !self.closed, !self.sleeping else { return false }
+            guard let self, !self.closed, !self.sleeping, !self.deviceLocked else { return false }
             return !self.checkDeadline() && !self.userPaused && !self.audioInterrupted && !self.playbackPosition.isRestoring && !(self.appInBackground && BackgroundPlaybackMode.current == .pause)
         }
         player = ZFPlayerController(playerManager: engine, containerView: surface)
@@ -131,6 +132,8 @@ final class PlayerController: UIViewController, AVPictureInPictureControllerDele
             self.updateTime()
         }
         player.playerLoadStateChanged = { [weak self] _, _ in self?.engine.trace("buffer-state") }
+        NotificationCenter.default.addObserver(self, selector: #selector(deviceWillLock), name: UIApplication.protectedDataWillBecomeUnavailableNotification, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(deviceDidUnlock), name: UIApplication.protectedDataDidBecomeAvailableNotification, object: nil)
         NotificationCenter.default.addObserver(self, selector: #selector(background), name: UIApplication.didEnterBackgroundNotification, object: nil)
         NotificationCenter.default.addObserver(self, selector: #selector(foreground), name: UIApplication.didBecomeActiveNotification, object: nil)
         NotificationCenter.default.addObserver(self, selector: #selector(audioInterruption), name: AVAudioSession.interruptionNotification, object: nil)
@@ -164,7 +167,7 @@ final class PlayerController: UIViewController, AVPictureInPictureControllerDele
         RunLoop.main.add(timer, forMode: .common)
     }
     private func load(_ index: Int) {
-        guard !closed, session.episodes.indices.contains(index), !checkDeadline() else { return }
+        guard !closed, !deviceLocked, session.episodes.indices.contains(index), !checkDeadline() else { return }
         resolveTask?.cancel(); generation = UUID(); let token = generation
         player.playerReadyToPlay = nil; player.playerPlayFailed = nil; player.playerDidToEnd = nil
         pipObservation = nil; pip?.delegate = nil; pip?.stopPictureInPicture(); pip = nil
@@ -320,7 +323,7 @@ final class PlayerController: UIViewController, AVPictureInPictureControllerDele
         playbackRateObservation = engine.player?.observe(\.rate, options: [.new]) { [weak self] observed, _ in
             DispatchQueue.main.async {
                 guard let self, !self.closed, self.engine.player === observed, self.isPictureInPictureActive, !self.restoringPiP else { return }
-                if self.sleeping || self.audioInterrupted { if observed.rate != 0 { self.engine.pause() }; return }
+                if self.sleeping || self.audioInterrupted || self.deviceLocked { if observed.rate != 0 { self.engine.pause() }; return }
                 guard !self.playbackPosition.hasPendingSeek, !self.playbackPosition.isRestoring else { return }
                 if observed.rate == 0 && self.engine.isPlaying { self.pausePlayback() }
                 else if observed.rate > 0 && !self.engine.isPlaying { self.userPaused = false; self.engine.rate = self.session.rate; self.engine.play(); self.updateTime() }
@@ -411,11 +414,22 @@ final class PlayerController: UIViewController, AVPictureInPictureControllerDele
     @objc private func previous() { selectEpisode(session.index - 1) }
     @objc private func nextEpisode() { selectEpisode(session.index + 1) }
     private func selectEpisode(_ index: Int) { guard session.episodes.indices.contains(index), index != session.index else { return }; emit("pause"); load(index) }
+    @objc private func deviceWillLock() {
+        guard !closed else { return }
+        deviceLocked = true
+        engine.trace("device-lock")
+        pausePlayback()
+    }
+    @objc private func deviceDidUnlock() {
+        deviceLocked = false
+        // Keep userPaused set; unlocking must never resume the video by itself.
+    }
     @objc private func background() {
         engine.trace("app-enter-background"); appInBackground = true
         UIApplication.shared.isIdleTimerDisabled = false
         guard !closed, !sleeping, !checkDeadline() else { return }
-        if BackgroundPlaybackMode.current == .pause { pausePlayback() }
+        if deviceLocked || !UIApplication.shared.isProtectedDataAvailable { deviceWillLock() }
+        else if BackgroundPlaybackMode.current == .pause { pausePlayback() }
         else {
             emit("progress")
             // Automatic PiP is initiated by AVKit during the user's app switch.
@@ -472,7 +486,7 @@ final class PlayerController: UIViewController, AVPictureInPictureControllerDele
         userPaused = true; resumeAfterInterruption = false; engine.pause(); emit("pause"); updateTime()
     }
     private func playFromControl() {
-        guard !closed, !audioInterrupted, !checkDeadline() else { return }
+        guard !closed, !deviceLocked, !audioInterrupted, !checkDeadline() else { return }
         if appInBackground && BackgroundPlaybackMode.current == .pause { return }
         try? AVAudioSession.sharedInstance().setActive(true)
         if sleeping || playbackInterrupted { retry(); return }

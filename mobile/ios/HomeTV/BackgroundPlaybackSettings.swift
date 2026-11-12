@@ -8,8 +8,8 @@ enum BackgroundPlaybackMode: String, CaseIterable {
     }
     var title: String {
         switch self {
-        case .pictureInPicture: return "小窗优先，锁屏继续听"
-        case .audio: return "后台仅播放声音"
+        case .pictureInPicture: return "小窗优先，锁屏暂停"
+        case .audio: return "后台仅播放声音，锁屏暂停"
         case .pause: return "离开 App 后暂停"
         }
     }

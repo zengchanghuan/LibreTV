@@ -94,6 +94,21 @@ import WebKit
             let rebound = await until { controller.session.id == "reopened" && controller.presentingViewController != nil }
             await wait(0.7)
             check("reopening-same-film-reuses-live-session", rebound && coordinator.current === controller && engine.player === avPlayer && controller.session.rate == 0.5)
+            // Public lock notifications exercise the same pause path for every background mode.
+            for mode in BackgroundPlaybackMode.allCases {
+                BackgroundPlaybackMode.current = mode
+                NotificationCenter.default.post(name: UIApplication.protectedDataWillBecomeUnavailableNotification, object: nil)
+                check("lock-pauses-\(mode.rawValue)", !engine.isPlaying && engine.player?.rate == 0)
+                engine.play(); controller.togglePlayback()
+                check("lock-blocks-recovery-and-controls-\(mode.rawValue)", !engine.isPlaying && engine.player?.rate == 0)
+                NotificationCenter.default.post(name: UIApplication.protectedDataDidBecomeAvailableNotification, object: nil)
+                NotificationCenter.default.post(name: UIApplication.didBecomeActiveNotification, object: nil)
+                check("unlock-stays-paused-\(mode.rawValue)", !engine.isPlaying && engine.player?.rate == 0)
+                controller.togglePlayback()
+                let resumed = await until { engine.isPlaying }
+                check("unlock-allows-explicit-play-\(mode.rawValue)", resumed)
+            }
+            BackgroundPlaybackMode.current = .pictureInPicture
             // Incoming calls can resume only if the OS permits it and no user pause intervened.
             NotificationCenter.default.post(name: AVAudioSession.interruptionNotification, object: nil, userInfo: [AVAudioSessionInterruptionTypeKey: AVAudioSession.InterruptionType.began.rawValue])
             check("interruption-pauses", !engine.isPlaying)
