@@ -7,6 +7,7 @@ import tempfile
 root = Path(__file__).resolve().parents[2]
 ios = root / "mobile/ios"
 sources = [
+    "HomeTV/PlaybackPreferences.swift", "Tests/PlaybackPreferencesTests.swift",
     "HomeTV/PlaybackLogStore.swift", "Tests/PlaybackLogStoreTests.swift",
     "HomeTV/SleepTimer.swift", "HomeTV/PlaybackPosition.swift",
     "HomeTV/OfflineLibrary.swift", "Tests/OfflineLibraryTests.swift",

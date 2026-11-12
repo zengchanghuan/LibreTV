@@ -168,7 +168,7 @@ final class BrowserController: UIViewController, WKScriptMessageHandler, WKNavig
         navigationURL = url
         setWatchLayout(NativeNavigation.usesWatchLayout(for: url, origin: origin))
         updateChrome()
-        pageNavigationItem.rightBarButtonItem = url.path == "/settings" ? UIBarButtonItem(title: "后台播放", style: .plain, target: self, action: #selector(showPlaybackSettings)) : nil
+        pageNavigationItem.rightBarButtonItem = url.path == "/settings" ? UIBarButtonItem(title: "播放器配置", style: .plain, target: self, action: #selector(showPlaybackSettings)) : nil
         if let page = NativeNavigation.page(for: url, origin: origin) {
             pageNavigationItem.title = page.title
             if page.parent != nil {

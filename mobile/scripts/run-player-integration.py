@@ -127,7 +127,7 @@ try:
                 if args.background_only:
                     progress_file = container / 'player-progress.json'
                     progress_data = json.loads(progress_file.read_text()) if progress_file.exists() else {}
-                    for mode in ['audio', 'pictureInPicture']:
+                    for mode in ['audio', 'pictureInPicture', 'freshAudio']:
                         if mode not in background_roundtrips and progress_data.get('ready-for-real-background-' + mode):
                             background_roundtrips.add(mode)
                             sim('launch', device, 'com.apple.Preferences')

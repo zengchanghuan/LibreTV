@@ -64,6 +64,17 @@ import WebKit
             let pickerNav = UINavigationController(rootViewController: picker); host.present(pickerNav, animated: false)
             _ = await until { picker.viewIfLoaded?.window != nil }
             let select = try testRequire(descendants(picker.view).compactMap { $0 as? UIButton }.first { $0.accessibilityIdentifier == "offline.select-all" }, "Select all")
+            let pickerCollection = try testRequire(descendants(picker.view).compactMap { $0 as? UICollectionView }.first, "Picker grid")
+            let start = try testRequire(descendants(picker.view).compactMap { $0 as? UIButton }.first { $0.accessibilityIdentifier == "offline.add-selected" }, "Start cache")
+            check("cache-start-disabled-with-no-selection", !start.isEnabled)
+            picker.collectionView(pickerCollection, didSelectItemAt: IndexPath(item: 1, section: 0))
+            check("cache-checkbox-selects-one", start.isEnabled && start.title(for: .normal)?.contains("1 集") == true)
+            picker.collectionView(pickerCollection, didSelectItemAt: IndexPath(item: 1, section: 0))
+            check("cache-checkbox-deselects", !start.isEnabled)
+            select.sendActions(for: .touchUpInside)
+            check("cache-select-all-count", start.title(for: .normal)?.contains("6 集") == true)
+            select.sendActions(for: .touchUpInside)
+            check("cache-select-all-toggles-off", !start.isEnabled)
             select.sendActions(for: .touchUpInside)
             await wait(); try snapshot("cache-picker-portrait")
             // Wait for the preceding sheet/portrait transition before requesting
@@ -77,7 +88,12 @@ import WebKit
             }
             let pickerRotated = await until { scene.interfaceOrientation == .landscapeRight && window.bounds.width > window.bounds.height }
             check("picker-rotates-to-landscape", pickerRotated)
-            await wait(0.5); try snapshot("cache-picker-landscape")
+            await wait(0.5)
+            check("landscape-cache-grid-has-room-for-complete-row", pickerCollection.bounds.height >= 90)
+            check("cache-navigation-matches-dark-panel", pickerNav.overrideUserInterfaceStyle == .dark)
+            let startFrame = start.convert(start.bounds, to: picker.view)
+            check("landscape-cache-action-visible-and-tappable", !start.isHidden && start.alpha > 0 && picker.view.safeAreaLayoutGuide.layoutFrame.contains(startFrame) && startFrame.height >= 44 && picker.view.hitTest(CGPoint(x: startFrame.midX, y: startFrame.midY), with: nil)?.isDescendant(of: start) == true)
+            try snapshot("cache-picker-landscape")
             let add = try testRequire(descendants(picker.view).compactMap { $0 as? UIButton }.first { $0.accessibilityIdentifier == "offline.add-selected" }, "Batch add")
             add.sendActions(for: .touchUpInside)
             _ = await until { host.presentedViewController == nil }; downloads.pauseAll()

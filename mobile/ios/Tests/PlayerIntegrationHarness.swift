@@ -8,6 +8,11 @@ private final class PessimisticBufferItem: AVPlayerItem {
     override var isPlaybackLikelyToKeepUp: Bool { false }
 }
 
+// Seekability metadata can be unavailable while the real playback clock runs.
+private final class EmptySeekableRangesItem: AVPlayerItem {
+    override var seekableTimeRanges: [NSValue] { [] }
+}
+
 /// Copied into an isolated app by run-player-integration.py, never into HomeTV.
 @MainActor func runPlayerIntegration(window: UIWindow, scene: UIWindowScene) {
     Task { @MainActor in
@@ -41,16 +46,36 @@ private final class PessimisticBufferItem: AVPlayerItem {
             }
         }
         func descendants(_ view: UIView) -> [UIView] { [view] + view.subviews.flatMap(descendants) }
-        func until(_ condition: () -> Bool) async -> Bool {
+        func isVisible(_ view: UIView) -> Bool {
+            var ancestor: UIView? = view
+            while let current = ancestor {
+                if current.isHidden || current.alpha < 0.01 { return false }
+                ancestor = current.superview
+            }
+            return view.window != nil
+        }
+        @MainActor func until(_ condition: @MainActor () -> Bool) async -> Bool {
             for _ in 0..<100 { if condition() { return true }; await wait(0.1) }; return false
         }
-        func snapshot(_ name: String) {
+        @MainActor func playerControlsReady(_ controller: PlayerController) -> Bool {
+            guard let view = controller.viewIfLoaded else { return false }
+            return descendants(view).compactMap { $0 as? HomeTVPlayerControls }.contains { $0.player?.currentPlayerManager != nil }
+        }
+        @MainActor func snapshot(_ name: String) {
             let image = UIGraphicsImageRenderer(bounds: window.bounds).image { _ in window.drawHierarchy(in: window.bounds, afterScreenUpdates: true) }
             do {
                 let directory = try testRequire(output, "Missing screenshot directory")
                 let data = try testRequire(image.pngData(), "Could not encode screenshot: \(name)")
                 try data.write(to: directory.appendingPathComponent(name + ".png"), options: .atomic)
             } catch { check("snapshot-" + name, false); failureDetails.append(String(describing: error)) }
+        }
+        @MainActor func snapshotPlayer(_ name: String, controls: HomeTVPlayerControls) async {
+            controls.revealControls()
+            await wait()
+            // A hide animation may already have been queued by the time the
+            // first reveal is requested. Let that finish, then reveal once more.
+            if !controls.controlViewAppeared { controls.revealControls(); await wait() }
+            snapshot(name)
         }
         func session(_ path: String = "/video.mp4", autoplay: Bool = true) -> PlaybackSession {
             PlaybackSession(id: UUID().uuidString, title: "HomeTV 播放器验收 · 横竖屏与续播", sourceKey: "fixture", vodId: "player", sourceUrl: nil, profileId: nil, index: 0,
@@ -59,8 +84,8 @@ private final class PessimisticBufferItem: AVPlayerItem {
         }
         do {
             // Legacy scenarios deliberately exercise the opt-in pause policy.
-            BackgroundPlaybackMode.current = .pause
-            defer { BackgroundPlaybackMode.current = .pictureInPicture }
+            PlaybackPreferences().smallWindow = false; PlaybackPreferences().backgroundAudio = false
+            defer { PlaybackPreferences().smallWindow = true; PlaybackPreferences().backgroundAudio = false }
             let origin = try testRequire(URL(string: "http://127.0.0.1:18085"), "Invalid fixture URL")
             // These switches exist only in the isolated test app. Each exercises the
             // same checked lookup used below, without changing production app data.
@@ -330,6 +355,42 @@ private final class PessimisticBufferItem: AVPlayerItem {
                 _ = await until { !hc.portraitControlView.slider.isdragging }; await wait(0.2)
                 check("seek-hls-paused-reposition-stays-paused", !hm.isPlaying && hm.player?.rate == 0 && abs(hm.currentTime - hm.totalTime * 0.2) <= 0.3)
                 hlsSeeking.closePlayer(); await wait(0.5)
+                // Progress must follow AVPlayer's clock, independently of whether
+                // the media advertises seekable ranges. Keep decoding and timing
+                // real, replacing only that metadata (as in the buffer test below).
+                let clockManager = HomeTVPlayerManager()
+                clockManager.shouldAutoPlay = false
+                let clockSurface = UIView(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
+                let clockPlayer = ZFPlayerController(playerManager: clockManager, containerView: clockSurface)
+                let clockControls = HomeTVPlayerControls()
+                clockPlayer.controlView = clockControls
+                clockPlayer.allowOrentitaionRotation = false
+                clockManager.assetURL = origin.appendingPathComponent("video.mp4")
+                _ = await until { clockManager.playerItem?.status == .readyToPlay }
+                let clockAVPlayer = try testRequire(clockManager.player, "Progress clock player")
+                let clockItem = EmptySeekableRangesItem(url: origin.appendingPathComponent("video.mp4"))
+                clockAVPlayer.replaceCurrentItem(with: clockItem)
+                clockManager.setValue(clockItem, forKey: "playerItem")
+                _ = await until { clockItem.status == .readyToPlay && !clockItem.loadedTimeRanges.isEmpty }
+                func timelineFollowsClock() -> Bool {
+                    let current = clockManager.currentTime
+                    let duration = clockManager.totalTime
+                    let label = clockControls.portraitControlView.currentTimeLabel.text ?? ""
+                    let displayed = label.split(separator: ":").compactMap { Double($0) }.reduce(0) { $0 * 60 + $1 }
+                    return duration > 0 && abs(Double(clockControls.portraitControlView.slider.value) - current / duration) < 0.025
+                        && abs(displayed - current) < 1.2
+                }
+                clockManager.play()
+                _ = await until { clockManager.currentTime > 1.5 }
+                check("progress-empty-seekable-ranges-clock-advances", clockItem.seekableTimeRanges.isEmpty && clockManager.currentTime > 1.5 && clockAVPlayer.rate > 0)
+                check("progress-empty-seekable-ranges-timeline-follows-clock", timelineFollowsClock())
+                clockManager.pause(); await wait(0.3)
+                let pausedClock = clockManager.currentTime
+                check("progress-empty-seekable-ranges-pause-stays-synced", clockAVPlayer.rate == 0 && timelineFollowsClock())
+                clockManager.play()
+                _ = await until { clockManager.currentTime > pausedClock + 1.5 }
+                check("progress-empty-seekable-ranges-resume-keeps-up", clockManager.currentTime > pausedClock + 1.5 && timelineFollowsClock())
+                clockManager.stop()
                 let pessimistic = HomeTVPlayerManager()
                 pessimistic.assetURL = origin.appendingPathComponent("video.mp4")
                 _ = await until { pessimistic.playerItem?.status == .readyToPlay }
@@ -354,7 +415,7 @@ private final class PessimisticBufferItem: AVPlayerItem {
                 premature.onProgress = { prematureEvents.append($0) }
                 premature.modalPresentationStyle = .fullScreen
                 host.present(premature, animated: false)
-                _ = await until { premature.isViewLoaded && host.presentedViewController === premature }
+                _ = await until { host.presentedViewController === premature && playerControlsReady(premature) }
                 let pc = try testRequire(descendants(premature.view).compactMap { $0 as? HomeTVPlayerControls }.first, "Premature EOF controls")
                 let pm = try testRequire(pc.player?.currentPlayerManager as? ZFAVPlayerManager, "Premature EOF manager")
                 _ = await until { pm.isPlaying && pm.currentTime >= 4 }
@@ -399,7 +460,7 @@ private final class PessimisticBufferItem: AVPlayerItem {
                 prematureAuto.onProgress = { autoEndEvents.append($0) }
                 prematureAuto.modalPresentationStyle = .fullScreen
                 host.present(prematureAuto, animated: false)
-                _ = await until { prematureAuto.isViewLoaded && host.presentedViewController === prematureAuto }
+                _ = await until { host.presentedViewController === prematureAuto && playerControlsReady(prematureAuto) }
                 let ac = try testRequire(descendants(prematureAuto.view).compactMap { $0 as? HomeTVPlayerControls }.first, "Premature autoplay controls")
                 let am = try testRequire(ac.player?.currentPlayerManager as? ZFAVPlayerManager, "Premature autoplay manager")
                 _ = await until { am.isPlaying && am.currentTime >= 4 }
@@ -412,7 +473,7 @@ private final class PessimisticBufferItem: AVPlayerItem {
                 await wait(0.2)
                 check("obsolete-item-eof-cannot-interrupt-replacement", am.playerItem === recoveredItem && am.isPlaying)
                 NotificationCenter.default.post(name: AVPlayerItem.didPlayToEndTimeNotification, object: recoveredItem)
-                ac.nextButton.sendActions(for: .touchUpInside)
+                prematureAuto.selectEpisode(prematureAuto.session.index + 1)
                 _ = await until { prematureAuto.session.index == 1 && am.isPlaying }
                 check("queued-eof-cannot-override-manual-next-episode", prematureAuto.session.index == 1 && am.isPlaying && am.currentTime >= 2 && am.currentTime < 5)
                 prematureAuto.closePlayer(); await wait(0.5)
@@ -464,6 +525,7 @@ private final class PessimisticBufferItem: AVPlayerItem {
                     list.play(id)
                     _ = await until { list.presentedViewController is PlayerController }
                     let offline = try testRequire(list.presentedViewController as? PlayerController, "Offline player")
+                    _ = await until { playerControlsReady(offline) }
                     let oc = try testRequire(Mirror(reflecting: offline).children.first { $0.label == "controls" }?.value as? HomeTVPlayerControls, "Offline controls")
                     let oe = try testRequire(oc.player?.currentPlayerManager as? ZFAVPlayerManager, "Offline engine")
                     let playing = await until { oe.isPlaying && oe.currentTime > 0.5 }
@@ -513,13 +575,46 @@ private final class PessimisticBufferItem: AVPlayerItem {
             check("restores-playback-rate", abs((engine.player?.rate ?? -1) - 1.5) < 0.01)
             controls.playButton.sendActions(for: .touchUpInside)
             check("pause-button", !engine.isPlaying && events.last?["reason"] as? String == "pause")
+            let initialSurface = try testRequire(descendants(controller.view).first { $0.accessibilityIdentifier == "player.video-surface" }, "Portrait video surface")
+            let initialFrame = initialSurface.frame
+            let initialItem = engine.playerItem
+            controls.moreButton.sendActions(for: .touchUpInside); await wait()
+            let more = try testRequire(controller.children.compactMap { $0 as? PlayerOptionsController }.first, "More panel")
+            let settings = descendants(more.view)
+            let autoNextSwitch = try testRequire(settings.first { $0.accessibilityIdentifier == "player.options.autoplay-next" } as? UISwitch, "Auto next setting")
+            let smallWindowSwitch = try testRequire(settings.first { $0.accessibilityIdentifier == "player.options.small-window" } as? UISwitch, "Small window setting")
+            let backgroundSwitch = try testRequire(settings.first { $0.accessibilityIdentifier == "player.options.background-audio" } as? UISwitch, "Background audio setting")
+            check("settings-includes-timer-cache-and-playback-switches", settings.compactMap { $0 as? UIButton }.filter { $0.accessibilityIdentifier == "player.sleep" || $0.accessibilityIdentifier == "player.download" }.count == 2 && autoNextSwitch.isOn && !smallWindowSwitch.isOn && !backgroundSwitch.isOn && controls.isHidden)
+            autoNextSwitch.setOn(false, animated: false); autoNextSwitch.sendActions(for: .valueChanged)
+            check("settings-auto-next-updates-session", !controller.session.autoplayNext && !engine.isPlaying)
+            autoNextSwitch.setOn(true, animated: false); autoNextSwitch.sendActions(for: .valueChanged)
+            smallWindowSwitch.setOn(true, animated: false); smallWindowSwitch.sendActions(for: .valueChanged)
+            backgroundSwitch.setOn(true, animated: false); backgroundSwitch.sendActions(for: .valueChanged)
+            check("settings-background-preferences-are-independent", PlaybackPreferences().smallWindow && PlaybackPreferences().backgroundAudio && !engine.isPlaying)
+            smallWindowSwitch.setOn(false, animated: false); smallWindowSwitch.sendActions(for: .valueChanged)
+            check("settings-small-window-off-keeps-audio-choice", !PlaybackPreferences().smallWindow && PlaybackPreferences().backgroundAudio)
+            backgroundSwitch.setOn(false, animated: false); backgroundSwitch.sendActions(for: .valueChanged)
+            let timer30 = try testRequire(settings.first { $0.accessibilityIdentifier == "player.options.timer.30" } as? UIButton, "30 minute preset")
+            let timerOff = try testRequire(settings.first { $0.accessibilityIdentifier == "player.options.timer.0" } as? UIButton, "Timer off preset")
+            timer30.sendActions(for: .touchUpInside)
+            check("settings-timer-preset-keeps-panel-and-pause", timer.minutesRemaining == 30 && controller.children.contains { $0 === more } && !engine.isPlaying)
+            timerOff.sendActions(for: .touchUpInside)
+            check("settings-timer-off-does-not-resume", timer.minutesRemaining == nil && !engine.isPlaying)
+            let settingsOutside = CGPoint(x: more.panel.frame.minX / 2, y: initialSurface.frame.midY)
+            check("settings-left-video-tap-isolated", more.panel.frame.minX >= 44 && more.view.hitTest(settingsOutside, with: nil) === more.backdrop && initialSurface.frame == initialFrame && engine.playerItem === initialItem)
+            snapshot("player-more-portrait")
+            let settingsPausedTime = engine.currentTime
+            more.backdrop.sendActions(for: .touchUpInside)
+            _ = await until { !controller.children.contains { $0 is PlayerOptionsController } }
+            check("settings-left-dismiss-preserves-pause-and-position", !controls.isHidden && !engine.isPlaying && abs(engine.currentTime - settingsPausedTime) < 0.1 && initialSurface.frame == initialFrame && engine.playerItem === initialItem)
+            controls.moreButton.sendActions(for: .touchUpInside); await wait()
             controls.downloadButton.sendActions(for: .touchUpInside)
             _ = await until { controller.presentedViewController is UINavigationController }
             let downloadNavigation = try testRequire(controller.presentedViewController as? UINavigationController, "Cache selection navigation")
             let downloadPicker = try testRequire(downloadNavigation.topViewController as? OfflineEpisodePickerController, "Cache episode picker")
             _ = await until { downloadPicker.viewIfLoaded?.window != nil }; await wait()
             let currentCacheEpisode = descendants(downloadPicker.view).first { $0.accessibilityIdentifier == "offline.episode.0" }
-            check("player-download-button-selects-current-episode", controls.downloadButton.isEnabled && downloadPicker.title == "缓存选集" && currentCacheEpisode?.accessibilityTraits.contains(.selected) == true)
+            check("cache-requires-explicit-selection", controls.downloadButton.isEnabled && downloadPicker.title == "缓存影片" && currentCacheEpisode?.accessibilityTraits.contains(.selected) == false)
             downloadNavigation.dismiss(animated: false); _ = await until { controller.presentedViewController == nil }
             // Put a long title on-screen and exercise the actual rotation button.
             scene.requestGeometryUpdate(.iOS(interfaceOrientations: .portrait)); await wait(1)
@@ -527,27 +622,56 @@ private final class PessimisticBufferItem: AVPlayerItem {
             await wait()
             func layoutIsSafe() -> Bool {
                 let safe = controller.view.safeAreaLayoutGuide.layoutFrame
-                let buttons = [controls.backButton, controls.downloadButton, controls.pipButton, controls.rotateButton, controls.previousButton, controls.playButton, controls.nextButton, controls.episodesButton, controls.speedButton, controls.sleepButton]
+                let buttons = [controls.backButton, controls.moreButton, controls.rotateButton, controls.playButton, controls.episodesButton, controls.speedButton, controls.nextButton, controls.pipButton, controls.lockButton].filter(isVisible)
+                let slider = controls.portraitControlView.slider.convert(controls.portraitControlView.slider.bounds, to: controller.view)
                 return buttons.allSatisfy { button in
                     let frame = button.convert(button.bounds, to: controller.view)
                     return frame.width >= 44 && frame.height >= 44 && safe.contains(frame)
-                } && controls.portraitControlView.slider.bounds.width > 100
+                } && slider.width >= 44 && safe.contains(slider)
             }
             check("portrait-safe-area-and-hit-targets", layoutIsSafe())
-            snapshot("player-zf-portrait")
-            controls.rotateButton.menu?.children.compactMap { $0 as? UIAction }.first { $0.title == "横竖屏" }.map { controls.rotateButton.sendAction($0) }; await wait(1.2)
+            let details = try testRequire(descendants(controller.view).first { $0.accessibilityIdentifier == "player.portrait-details" }, "Portrait information and episodes")
+            check("portrait-video-above-details-at-sixteen-nine", abs(initialSurface.frame.minY - controller.view.safeAreaInsets.top) < 1 && abs(initialSurface.bounds.height - initialSurface.bounds.width * 9 / 16) < 1 && details.frame.minY >= initialSurface.frame.maxY - 1 && !details.isHidden)
+            let portraitPlay = controls.playButton.convert(controls.playButton.bounds, to: controller.view)
+            let portraitRotate = controls.rotateButton.convert(controls.rotateButton.bounds, to: controller.view)
+            check("portrait-bottom-row-ends-with-rotation-icon", portraitPlay.maxX < portraitRotate.minX && abs(portraitPlay.midY - portraitRotate.midY) < 1 && portraitRotate.maxY <= initialSurface.frame.maxY + 1 && controls.rotateButton.accessibilityLabel == "切换横屏")
+            await snapshotPlayer("player-zf-portrait", controls: controls)
+            controls.rotateButton.sendActions(for: .touchUpInside); await wait(1.2)
             check("rotation-button", controller.view.bounds.width > controller.view.bounds.height)
             check("landscape-safe-area-and-hit-targets", layoutIsSafe())
-            let prev = controls.previousButton.convert(controls.previousButton.bounds, to: controller.view)
             let play = controls.playButton.convert(controls.playButton.bounds, to: controller.view)
             let next = controls.nextButton.convert(controls.nextButton.bounds, to: controller.view)
-            check("transport-controls-left-aligned", prev.maxX <= play.minX && play.maxX <= next.minX && next.maxX < controller.view.bounds.midX)
-            snapshot("player-zf-landscape")
+            let episodesAction = controls.episodesButton.convert(controls.episodesButton.bounds, to: controller.view)
+            let speedAction = controls.speedButton.convert(controls.speedButton.bounds, to: controller.view)
+            let landscapeSlider = controls.portraitControlView.slider.convert(controls.portraitControlView.slider.bounds, to: controller.view)
+            check("landscape-video-fills-player", initialSurface.frame == controller.view.bounds && details.isHidden)
+            check("landscape-bottom-controls-follow-reference", play.maxX <= next.minX && next.maxX < episodesAction.minX && episodesAction.maxX <= speedAction.minX && abs(play.midY - speedAction.midY) < 1 && landscapeSlider.maxY <= play.maxY && play.minY > controller.view.bounds.midY)
+            await snapshotPlayer("player-zf-landscape", controls: controls)
             check("speed-and-sleep-menus", controls.speedButton.menu?.children.count == 8 && controls.sleepButton.menu?.children.count == 8)
+            controls.moreButton.sendActions(for: .touchUpInside); await wait(0.4)
+            let landscapeSettings = try testRequire(controller.children.compactMap { $0 as? PlayerOptionsController }.first, "Landscape settings drawer")
+            check("settings-landscape-right-overlay", landscapeSettings.panel.frame.maxX == controller.view.bounds.maxX && landscapeSettings.panel.frame.minX > controller.view.bounds.midX && landscapeSettings.panel.frame.height == controller.view.bounds.height && initialSurface.frame == controller.view.bounds && !engine.isPlaying)
+            snapshot("player-more-landscape")
+            landscapeSettings.backdrop.sendActions(for: .touchUpInside)
+            _ = await until { !controller.children.contains { $0 is PlayerOptionsController } }
+            let itemBeforeBack = engine.playerItem
+            let timeBeforeBack = engine.currentTime
+            controls.backButton.sendActions(for: .touchUpInside)
+            let returnedToPortrait = await until { scene.interfaceOrientation == .portrait && controller.view.bounds.height > controller.view.bounds.width }
+            await wait()
+            check("landscape-back-returns-to-portrait-with-same-session", returnedToPortrait && host.presentedViewController === controller && engine.playerItem === itemBeforeBack && !engine.isPlaying && abs(engine.currentTime - timeBeforeBack) < 0.1 && !details.isHidden)
+            controls.rotateButton.sendActions(for: .touchUpInside)
+            _ = await until { scene.interfaceOrientation.isLandscape && controller.view.bounds.width > controller.view.bounds.height }; await wait()
+            let lockedTime = engine.currentTime
+            controls.lockButton.sendActions(for: .touchUpInside)
+            controls.gestureDoubleTapped(controlsPlayer.gestureControl)
+            check("lock-hides-actions-and-blocks-playback-gesture", controls.controlsLocked && !isVisible(controls.playButton) && isVisible(controls.lockButton) && !engine.isPlaying && abs(engine.currentTime - lockedTime) < 0.1)
+            controls.lockButton.sendActions(for: .touchUpInside)
+            check("unlock-restores-controls-without-resuming", !controls.controlsLocked && isVisible(controls.playButton) && !engine.isPlaying)
             await wait(4.5)
-            check("controls-auto-hide", !controls.controlViewAppeared && controls.playButton.superview?.alpha == 0)
+            check("controls-auto-hide", !controls.controlViewAppeared && !isVisible(controls.playButton))
             controls.gestureSingleTapped(controlsPlayer.gestureControl); await wait()
-            check("tap-shows-controls", controls.controlViewAppeared && controls.playButton.superview?.alpha == 1)
+            check("tap-shows-controls", controls.controlViewAppeared && isVisible(controls.playButton))
             controls.gestureDoubleTapped(controlsPlayer.gestureControl)
             check("double-tap-resumes", engine.isPlaying)
             controls.gestureDoubleTapped(controlsPlayer.gestureControl)
@@ -557,7 +681,7 @@ private final class PessimisticBufferItem: AVPlayerItem {
             controls.nextButton.sendActions(for: .touchUpInside)
             let second = await until { controller.session.index == 1 && engine.isPlaying && engine.currentTime >= 2 }
             check("next-episode-restores-own-position", second && engine.currentTime < 6 && abs((engine.player?.rate ?? -1) - 1.5) < 0.01)
-            controls.previousButton.sendActions(for: .touchUpInside)
+            controller.selectEpisode(controller.session.index - 1)
             let previous = await until { controller.session.index == 0 && engine.isPlaying && engine.currentTime >= 10 }
             check("previous-episode-preserves-progress", previous && engine.currentTime < 14)
             NotificationCenter.default.post(name: UIApplication.didEnterBackgroundNotification, object: nil)
@@ -640,7 +764,7 @@ private final class PessimisticBufferItem: AVPlayerItem {
             let itemBeforeRotation = re.playerItem
             let positionBeforeRotation = re.currentTime
             for _ in 0..<4 {
-                rc.rotateButton.menu?.children.compactMap { $0 as? UIAction }.first { $0.title == "横竖屏" }.map { rc.rotateButton.sendAction($0) }; await wait(0.7)
+                rc.rotateButton.sendActions(for: .touchUpInside); await wait(0.7)
             }
             check("rotation-keeps-item-and-progress", re.playerItem === itemBeforeRotation && re.currentTime >= positionBeforeRotation && re.isPlaying)
             let videoSurface = try testRequire(descendants(rotation.view).first { $0.accessibilityIdentifier == "player.video-surface" }, "Video surface")
@@ -648,20 +772,47 @@ private final class PessimisticBufferItem: AVPlayerItem {
                 let video = videoSurface.frame
                 let panel = picker.panel.frame
                 let renderer = re.view.convert(re.view.bounds, to: rotation.view)
-                check(name + "-video-unchanged", video == rotation.view.bounds && renderer == rotation.view.bounds && re.playerItem === itemBeforeRotation)
-                check(name + "-placement", landscape ? (panel.maxX == video.maxX && panel.width < video.width * 0.5 && panel.height == video.height) : (panel.maxY == video.maxY && panel.width == video.width && panel.height < video.height * 0.6))
+                let expected = landscape ? rotation.view.bounds : CGRect(x: 0, y: rotation.view.safeAreaInsets.top, width: rotation.view.bounds.width, height: rotation.view.bounds.width * 9 / 16)
+                // UIKit pixel-aligns the renderer inside the exact 16:9 surface.
+                // Permit only nearest-pixel rounding, not a shifted/resized video.
+                let rendererTolerance = 0.5 / window.screen.scale + 0.000_001
+                let rendererWithinHalfPixel = abs(renderer.minX - expected.minX) <= rendererTolerance
+                    && abs(renderer.minY - expected.minY) <= rendererTolerance
+                    && abs(renderer.width - expected.width) <= rendererTolerance
+                    && abs(renderer.height - expected.height) <= rendererTolerance
+                func coordinates(_ rect: CGRect) -> [String: Double] {
+                    ["x": Double(rect.origin.x), "y": Double(rect.origin.y), "width": Double(rect.width), "height": Double(rect.height)]
+                }
+                results[name + "-video-geometry"] = [
+                    "video": coordinates(video), "renderer": coordinates(renderer), "expected": coordinates(expected),
+                    "rendererBounds": coordinates(re.view.bounds), "screenScale": window.screen.scale,
+                    "videoMatchesExpected": video == expected, "rendererMatchesExpected": renderer == expected,
+                    "rendererTolerancePoints": Double(rendererTolerance), "rendererWithinHalfPixel": rendererWithinHalfPixel,
+                    "playerItemUnchanged": re.playerItem === itemBeforeRotation
+                ] as [String: Any]
+                check(name + "-video-unchanged", video == expected && rendererWithinHalfPixel && re.playerItem === itemBeforeRotation)
+                check(name + "-placement", abs(panel.maxX - rotation.view.bounds.maxX) < 1 && panel.minX >= 44 && abs(panel.height - rotation.view.bounds.height) < 1 && (landscape ? panel.width <= video.width * 0.5 : panel.width < video.width))
                 let safe = rotation.view.safeAreaLayoutGuide.layoutFrame
                 let close = picker.closeButton.convert(picker.closeButton.bounds, to: rotation.view)
                 let grid = picker.collection.convert(picker.collection.bounds, to: rotation.view)
                 check(name + "-safe-controls", safe.contains(close) && safe.contains(grid) && close.width >= 44 && close.height >= 44 && !close.intersects(grid))
-                let outside = landscape ? CGPoint(x: panel.minX / 2, y: video.midY) : CGPoint(x: video.midX, y: panel.minY / 2)
+                let outside = CGPoint(x: panel.minX / 2, y: video.midY)
                 check(name + "-outside-tap-isolated", picker.view.hitTest(outside, with: nil) === picker.backdrop && rc.isHidden)
             }
+            let frameBeforePane = videoSurface.frame
+            let settingsBeforeTime = re.currentTime
+            rc.moreButton.sendActions(for: .touchUpInside); await wait(0.4)
+            let playingSettings = try testRequire(rotation.children.compactMap { $0 as? PlayerOptionsController }.first, "Playing settings drawer")
+            playingSettings.backdrop.sendActions(for: .touchUpInside)
+            _ = await until { !rotation.children.contains { $0 is PlayerOptionsController } }
+            check("settings-left-dismiss-keeps-playing-and-surface", re.isPlaying && re.currentTime >= settingsBeforeTime && re.playerItem === itemBeforeRotation && videoSurface.frame == frameBeforePane && !rc.isHidden)
             let beforePaneTime = re.currentTime
             rc.episodesButton.sendActions(for: .touchUpInside); await wait(0.5)
-            check("episode-pane-keeps-playing", re.isPlaying && re.playerItem === itemBeforeRotation && re.currentTime > beforePaneTime && rotation.presentedViewController == nil && videoSurface.frame == rotation.view.bounds)
-            rc.episodesButton.sendActions(for: .touchUpInside); await wait(0.2)
-            check("episode-pane-toggle-restores-controls", rotation.children.isEmpty && !rc.isHidden && videoSurface.frame == rotation.view.bounds && re.isPlaying && re.playerItem === itemBeforeRotation)
+            check("episode-pane-keeps-playing", re.isPlaying && re.playerItem === itemBeforeRotation && re.currentTime > beforePaneTime && rotation.presentedViewController == nil && videoSurface.frame == frameBeforePane)
+            let playingPicker = try testRequire(rotation.children.compactMap { $0 as? EpisodePickerController }.first, "Playing episode drawer")
+            playingPicker.backdrop.sendActions(for: .touchUpInside)
+            _ = await until { !rotation.children.contains { $0 is EpisodePickerController } }
+            check("episode-left-dismiss-restores-controls-and-keeps-playing", rotation.children.isEmpty && !rc.isHidden && videoSurface.frame == frameBeforePane && re.isPlaying && re.playerItem === itemBeforeRotation)
             rc.playButton.sendActions(for: .touchUpInside) // Inspect drawers without natural auto-next.
             let originalEpisodes = rotation.session.episodes
             let originalEpisode = originalEpisodes[0]
@@ -675,7 +826,9 @@ private final class PessimisticBufferItem: AVPlayerItem {
                 let picker = try testRequire(rotation.children.first as? EpisodePickerController, "Episode drawer")
                 let currentCell = try testRequire(picker.collection.cellForItem(at: IndexPath(item: 0, section: 0)) as? EpisodeGridCell, "Current episode cell")
                 let prefix = dark ? "episode-drawer-dark" : "episode-drawer-light"
-                check(prefix + "-transparent-player-style", picker.view.backgroundColor == .clear && picker.collection.backgroundColor == .clear && picker.panel.backgroundColor == NativeTheme(dark: true).page.withAlphaComponent(0.82))
+                let panelAlpha = picker.panel.backgroundColor?.cgColor.alpha ?? 1
+                let backdropAlpha = picker.backdrop.backgroundColor?.cgColor.alpha ?? 1
+                check(prefix + "-transparent-player-style", picker.view.backgroundColor == .clear && picker.collection.backgroundColor == .clear && panelAlpha >= 0.60 && panelAlpha <= 0.80 && backdropAlpha <= 0.15 && picker.panel.alpha == 1)
                 check(prefix + "-current-and-long-title", currentCell.accessibilityTraits.contains(.selected) && currentCell.label.text == longEpisodeTitle && currentCell.label.numberOfLines == 0 && currentCell.frame.height > 76)
                 let second = try testRequire(picker.collection.layoutAttributesForItem(at: IndexPath(item: 1, section: 0)), "Second episode layout")
                 let third = try testRequire(picker.collection.layoutAttributesForItem(at: IndexPath(item: 2, section: 0)), "Third episode layout")
@@ -689,6 +842,8 @@ private final class PessimisticBufferItem: AVPlayerItem {
                     _ = await until { scene.interfaceOrientation == .landscapeRight }; await wait(0.5)
                     check("episode-pane-rotation-keeps-current", rotation.session.index == 0 && !re.isPlaying && picker.collection.cellForItem(at: IndexPath(item: 0, section: 0))?.accessibilityTraits.contains(.selected) == true)
                     checkEpisodeOverlay(prefix + "-landscape", picker, landscape: true)
+                    let numberedRow = (1...5).compactMap { picker.collection.layoutAttributesForItem(at: IndexPath(item: $0, section: 0))?.frame }
+                    check("landscape-episode-grid-has-five-columns", numberedRow.count == 5 && numberedRow.allSatisfy { abs($0.minY - numberedRow[0].minY) < 1 && $0.width >= 44 })
                     snapshot(prefix + "-landscape")
                     scene.requestGeometryUpdate(.iOS(interfaceOrientations: .landscapeLeft))
                     _ = await until { scene.interfaceOrientation == .landscapeLeft }; await wait(0.4)
@@ -698,27 +853,34 @@ private final class PessimisticBufferItem: AVPlayerItem {
                     _ = await until { scene.interfaceOrientation == .portrait }; await wait(0.3)
                 }
                 // Exercise both dismissal affordances; neither may play/pause or seek.
+                let pausedTime = re.currentTime
                 (dark ? picker.backdrop : picker.closeButton).sendActions(for: .touchUpInside)
-                let closed = await until { rotation.children.isEmpty && videoSurface.frame == rotation.view.bounds }
-                check(prefix + "-dismiss-preserves-pause", closed && !rc.isHidden && rotation.session.index == 0 && !re.isPlaying && re.playerItem === itemBeforeRotation)
+                let closed = await until { rotation.children.isEmpty && videoSurface.frame == frameBeforePane }
+                check(prefix + "-dismiss-preserves-pause", closed && !rc.isHidden && rotation.session.index == 0 && !re.isPlaying && abs(re.currentTime - pausedTime) < 0.1 && re.playerItem === itemBeforeRotation)
             }
             rotation.session.episodes = originalEpisodes
+            let currentEpisodeTime = re.currentTime
+            rc.episodesButton.sendActions(for: .touchUpInside); await wait(0.4)
+            let currentPicker = try testRequire(rotation.children.compactMap { $0 as? EpisodePickerController }.first, "Current episode drawer")
+            currentPicker.collectionView(currentPicker.collection, didSelectItemAt: IndexPath(item: rotation.session.index, section: 0))
+            _ = await until { !rotation.children.contains { $0 is EpisodePickerController } }
+            check("select-current-episode-keeps-pause-and-progress", !re.isPlaying && abs(re.currentTime - currentEpisodeTime) < 0.1 && re.playerItem === itemBeforeRotation && !rc.isHidden)
             rc.playButton.sendActions(for: .touchUpInside)
             rc.episodesButton.sendActions(for: .touchUpInside); await wait(0.4)
             if let picker = rotation.children.first as? EpisodePickerController {
                 picker.collectionView(picker.collection, didSelectItemAt: IndexPath(item: 1, section: 0))
-                _ = await until { rotation.session.index == 1 && re.isPlaying }
-                check("picker-selects-episode", rotation.session.index == 1 && re.currentTime >= 2 && re.currentTime < 6 && rotation.children.isEmpty && !rc.isHidden && videoSurface.frame == rotation.view.bounds)
+                _ = await until { rotation.session.index == 1 && re.isPlaying && rotation.children.isEmpty }
+                check("picker-selects-episode", rotation.session.index == 1 && re.currentTime >= 2 && re.currentTime < 6 && rotation.children.isEmpty && !rc.isHidden && videoSurface.frame == frameBeforePane)
             } else { check("picker-selects-episode", false) }
-            rc.previousButton.sendActions(for: .touchUpInside)
-            rc.nextButton.sendActions(for: .touchUpInside)
-            rc.previousButton.sendActions(for: .touchUpInside)
+            rotation.selectEpisode(rotation.session.index - 1)
+            rotation.selectEpisode(rotation.session.index + 1)
+            rotation.selectEpisode(rotation.session.index - 1)
             _ = await until { rotation.session.index == 0 && re.isPlaying }
             check("rapid-switch-keeps-last-choice", rotation.session.index == 0 && re.assetURL?.query == nil)
             rc.gestureBeganPan(rcPlayer.gestureControl, panDirection: .H, panLocation: .left)
             rc.gestureChangedPan(rcPlayer.gestureControl, panDirection: .H, panLocation: .left, withVelocity: CGPoint(x: 600, y: 0))
             rc.gestureEndedPan(rcPlayer.gestureControl, panDirection: .H, panLocation: .left)
-            rc.nextButton.sendActions(for: .touchUpInside)
+            rotation.selectEpisode(rotation.session.index + 1)
             _ = await until { rotation.session.index == 1 && re.isPlaying }
             await wait(0.5)
             results["drag-switch-clock"] = re.currentTime
@@ -748,8 +910,8 @@ private final class PessimisticBufferItem: AVPlayerItem {
             pan(false)
             await wait()
             check("old-slider-completion-preserves-new-pan", rc.portraitControlView.slider.isdragging && rc.bottomPgrogress.isdragging)
-            rc.nextButton.sendActions(for: .touchUpInside) // Last episode: no-op.
-            rc.previousButton.sendActions(for: .touchUpInside)
+            rotation.selectEpisode(rotation.session.index + 1) // Last episode: no-op.
+            rotation.selectEpisode(rotation.session.index - 1)
             _ = await until { rotation.session.index == 0 && re.isPlaying }
             check("switch-resets-active-pan", !rc.portraitControlView.slider.isdragging && !rc.bottomPgrogress.isdragging)
             rotation.closePlayer(); await wait(0.6)
@@ -794,7 +956,7 @@ private final class PessimisticBufferItem: AVPlayerItem {
             _ = await until { be.isPlaying }
             be.setValue(NSNumber(value: 8), forKey: "loadState")
             be.perform(NSSelectorFromString("bufferingSomeSecond"))
-            bc.nextButton.sendActions(for: .touchUpInside)
+            buffering.selectEpisode(buffering.session.index + 1)
             _ = await until { buffering.session.index == 1 && be.isPlaying }
             bc.playButton.sendActions(for: .touchUpInside)
             check("next-episode-paused-before-old-buffer-retry", !be.isPlaying)
@@ -841,7 +1003,7 @@ private final class PessimisticBufferItem: AVPlayerItem {
                 host.present(returning, animated: false); await wait()
                 let returningControls = try testRequire(descendants(returning.view).compactMap { $0 as? HomeTVPlayerControls }.first, "Missing controls: returning")
                 if scenario == "rotate-immediately-close" {
-                    returningControls.rotateButton.menu?.children.compactMap { $0 as? UIAction }.first { $0.title == "横竖屏" }.map { returningControls.rotateButton.sendAction($0) }
+                    returningControls.rotateButton.sendActions(for: .touchUpInside)
                 } else {
                     let target: UIInterfaceOrientation = landscapeHome ? .portrait : .landscapeLeft
                     scene.requestGeometryUpdate(.iOS(interfaceOrientations: landscapeHome ? .portrait : .landscapeLeft))
@@ -882,11 +1044,11 @@ private final class PessimisticBufferItem: AVPlayerItem {
                     jc.gestureChangedPan(jcPlayer.gestureControl, panDirection: .H, panLocation: .left, withVelocity: CGPoint(x: 1000, y: 0))
                     jc.gestureEndedPan(jcPlayer.gestureControl, panDirection: .H, panLocation: .left)
                 }
-                jc.nextButton.sendActions(for: .touchUpInside)
+                jumping.selectEpisode(jumping.session.index + 1)
                 let saved = jumpEvents.last { ($0["index"] as? Int) == 0 && ($0["reason"] as? String) == "pause" }?["position"] as? Double ?? -1
                 check(seekKind + "-immediate-switch-saves-target", abs(saved - target) < 0.1)
                 _ = await until { jumping.session.index == 1 && je.isPlaying }
-                jc.previousButton.sendActions(for: .touchUpInside)
+                jumping.selectEpisode(jumping.session.index - 1)
                 let resumed = await until { jumping.session.index == 0 && je.isPlaying }
                 check(seekKind + "-switch-back-restores-target", resumed && je.currentTime >= target - 0.1 && je.currentTime < target + 2)
                 // A completed seek must stop masking the live clock.
@@ -936,7 +1098,7 @@ private final class PessimisticBufferItem: AVPlayerItem {
                     host.present(timed, animated: false)
                     if targetIndex == 1 {
                         _ = await until { te.isPlaying }
-                        tc.nextButton.sendActions(for: .touchUpInside)
+                        timed.selectEpisode(timed.session.index + 1)
                     }
                     _ = await until { injected }; await wait(0.5)
                     let prefix = "sleep-during-resume-episode-\(targetIndex)-immediate-\(immediatePlay)"
@@ -971,7 +1133,7 @@ private final class PessimisticBufferItem: AVPlayerItem {
                 let oldEnd = try testRequire(z.playerDidToEnd, "Missing episode-end callback: " + scenario)
                 deadline.set(minutes: 1)
                 if scenario == "switch-before" {
-                    c.nextButton.sendActions(for: .touchUpInside)
+                    tested.selectEpisode(tested.session.index + 1)
                     let switched = await until { tested.session.index == 1 && e.isPlaying }
                     check(prefix + "-deadline-survives-switch", switched && deadline.minutesRemaining == 1)
                 }
@@ -980,7 +1142,7 @@ private final class PessimisticBufferItem: AVPlayerItem {
                     check(prefix + "-paused-before-deadline", !e.isPlaying)
                 }
                 clock += 60
-                if scenario == "switch-at" { c.nextButton.sendActions(for: .touchUpInside) }
+                if scenario == "switch-at" { tested.selectEpisode(tested.session.index + 1) }
                 else if scenario == "end-at" { oldEnd(e) }
                 else { NotificationCenter.default.post(name: UIApplication.didBecomeActiveNotification, object: nil) }
                 _ = await until { boundaryEvents.contains { $0["reason"] as? String == "sleep" } }
@@ -1005,7 +1167,7 @@ private final class PessimisticBufferItem: AVPlayerItem {
                 check(prefix + "-no-autonext", tested.session.index == (scenario == "switch-before" ? 1 : 0) && !tested.session.autoplayNext)
                 check(prefix + "-single-sleep", boundaryEvents.filter { $0["reason"] as? String == "sleep" }.count == 1)
                 // Explicit episode selection after stopping is intentional playback.
-                c.nextButton.sendActions(for: .touchUpInside)
+                tested.selectEpisode(tested.session.index + 1)
                 if scenario != "switch-before" {
                     let resumed = await until { tested.session.index == 1 && e.isPlaying }
                     check(prefix + "-explicit-next-works", resumed && UIApplication.shared.isIdleTimerDisabled)

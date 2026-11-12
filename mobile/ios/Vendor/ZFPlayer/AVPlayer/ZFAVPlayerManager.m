@@ -382,14 +382,16 @@ static NSString *const kPresentationSize         = @"presentationSize";
     _timeObserver = [self.player addPeriodicTimeObserverForInterval:interval queue:dispatch_get_main_queue() usingBlock:^(CMTime time) {
         @zf_strongify(self)
         if (!self) return;
-        NSArray *loadedRanges = self.playerItem.seekableTimeRanges;
         if (self.isPlaying && !self.isBuffering && self.loadState == ZFPlayerLoadStateStalled) {
             self.player.rate = self.rate;
             // Actual playback also clears the spinner when the throughput
             // prediction stays pessimistic despite sufficient buffered media.
             if (self.player.timeControlStatus == AVPlayerTimeControlStatusPlaying) self.loadState = ZFPlayerLoadStatePlayable;
         }
-        if (loadedRanges.count > 0) {
+        // Seekable ranges describe where seeking is allowed, not whether the
+        // playback clock is valid. Some playing items report no ranges; keep
+        // their timeline and time labels driven by the actual media clock.
+        if (self.playerItem.status == AVPlayerItemStatusReadyToPlay) {
             if (self.playerPlayTimeChanged) self.playerPlayTimeChanged(self, self.currentTime, self.totalTime);
         }
     }];
@@ -426,8 +428,8 @@ static NSString *const kPresentationSize         = @"presentationSize";
                     if (self.shouldAutoPlay && self.isPlaying) [self play];
                 }
                 self.player.muted = self.muted;
-                NSArray *loadedRanges = self.playerItem.seekableTimeRanges;
-                if (loadedRanges.count > 0) {
+                // The ready callback may synchronously stop or replace this item.
+                if (object == self.playerItem && self.playerItem.status == AVPlayerItemStatusReadyToPlay) {
                     if (self.playerPlayTimeChanged) self.playerPlayTimeChanged(self, self.currentTime, self.totalTime);
                 }
             } else if (self.player.currentItem.status == AVPlayerItemStatusFailed) {

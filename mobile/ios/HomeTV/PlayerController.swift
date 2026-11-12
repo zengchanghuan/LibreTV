@@ -12,6 +12,9 @@ final class PlayerController: UIViewController, AVPictureInPictureControllerDele
     private let engine = HomeTVPlayerManager()
     private let surface = UIView()
     private let controls = HomeTVPlayerControls()
+    private let portraitInfo = PlayerPortraitInfoView()
+    private let statusBackdrop = UIView()
+    private var landscapeLayout = false
     private var player: ZFPlayerController!
     private var tick: Timer?
     private var resolveTask: Task<Void, Never>?
@@ -21,11 +24,14 @@ final class PlayerController: UIViewController, AVPictureInPictureControllerDele
     private var earlyEndRetried = false, playbackInterrupted = false
     private var stoppedDuration: Double?
     private var resolvedURL: URL?, proxied = false
+    private let preferences = PlaybackPreferences()
+    private var optionsPanel: PlayerOptionsController?
+    private var dismissingOptions = false, dismissingEpisodes = false
+    private var backgroundPiPGrace = false
     private var episodePicker: EpisodePickerController?
     private var returnOrientation: UIInterfaceOrientationMask?
     private let playbackPosition: PlaybackPosition
     private var pip: AVPictureInPictureController?
-    private var pipObservation: NSKeyValueObservation?
     private var playbackRateObservation: NSKeyValueObservation?
     private var restoringPiP = false, startingPiP = false
     private var minimized = false, appInBackground = false
@@ -43,8 +49,9 @@ final class PlayerController: UIViewController, AVPictureInPictureControllerDele
         super.init(nibName: nil, bundle: nil)
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
-    override var prefersStatusBarHidden: Bool { !minimized }
-    override var prefersHomeIndicatorAutoHidden: Bool { true }
+    override var prefersStatusBarHidden: Bool { !minimized && landscapeLayout }
+    override var preferredStatusBarStyle: UIStatusBarStyle { .lightContent }
+    override var prefersHomeIndicatorAutoHidden: Bool { !minimized && landscapeLayout }
     override var supportedInterfaceOrientations: UIInterfaceOrientationMask { .allButUpsideDown }
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
@@ -60,9 +67,13 @@ final class PlayerController: UIViewController, AVPictureInPictureControllerDele
         }
     }
     override func viewDidLoad() {
-        super.viewDidLoad(); view.backgroundColor = .black
+        super.viewDidLoad(); view.backgroundColor = .black; overrideUserInterfaceStyle = .dark
         surface.accessibilityIdentifier = "player.video-surface"
         surface.clipsToBounds = true; surface.frame = view.bounds; view.addSubview(surface)
+        statusBackdrop.backgroundColor = .black; view.addSubview(statusBackdrop)
+        view.addSubview(portraitInfo)
+        portraitInfo.onSelect = { [weak self] index in self?.selectEpisode(index) }
+        portraitInfo.update(title: session.title, episodes: session.episodes, current: session.index)
         engine.shouldAutoPlay = false
         engine.diagnosticContext = { [weak self] in
             guard let self else { return [:] }
@@ -74,7 +85,7 @@ final class PlayerController: UIViewController, AVPictureInPictureControllerDele
         }
         engine.canPlay = { [weak self] in
             guard let self, !self.closed, !self.sleeping, !self.deviceLocked else { return false }
-            return !self.checkDeadline() && !self.userPaused && !self.audioInterrupted && !self.playbackPosition.isRestoring && !(self.appInBackground && BackgroundPlaybackMode.current == .pause)
+            return !self.checkDeadline() && !self.userPaused && !self.audioInterrupted && !self.playbackPosition.isRestoring && (!self.appInBackground || self.permitsBackgroundPlayback)
         }
         player = ZFPlayerController(playerManager: engine, containerView: surface)
         player.controlView = controls
@@ -100,17 +111,12 @@ final class PlayerController: UIViewController, AVPictureInPictureControllerDele
             return { [weak self] in self?.playbackPosition.finishSeek(id) }
         }
         controls.downloadButton.addTarget(self, action: #selector(downloadEpisode), for: .touchUpInside)
-        controls.backButton.addTarget(self, action: #selector(minimizePlayer), for: .touchUpInside)
-        controls.pipButton.addTarget(self, action: #selector(startPictureInPicture), for: .touchUpInside)
-        controls.rotateButton.showsMenuAsPrimaryAction = true
-        controls.rotateButton.menu = UIMenu(children: [
-            UIAction(title: "横竖屏", image: UIImage(systemName: "rotate.right")) { [weak self] _ in self?.rotate() },
-            UIAction(title: "后台播放", image: UIImage(systemName: "play.rectangle.on.rectangle")) { [weak self] _ in self?.showBackgroundSettings() },
-            UIAction(title: "停止播放", image: UIImage(systemName: "stop.fill"), attributes: .destructive) { [weak self] _ in self?.closePlayer() }
-        ])
-        controls.previousButton.addTarget(self, action: #selector(previous), for: .touchUpInside)
-        controls.playButton.addTarget(self, action: #selector(toggle), for: .touchUpInside)
+        controls.backButton.addTarget(self, action: #selector(goBack), for: .touchUpInside)
         controls.nextButton.addTarget(self, action: #selector(nextEpisode), for: .touchUpInside)
+        controls.pipButton.addTarget(self, action: #selector(startSmallWindow), for: .touchUpInside)
+        controls.moreButton.addTarget(self, action: #selector(showMore), for: .touchUpInside)
+        controls.rotateButton.addTarget(self, action: #selector(rotate), for: .touchUpInside)
+        controls.playButton.addTarget(self, action: #selector(toggle), for: .touchUpInside)
         controls.episodesButton.addTarget(self, action: #selector(episodes), for: .touchUpInside)
         controls.speedButton.showsMenuAsPrimaryAction = true
         controls.speedButton.menu = UIMenu(title: "播放速度", children: [Float(0.5), 0.75, 1, 1.25, 1.5, 1.75, 2, 3].map { rate in
@@ -121,7 +127,7 @@ final class PlayerController: UIViewController, AVPictureInPictureControllerDele
         controls.sleepButton.showsMenuAsPrimaryAction = true
         controls.sleepButton.menu = UIMenu(title: "定时停止", children: [0, 1, 15, 30, 45, 60, 90, 120].map { minutes in
             UIAction(title: minutes == 0 ? "关闭定时" : "\(minutes) 分钟后停止") { [weak self] _ in
-                self?.sleepTimer.set(minutes: minutes); self?.updateTime()
+                self?.sleepTimer.set(minutes: minutes); self?.updateTime(); self?.dismissMore()
             }
         })
         controls.failBtn.removeTarget(nil, action: nil, for: .touchUpInside)
@@ -147,9 +153,29 @@ final class PlayerController: UIViewController, AVPictureInPictureControllerDele
         layoutPlaybackRegions()
     }
     private func layoutPlaybackRegions() {
-        // Opening the drawer must never resize or move the video render surface.
-        surface.frame = view.bounds
+        let landscape = view.bounds.width > view.bounds.height
+        if landscapeLayout != landscape {
+            landscapeLayout = landscape
+            setNeedsStatusBarAppearanceUpdate(); setNeedsUpdateOfHomeIndicatorAutoHidden()
+        }
+        controls.landscapeLayout = landscape && !minimized
+        portraitInfo.isHidden = landscape || minimized
+        statusBackdrop.isHidden = landscape || minimized
+        if landscape || minimized {
+            view.backgroundColor = .black; surface.frame = view.bounds
+        } else {
+            view.backgroundColor = NativeTheme.current.surface
+            let top = view.safeAreaInsets.top
+            let videoHeight = min(view.bounds.width * 9 / 16, max(0, view.bounds.height - top))
+            statusBackdrop.frame = CGRect(x: 0, y: 0, width: view.bounds.width, height: top)
+            surface.frame = CGRect(x: 0, y: top, width: view.bounds.width, height: videoHeight)
+            portraitInfo.frame = CGRect(x: 0, y: surface.frame.maxY, width: view.bounds.width, height: max(0, view.bounds.height - surface.frame.maxY))
+            portraitInfo.setNeedsLayout()
+        }
+        // The drawers cover this stable surface; opening or dismissing them does
+        // not resize it, replace the AVPlayerItem, or send a playback gesture.
         episodePicker?.view.frame = view.bounds
+        optionsPanel?.view.frame = view.bounds
     }
     private func startPlaybackWork() {
         try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .moviePlayback)
@@ -170,7 +196,7 @@ final class PlayerController: UIViewController, AVPictureInPictureControllerDele
         guard !closed, !deviceLocked, session.episodes.indices.contains(index), !checkDeadline() else { return }
         resolveTask?.cancel(); generation = UUID(); let token = generation
         player.playerReadyToPlay = nil; player.playerPlayFailed = nil; player.playerDidToEnd = nil
-        pipObservation = nil; pip?.delegate = nil; pip?.stopPictureInPicture(); pip = nil
+        pip?.delegate = nil; pip?.stopPictureInPicture(); pip = nil
         playbackRateObservation = nil
         engine.stop()
         session.index = index; userPaused = false; sleeping = false; finished = false; proxied = false
@@ -181,10 +207,9 @@ final class PlayerController: UIViewController, AVPictureInPictureControllerDele
         stoppedDuration = nil
         playbackPosition.selectEpisode(index)
         controls.heading.text = "\(session.title) · 第 \(index + 1)/\(session.episodes.count) 集"
-        controls.previousButton.isEnabled = index > 0
+        controls.episodesButton.isHidden = session.episodes.count <= 1
         controls.nextButton.isEnabled = index + 1 < session.episodes.count
-        controls.previousButton.alpha = index > 0 ? 1 : 0.35
-        controls.nextButton.alpha = index + 1 < session.episodes.count ? 1 : 0.35
+        portraitInfo.update(title: session.title, episodes: session.episodes, current: index)
         resolvedURL = nil
         controls.downloadButton.isHidden = URL(string: session.episodes[index].url)?.isFileURL == true
         controls.downloadButton.isEnabled = false
@@ -213,17 +238,11 @@ final class PlayerController: UIViewController, AVPictureInPictureControllerDele
     }
     @objc private func downloadEpisode() {
         guard !closed, !session.episodes.isEmpty, URL(string: session.episodes[session.index].url)?.isFileURL != true else { return }
-        if session.episodes.count == 1, let url = URL(string: session.episodes[0].url) {
-            do {
-                let group = OfflineIdentity.group(origin: origin, source: session.sourceKey, video: session.vodId)
-                try OfflineDownloads.shared.enqueue(url: url, title: session.title, origin: origin, cookies: cookies, identity: OfflineIdentity.episode(group: group, index: 0), groupID: group, groupTitle: session.title, episodeTitle: "电影")
-                showCacheNotice(1)
-            } catch { controls.message.text = error.localizedDescription }
-            return
-        }
-        let picker = OfflineEpisodePickerController(session: session, origin: origin)
+        dismissMore(animated: false)
+        let picker = OfflineEpisodePickerController(session: session, origin: origin, cookies: cookies)
         picker.onAdded = { [weak self] count in self?.showCacheNotice(count) }
         let navigation = UINavigationController(rootViewController: picker)
+        navigation.overrideUserInterfaceStyle = .dark
         navigation.modalPresentationStyle = .pageSheet
         navigation.sheetPresentationController?.detents = [.large()]
         present(navigation, animated: true)
@@ -239,7 +258,7 @@ final class PlayerController: UIViewController, AVPictureInPictureControllerDele
     private var attachmentID = UUID()
     private func attach(_ url: URL, token: UUID) {
         // Retries can replace the underlying player without going through load().
-        pipObservation = nil; pip?.delegate = nil; pip?.stopPictureInPicture(); pip = nil
+        pip?.delegate = nil; pip?.stopPictureInPicture(); pip = nil
         playbackRateObservation = nil; startingPiP = false; restoringPiP = false
         restoreAttempt = UUID()
         let attempt = restoreAttempt
@@ -314,7 +333,7 @@ final class PlayerController: UIViewController, AVPictureInPictureControllerDele
         }
         engine.rate = session.rate
         player.assetURL = url
-        engine.player?.audiovisualBackgroundPlaybackPolicy = BackgroundPlaybackMode.current == .pause ? .pauses : .continuesIfPossible
+        engine.player?.audiovisualBackgroundPlaybackPolicy = (preferences.smallWindow || preferences.backgroundAudio) ? .continuesIfPossible : .pauses
         // HomeTV owns lifecycle and interruptions. ZFPlayer's default callbacks
         // would reactivate audio on resign-active and resume after route changes.
         player.notification?.willResignActive = { _ in }
@@ -391,8 +410,10 @@ final class PlayerController: UIViewController, AVPictureInPictureControllerDele
     private func updateTime() {
         controls.updatePlaying(engine.isPlaying && !finished)
         controls.speedButton.setTitle("\(session.rate)×", for: .normal)
-        controls.sleepButton.tintColor = sleepTimer.minutesRemaining == nil ? .white : .systemYellow
+        controls.pipButton.isHidden = !preferences.smallWindow
+        controls.nextButton.isEnabled = session.index + 1 < session.episodes.count && !closed
         controls.sleepButton.accessibilityLabel = sleepTimer.minutesRemaining.map { "定时停止，剩余 \($0) 分钟" } ?? "定时停止"
+        optionsPanel?.update(autoplayNext: session.autoplayNext, hasMultipleEpisodes: session.episodes.count > 1, smallWindow: preferences.smallWindow, backgroundAudio: preferences.backgroundAudio, sleepMinutesRemaining: sleepTimer.minutesRemaining)
         if !closed {
             updateNowPlaying()
             PlaybackCoordinator.shared.updateMini()
@@ -411,9 +432,7 @@ final class PlayerController: UIViewController, AVPictureInPictureControllerDele
         playbackPosition.prepareRetry(currentPosition: position)
         load(session.index)
     }
-    @objc private func previous() { selectEpisode(session.index - 1) }
-    @objc private func nextEpisode() { selectEpisode(session.index + 1) }
-    private func selectEpisode(_ index: Int) { guard session.episodes.indices.contains(index), index != session.index else { return }; emit("pause"); load(index) }
+    func selectEpisode(_ index: Int) { guard session.episodes.indices.contains(index), index != session.index else { return }; emit("pause"); load(index) }
     @objc private func deviceWillLock() {
         guard !closed else { return }
         deviceLocked = true
@@ -429,23 +448,33 @@ final class PlayerController: UIViewController, AVPictureInPictureControllerDele
         UIApplication.shared.isIdleTimerDisabled = false
         guard !closed, !sleeping, !checkDeadline() else { return }
         if deviceLocked || !UIApplication.shared.isProtectedDataAvailable { deviceWillLock() }
-        else if BackgroundPlaybackMode.current == .pause { pausePlayback() }
+        else if !preferences.smallWindow && !preferences.backgroundAudio { pausePlayback() }
         else {
+            backgroundPiPGrace = preferences.smallWindow && !userPaused
             emit("progress")
-            // Automatic PiP is initiated by AVKit during the user's app switch.
-            // Once that transition settles, detach the screen layer for audio-only playback.
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) { [weak self] in self?.updateBackgroundLayer() }
+            // Audio-only playback must detach the screen layer at the background
+            // boundary. Waiting for a PiP transition that cannot start lets the
+            // system suspend the video clock before the layer is detached.
+            if !preferences.smallWindow { updateBackgroundLayer() }
+            else {
+                // AVKit gets a short opportunity to start automatic PiP before
+                // applying the configured audio fallback or pause behavior.
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) { [weak self] in
+                    self?.backgroundPiPGrace = false; self?.updateBackgroundLayer()
+                }
+            }
         }
     }
     @objc private func foreground() {
-        engine.trace("app-become-active"); appInBackground = false
+        engine.trace("app-become-active"); appInBackground = false; backgroundPiPGrace = false
         guard !closed else { return }
         engine.avPlayerLayer?.player = engine.player
         _ = checkDeadline(); updateTime()
     }
     private func updateBackgroundLayer() {
-        guard !closed, appInBackground, !isPictureInPictureActive, !startingPiP, BackgroundPlaybackMode.current != .pause else { return }
-        engine.avPlayerLayer?.player = nil
+        guard !closed, appInBackground, !isPictureInPictureActive, !startingPiP, !backgroundPiPGrace else { return }
+        if preferences.backgroundAudio && !deviceLocked { engine.avPlayerLayer?.player = nil }
+        else { pausePlayback() }
     }
     @objc private func audioInterruption(_ notification: Notification) {
         guard let raw = (notification.userInfo?[AVAudioSessionInterruptionTypeKey] as? NSNumber)?.uintValue,
@@ -467,10 +496,15 @@ final class PlayerController: UIViewController, AVPictureInPictureControllerDele
     }
     @objc private func applyBackgroundMode() {
         guard !closed else { return }
-        engine.player?.audiovisualBackgroundPlaybackPolicy = BackgroundPlaybackMode.current == .pause ? .pauses : .continuesIfPossible
-        pip?.canStartPictureInPictureAutomaticallyFromInline = BackgroundPlaybackMode.current == .pictureInPicture
-        if appInBackground && BackgroundPlaybackMode.current == .pause { pausePlayback() }
+        engine.player?.audiovisualBackgroundPlaybackPolicy = (preferences.smallWindow || preferences.backgroundAudio) ? .continuesIfPossible : .pauses
+        pip?.canStartPictureInPictureAutomaticallyFromInline = preferences.smallWindow
+        if !preferences.smallWindow && minimized { closePlayer(); return }
+        if !preferences.smallWindow { pip?.stopPictureInPicture() }
+        if appInBackground && !permitsBackgroundPlayback { pausePlayback() }
         updateTime()
+    }
+    private var permitsBackgroundPlayback: Bool {
+        preferences.permitsBackground(pictureInPicture: isPictureInPictureActive, startingPictureInPicture: startingPiP || backgroundPiPGrace)
     }
     func persistPlaybackProgress() { if !closed { emit("progress") } }
     func rebindWebSession(_ incoming: PlaybackSession) {
@@ -487,7 +521,7 @@ final class PlayerController: UIViewController, AVPictureInPictureControllerDele
     }
     private func playFromControl() {
         guard !closed, !deviceLocked, !audioInterrupted, !checkDeadline() else { return }
-        if appInBackground && BackgroundPlaybackMode.current == .pause { return }
+        if appInBackground && !permitsBackgroundPlayback { return }
         try? AVAudioSession.sharedInstance().setActive(true)
         if sleeping || playbackInterrupted { retry(); return }
         userPaused = false
@@ -498,42 +532,85 @@ final class PlayerController: UIViewController, AVPictureInPictureControllerDele
     func setMinimized(_ value: Bool) {
         if value && !minimized { emit("close") } // Existing web UI treats this as full-screen dismissal.
         minimized = value; controls.isHidden = value; view.isUserInteractionEnabled = !value
-        dismissEpisodes(); controls.isHidden = value; updateTime()
+        dismissMore(animated: false); dismissEpisodes(animated: false)
+        controls.unlockControls(); refreshControlsVisibility()
+        view.setNeedsLayout(); view.layoutIfNeeded()
+        setNeedsStatusBarAppearanceUpdate(); setNeedsUpdateOfHomeIndicatorAutoHidden(); updateTime()
+    }
+    @objc private func goBack() {
+        if landscapeLayout && !minimized { rotate() }
+        else { minimizePlayer() }
+    }
+    @objc private func nextEpisode() {
+        guard !closed else { return }
+        selectEpisode(session.index + 1)
+    }
+    @objc private func startSmallWindow() {
+        guard !closed, !deviceLocked, preferences.smallWindow else { return }
+        dismissTransientPanels()
+        if let pip, pip.isPictureInPicturePossible { pip.startPictureInPicture() }
+        else if PlaybackCoordinator.shared.current === self { PlaybackCoordinator.shared.minimize(self) }
+        else { controls.message.text = "当前设备暂无法使用小窗播放" }
     }
     @objc func minimizePlayer() {
         guard !closed else { return }
-        if PlaybackCoordinator.shared.current === self { PlaybackCoordinator.shared.minimize(self) }
+        if preferences.smallWindow && PlaybackCoordinator.shared.current === self { PlaybackCoordinator.shared.minimize(self) }
         else { closePlayer() }
     }
     func dismissTransientPanels() {
-        dismissEpisodes()
+        dismissMore(animated: false); dismissEpisodes(animated: false)
         if presentedViewController != nil { dismiss(animated: false) }
     }
     func restorePageOrientation(in scene: UIWindowScene?, presenter: UIViewController?) {
         presenter?.setNeedsUpdateOfSupportedInterfaceOrientations()
         scene?.requestGeometryUpdate(.iOS(interfaceOrientations: returnOrientation ?? .portrait))
     }
-    @objc private func showBackgroundSettings() {
-        present(UINavigationController(rootViewController: BackgroundPlaybackSettingsController()), animated: true)
+    @objc private func showMore() {
+        guard !closed, presentedViewController == nil else { return }
+        dismissEpisodes(animated: false)
+        if optionsPanel != nil { dismissMore(); return }
+        let panel = PlayerOptionsController(buttons: [controls.sleepButton, controls.downloadButton])
+        panel.onDismiss = { [weak self] in self?.dismissMore() }
+        panel.onSleepTimerChanged = { [weak self] minutes in
+            self?.sleepTimer.set(minutes: minutes); self?.updateTime()
+        }
+        panel.onAutoplayNextChanged = { [weak self] enabled in
+            guard let self else { return }
+            self.session.autoplayNext = enabled; self.updateTime()
+        }
+        panel.onSmallWindowChanged = { [weak self] enabled in self?.preferences.smallWindow = enabled }
+        panel.onBackgroundAudioChanged = { [weak self] enabled in self?.preferences.backgroundAudio = enabled }
+        optionsPanel = panel; controls.isHidden = true
+        addChild(panel); view.addSubview(panel.view); panel.didMove(toParent: self)
+        layoutPlaybackRegions(); updateTime(); panel.animateIn()
+    }
+    private func dismissMore(animated: Bool = true) {
+        guard let panel = optionsPanel else { return }
+        if animated && dismissingOptions { return }
+        dismissingOptions = true
+        let finish = { [weak self, weak panel] in
+            guard let self, let panel, self.optionsPanel === panel else { return }
+            panel.willMove(toParent: nil); panel.view.removeFromSuperview(); panel.removeFromParent()
+            self.optionsPanel = nil; self.dismissingOptions = false; self.refreshControlsVisibility()
+        }
+        if animated { panel.animateOut(completion: finish) } else { finish() }
+    }
+    private func refreshControlsVisibility() {
+        controls.isHidden = minimized || optionsPanel != nil || episodePicker != nil
+        if !controls.isHidden { controls.revealControls() }
     }
     private func configurePictureInPicture() {
         guard !closed, AVPictureInPictureController.isPictureInPictureSupported(), let layer = engine.avPlayerLayer else { return }
-        pipObservation = nil; pip?.delegate = nil
+        pip?.delegate = nil
         pip = AVPictureInPictureController(playerLayer: layer)
         pip?.delegate = self
-        pip?.canStartPictureInPictureAutomaticallyFromInline = BackgroundPlaybackMode.current == .pictureInPicture
-        pipObservation = pip?.observe(\.isPictureInPicturePossible, options: [.initial, .new]) { [weak self] _, _ in
-            DispatchQueue.main.async { self?.controls.pipButton.accessibilityHint = self?.pip?.isPictureInPicturePossible == true ? "系统画中画" : "App 内小窗" }
-        }
+        pip?.canStartPictureInPictureAutomaticallyFromInline = preferences.smallWindow
         updateBackgroundLayer()
     }
-    @objc private func startPictureInPicture() {
-        guard !closed else { return }
-        if pip?.isPictureInPicturePossible == true { pip?.startPictureInPicture() }
-        else { minimizePlayer() }
-    }
     func pictureInPictureControllerWillStartPictureInPicture(_ pictureInPictureController: AVPictureInPictureController) {
-        guard pictureInPictureController === pip, !closed else { return }; startingPiP = true
+        guard pictureInPictureController === pip, !closed else { return }
+        guard preferences.smallWindow, !deviceLocked else { pip?.stopPictureInPicture(); return }
+        startingPiP = true
     }
     func pictureInPictureControllerDidStartPictureInPicture(_ pictureInPictureController: AVPictureInPictureController) {
         guard pictureInPictureController === pip, !closed else { return }
@@ -543,7 +620,9 @@ final class PlayerController: UIViewController, AVPictureInPictureControllerDele
     func pictureInPictureController(_ pictureInPictureController: AVPictureInPictureController, failedToStartPictureInPictureWithError error: Error) {
         guard pictureInPictureController === pip, !closed else { return }
         startingPiP = false; updateBackgroundLayer()
-        if !appInBackground { controls.message.text = "系统小窗暂不可用，可返回页面使用小窗" }
+        if !appInBackground, preferences.smallWindow, PlaybackCoordinator.shared.current === self {
+            PlaybackCoordinator.shared.minimize(self)
+        } else if !appInBackground { controls.message.text = "系统小窗暂不可用，可返回页面使用小窗" }
     }
     func pictureInPictureController(_ pictureInPictureController: AVPictureInPictureController, restoreUserInterfaceForPictureInPictureStopWithCompletionHandler completionHandler: @escaping (Bool) -> Void) {
         guard pictureInPictureController === pip, !closed else { completionHandler(false); return }
@@ -617,8 +696,8 @@ final class PlayerController: UIViewController, AVPictureInPictureControllerDele
     func stopPlayback() {
         guard !closed else { return }
         emit("close"); closed = true; generation = UUID(); resolveTask?.cancel(); tick?.invalidate(); tick = nil
-        playbackRateObservation = nil; pipObservation = nil; pip?.delegate = nil; pip?.stopPictureInPicture(); pip = nil
-        dismissEpisodes(); player?.stop()
+        playbackRateObservation = nil; pip?.delegate = nil; pip?.stopPictureInPicture(); pip = nil
+        dismissMore(animated: false); dismissEpisodes(animated: false); player?.stop()
         for (command, target) in remoteTargets { command.removeTarget(target); command.isEnabled = false }
         remoteTargets.removeAll(); MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
         UIApplication.shared.isIdleTimerDisabled = false
@@ -628,6 +707,7 @@ final class PlayerController: UIViewController, AVPictureInPictureControllerDele
     @objc private func episodes() {
         guard !closed, presentedViewController == nil else { return }
         if episodePicker != nil { dismissEpisodes(); return }
+        dismissMore(animated: false)
         let picker = EpisodePickerController(episodes: session.episodes, current: session.index)
         picker.onDismiss = { [weak self] in self?.dismissEpisodes() }
         picker.onSelect = { [weak self] index in
@@ -639,13 +719,19 @@ final class PlayerController: UIViewController, AVPictureInPictureControllerDele
         layoutPlaybackRegions()
         picker.didMove(toParent: self)
         view.layoutIfNeeded(); picker.view.layoutIfNeeded()
+        picker.animateIn()
     }
-    @objc private func dismissEpisodes() {
+    private func dismissEpisodes(animated: Bool = true) {
         guard let picker = episodePicker else { return }
-        picker.willMove(toParent: nil); picker.view.removeFromSuperview(); picker.removeFromParent()
-        episodePicker = nil
-        controls.isHidden = false
-        layoutPlaybackRegions()
+        if animated && dismissingEpisodes { return }
+        dismissingEpisodes = true
+        let finish = { [weak self, weak picker] in
+            guard let self, let picker, self.episodePicker === picker else { return }
+            picker.willMove(toParent: nil); picker.view.removeFromSuperview(); picker.removeFromParent()
+            self.episodePicker = nil; self.dismissingEpisodes = false
+            self.refreshControlsVisibility(); self.layoutPlaybackRegions()
+        }
+        if animated { picker.animateOut(completion: finish) } else { finish() }
     }
     deinit {
         tick?.invalidate(); resolveTask?.cancel()
