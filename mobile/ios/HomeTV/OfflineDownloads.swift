@@ -109,7 +109,7 @@ final class OfflineDownloads: NSObject, AVAssetDownloadDelegate, URLSessionDownl
         defaults.set(min(3, max(1, value)), forKey: "offline.concurrency")
         let active = videos.filter { [.preparing, .downloading].contains($0.state) }
         for video in active.dropFirst(concurrency) { suspend(video.id, state: .queued) }
-        schedule()
+        schedule(); notify()
     }
     func setAllowsCellular(_ allowed: Bool) {
         guard allowed != allowsCellular else { return }

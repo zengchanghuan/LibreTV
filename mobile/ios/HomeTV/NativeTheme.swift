@@ -18,13 +18,17 @@ struct NativeTheme {
     var chip: UIColor { color(0xeef0f3, 0x16202e) }
     var hover: UIColor { color(0xe9ecf0, 0x1d2a3d) }
 
-    func apply(to bar: UINavigationBar) {
-        bar.overrideUserInterfaceStyle = style
+    var navigationAppearance: UINavigationBarAppearance {
         let appearance = UINavigationBarAppearance()
         appearance.configureWithOpaqueBackground()
         appearance.backgroundColor = surface; appearance.shadowColor = line
         appearance.titleTextAttributes = [.foregroundColor: content]
         appearance.largeTitleTextAttributes = [.foregroundColor: content]
+        return appearance
+    }
+    func apply(to bar: UINavigationBar) {
+        bar.overrideUserInterfaceStyle = style
+        let appearance = navigationAppearance
         bar.standardAppearance = appearance; bar.scrollEdgeAppearance = appearance
         bar.compactAppearance = appearance; bar.compactScrollEdgeAppearance = appearance
         bar.tintColor = content
