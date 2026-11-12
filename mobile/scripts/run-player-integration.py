@@ -12,6 +12,8 @@ parser.add_argument("device")
 parser.add_argument("--sleep-minute-only", action="store_true", help="Verify the real one-minute menu and unattended stop")
 parser.add_argument("--navigation-only", action="store_true", help="Run browser navigation and tab layout checks only")
 parser.add_argument("--seek-only", action="store_true", help="Run seek and buffering recovery regressions only")
+parser.add_argument("--background-only", action="store_true", help="Run mini player, PiP, real background audio and interruption checks")
+parser.add_argument("--cache-only", action="store_true", help="Run multi-film queue, batch picker and offline media checks")
 parser.add_argument("--offline-only", action="store_true", help="Run download and offline playback checks only")
 parser.add_argument("--verify-failure-reporting", action="store_true", help="Exercise missing prerequisites and a failed check before the normal suite")
 parser.add_argument("--inject-failure", choices=["missing-root", "missing-controls", "missing-player", "wrong-manager", "missing-reflection", "wrong-type", "failed-check", "progress-write", "report-write"])
@@ -25,7 +27,7 @@ shutil.copytree(repo / 'mobile/ios', project / 'ios', ignore=shutil.ignore_patte
 (project / 'scripts').mkdir()
 shutil.copy2(repo / 'mobile/scripts/generate-ios-project.py', project / 'scripts')
 code = project / 'ios/HomeTV'
-for name in ["PlayerIntegrationHarness.swift", "RegressionSupport.swift"]:
+for name in [("BackgroundPlaybackIntegrationHarness.swift" if args.background_only else "OfflineIntegrationHarness.swift" if args.cache_only else "PlayerIntegrationHarness.swift"), "RegressionSupport.swift"]:
     shutil.copy2(project / "ios/Tests" / name, code)
 p = code / 'AppDelegate.swift'
 s = p.read_text()
@@ -44,7 +46,7 @@ if browser_source.count(connect) != 1:
 browser.write_text(browser_source.replace(connect,
     'if let url = URL(string: "http://127.0.0.1:18085") { connect(url) }'))
 subprocess.run([sys.executable, str(project / 'scripts/generate-ios-project.py')], check=True)
-video = (project / 'ios/Tests/Fixtures/player.mp4').read_bytes()
+video = (project / ('ios/Tests/Fixtures/background.mp4' if args.background_only else 'ios/Tests/Fixtures/player.mp4')).read_bytes()
 # Exercise the real web theme palette without connecting to production.
 theme_css = (repo / 'src/app/globals.css').read_text().split('html,\nbody')[0]
 class Handler(BaseHTTPRequestHandler):
@@ -84,7 +86,15 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header('Accept-Ranges', 'bytes')
         if raw: self.send_header('Content-Range', f'bytes {start}-{end}/{len(video)}')
         self.send_header('Content-Length', str(end-start+1)); self.end_headers()
-        self.wfile.write(video[start:end+1])
+        try:
+            if path.startswith('/offline-slow-'):
+                payload = video[start:end+1]
+                for offset in range(0, len(payload), 8192):
+                    time.sleep(0.75); self.wfile.write(payload[offset:offset+8192]); self.wfile.flush()
+            else:
+                self.wfile.write(video[start:end+1])
+        except (BrokenPipeError, ConnectionResetError):
+            pass
     def log_message(self, *args): pass
 server = ThreadingHTTPServer(('127.0.0.1', 18085), Handler)
 threading.Thread(target=server.serve_forever, daemon=True).start()
@@ -112,7 +122,21 @@ try:
         pid = launch.rsplit(':', 1)[-1].strip()
         try:
             # Allow the default suite to include the sleep boundary matrix.
+            background_roundtrips = set()
             for _ in range(240):
+                if args.background_only:
+                    progress_file = container / 'player-progress.json'
+                    progress_data = json.loads(progress_file.read_text()) if progress_file.exists() else {}
+                    for mode in ['audio', 'pictureInPicture']:
+                        if mode not in background_roundtrips and progress_data.get('ready-for-real-background-' + mode):
+                            background_roundtrips.add(mode)
+                            sim('launch', device, 'com.apple.Preferences')
+                            for _ in range(100):
+                                observed = json.loads(progress_file.read_text())
+                                if observed.get('entered-real-background-' + mode): break
+                                time.sleep(0.1)
+                            time.sleep(4)
+                            sim('launch', device, bundle)
                 errors = stderr.read_text(errors='replace') if stderr.exists() else ''
                 if 'PLAYER_REPORT_ERROR:' in errors:
                     subprocess.run(['kill', '-0', pid], check=True, capture_output=True)

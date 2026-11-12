@@ -35,6 +35,14 @@ jobs:
           with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
               output.write('udid=' + device['udid'] + '\n')
           PYTHON
+      - name: Multi-film cache integration
+        env:
+          SIMULATOR_UDID: ${{ steps.simulator.outputs.udid }}
+        run: python3 mobile/scripts/run-player-integration.py "$SIMULATOR_UDID" --cache-only
+      - name: Background playback and mini player integration
+        env:
+          SIMULATOR_UDID: ${{ steps.simulator.outputs.udid }}
+        run: python3 mobile/scripts/run-player-integration.py "$SIMULATOR_UDID" --background-only
       - name: Player integration and failure reporting
         env:
           SIMULATOR_UDID: ${{ steps.simulator.outputs.udid }}

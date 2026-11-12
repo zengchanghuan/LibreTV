@@ -4,7 +4,8 @@ import WebKit
 final class BrowserController: UIViewController, WKScriptMessageHandler, WKNavigationDelegate {
     private var web: WKWebView!
     private var origin: URL?
-    private var player: PlayerController?
+    private var player: PlayerController? { PlaybackCoordinator.shared.current }
+    private var openRevision = UUID()
     private let status = UILabel()
     private let navigationBar = UINavigationBar()
     private let pageNavigationItem = UINavigationItem(title: "首页")
@@ -47,7 +48,7 @@ final class BrowserController: UIViewController, WKScriptMessageHandler, WKNavig
         retry.setTitle("重试", for: .normal); retry.isHidden = true
         retry.heightAnchor.constraint(greaterThanOrEqualToConstant: 44).isActive = true
         retry.addTarget(self, action: #selector(reload), for: .touchUpInside)
-        offlineButton.setTitle("我的下载 · 离线观看", for: .normal)
+        offlineButton.setTitle("我的缓存 · 离线观看", for: .normal)
         offlineButton.accessibilityIdentifier = "offline.open"
         offlineButton.heightAnchor.constraint(greaterThanOrEqualToConstant: 44).isActive = true
         offlineButton.addTarget(self, action: #selector(showDownloads), for: .touchUpInside)
@@ -127,6 +128,10 @@ final class BrowserController: UIViewController, WKScriptMessageHandler, WKNavig
         if let previous = web.backForwardList.backItem, previous.url == destination { web.go(to: previous) }
         else { web.load(URLRequest(url: destination)) }
     }
+    @objc private func showPlaybackSettings() {
+        guard presentedViewController == nil else { return }
+        present(UINavigationController(rootViewController: BackgroundPlaybackSettingsController()), animated: true)
+    }
     @objc private func showDownloads() {
         guard presentedViewController == nil else { return }
         present(UINavigationController(rootViewController: OfflineDownloadsController()), animated: true)
@@ -163,6 +168,7 @@ final class BrowserController: UIViewController, WKScriptMessageHandler, WKNavig
         navigationURL = url
         setWatchLayout(NativeNavigation.usesWatchLayout(for: url, origin: origin))
         updateChrome()
+        pageNavigationItem.rightBarButtonItem = url.path == "/settings" ? UIBarButtonItem(title: "后台播放", style: .plain, target: self, action: #selector(showPlaybackSettings)) : nil
         if let page = NativeNavigation.page(for: url, origin: origin) {
             pageNavigationItem.title = page.title
             if page.parent != nil {
@@ -204,16 +210,24 @@ final class BrowserController: UIViewController, WKScriptMessageHandler, WKNavig
         if type == "ack", let id = body["eventId"] as? String {
             pending = pending.filter { $0.value["eventId"] as? String != id }; persist(); return
         }
-        if type == "close", let id = body["sessionId"] as? String, player?.session.id == id { player?.closePlayer(); return }
-        guard type == "open", player == nil, let raw = body["session"], JSONSerialization.isValidJSONObject(raw),
+        // The web panel sends close when it unmounts. Page navigation must not stop
+        // the independently owned mini/background session.
+        if type == "close", let id = body["sessionId"] as? String, player?.session.id == id { player?.persistPlaybackProgress(); return }
+        guard type == "open", let raw = body["session"], JSONSerialization.isValidJSONObject(raw),
               let data = try? JSONSerialization.data(withJSONObject: raw), let session = try? JSONDecoder().decode(PlaybackSession.self, from: data), session.isValid(origin: origin) else { return }
+        openRevision = UUID(); let revision = openRevision
         web.configuration.websiteDataStore.httpCookieStore.getAllCookies { [weak self] cookies in
-            guard let self, self.player == nil, self.origin == origin, self.web.url.map({ sameOrigin($0, origin) }) == true else { return }
+            guard let self, self.openRevision == revision, self.origin == origin, self.web.url.map({ sameOrigin($0, origin) }) == true else { return }
+            if let current = self.player, current.origin == origin, current.session.sourceKey == session.sourceKey,
+               current.session.vodId == session.vodId, current.session.index == session.index,
+               current.session.profileId == session.profileId, !current.hasStopped {
+                current.rebindWebSession(session)
+                PlaybackCoordinator.shared.expand(current)
+                return
+            }
             let controller = PlayerController(session: session, origin: origin, cookies: cookies)
             controller.onProgress = { [weak self] event in self?.record(event) }
-            controller.onClose = { [weak self] in self?.player = nil }
-            controller.modalPresentationStyle = .fullScreen; self.player = controller
-            self.present(controller, animated: true)
+            PlaybackCoordinator.shared.start(controller, from: self)
         }
     }
     private func record(_ event: [String: Any]) {

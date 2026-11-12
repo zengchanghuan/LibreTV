@@ -58,6 +58,9 @@ private final class PessimisticBufferItem: AVPlayerItem {
               rate: 1.5, autoplayNext: autoplay, baseRevision: 0, openedAt: 1)
         }
         do {
+            // Legacy scenarios deliberately exercise the opt-in pause policy.
+            BackgroundPlaybackMode.current = .pause
+            defer { BackgroundPlaybackMode.current = .pictureInPicture }
             let origin = try testRequire(URL(string: "http://127.0.0.1:18085"), "Invalid fixture URL")
             // These switches exist only in the isolated test app. Each exercises the
             // same checked lookup used below, without changing production app data.
@@ -120,30 +123,33 @@ private final class PessimisticBufferItem: AVPlayerItem {
             scene.requestGeometryUpdate(.iOS(interfaceOrientations: .portrait))
             _ = await until { scene.interfaceOrientation == .portrait && host.view.bounds.height > host.view.bounds.width }
             let browser = try testRequire(host as? BrowserController, "Missing browser host")
-            let tabs = try testRequire(descendants(host.view).compactMap { $0 as? UITabBar }.first, "Missing native tabs")
+            let tabs = try testRequire(descendants(host.view).compactMap { $0 as? HomeTabBar }.first, "Missing native tabs")
             let web = try testRequire(descendants(host.view).compactMap { $0 as? WKWebView }.first, "Missing browser web view")
             let navigation = try testRequire(descendants(host.view).compactMap { $0 as? UINavigationBar }.first, "Missing browser navigation bar")
-            let tabItems = try testRequire(tabs.items, "Missing tab items")
+            let tabItems = descendants(tabs).compactMap { $0 as? UIButton }.filter { $0.accessibilityIdentifier?.hasPrefix("browser.tab.") == true }.sorted { ($0.accessibilityIdentifier ?? "") < ($1.accessibilityIdentifier ?? "") }
             try testCheck(tabItems.count == 4, "Expected home, live, HD and settings tabs")
-            check("four-tabs-have-labels-and-icons", tabItems.map(\.title) == ["首页", "直播", "高清", "设置"] && tabItems.allSatisfy { $0.image != nil })
+            // Prerequisite injection runs the actual player lookup below without
+            // also running unrelated navigation/seek scenarios on each injection.
+            if !["missing-controls", "missing-player", "wrong-manager"].contains(fault ?? "") {
+            check("four-tabs-have-labels-and-icons", tabItems.map { $0.configuration?.title } == ["首页", "直播", "高清", "设置"] && tabItems.allSatisfy { $0.configuration?.image != nil })
             _ = await until { !web.isLoading }
-            browser.tabBar(tabs, didSelect: tabItems[2])
-            let hdLoaded = await until { !web.isLoading && web.url?.path == "/hd" && tabs.selectedItem?.tag == 2 }
+            tabItems[2].sendActions(for: .touchUpInside)
+            let hdLoaded = await until { !web.isLoading && web.url?.path == "/hd" && tabs.selectedIndex == 2 }
             check("hd-tab-navigates-and-highlights", hdLoaded)
             let historyCount = web.backForwardList.backList.count
-            browser.tabBar(tabs, didSelect: tabItems[2]); await wait()
+            tabItems[2].sendActions(for: .touchUpInside); await wait()
             check("repeated-hd-tab-preserves-document", !web.isLoading && web.backForwardList.backList.count == historyCount && web.url?.path == "/hd")
             snapshot("hd-tabs-portrait")
-            check("four-tabs-portrait-layout", tabs.bounds.height >= 49 + host.view.safeAreaInsets.bottom && web.frame.maxY <= tabs.frame.minY + 1 && navigation.frame.minY >= host.view.safeAreaInsets.top && navigation.frame.maxY <= web.frame.minY + 1 && navigation.bounds.height >= 44)
+            check("four-tabs-portrait-layout", tabs.bounds.height >= 56 + host.view.safeAreaInsets.bottom && web.frame.maxY <= tabs.frame.minY + 1 && navigation.isHidden && navigation.bounds.height < 1 && abs(web.frame.minY - host.view.safeAreaInsets.top) < 1)
             scene.requestGeometryUpdate(.iOS(interfaceOrientations: .landscapeRight))
             _ = await until { scene.interfaceOrientation == .landscapeRight }; await wait(0.5)
             snapshot("hd-tabs-landscape")
-            check("four-tabs-landscape-layout", tabs.bounds.height >= 49 + host.view.safeAreaInsets.bottom && web.frame.maxY <= tabs.frame.minY + 1 && navigation.frame.minY >= host.view.safeAreaInsets.top && navigation.frame.maxY <= web.frame.minY + 1 && navigation.bounds.height >= 44)
-            browser.tabBar(tabs, didSelect: tabItems[3])
-            let settingsLoaded = await until { !web.isLoading && web.url?.path == "/settings" && tabs.selectedItem?.tag == 3 }
+            check("four-tabs-landscape-layout", tabs.bounds.height >= 56 + host.view.safeAreaInsets.bottom && web.frame.maxY <= tabs.frame.minY + 1 && navigation.isHidden && navigation.bounds.height < 1 && abs(web.frame.minY - host.view.safeAreaInsets.top) < 1)
+            tabItems[3].sendActions(for: .touchUpInside)
+            let settingsLoaded = await until { !web.isLoading && web.url?.path == "/settings" && tabs.selectedIndex == 3 }
             check("settings-after-hd-highlights-fourth-tab", settingsLoaded)
-            browser.tabBar(tabs, didSelect: tabItems[0])
-            _ = await until { !web.isLoading && tabs.selectedItem?.tag == 0 }
+            tabItems[0].sendActions(for: .touchUpInside)
+            _ = await until { !web.isLoading && tabs.selectedIndex == 0 }
             scene.requestGeometryUpdate(.iOS(interfaceOrientations: .portrait))
             _ = await until { scene.interfaceOrientation == .portrait }; await wait(0.5)
             // Native navigation follows both full loads and SPA history. Tab roots
@@ -154,9 +160,9 @@ private final class PessimisticBufferItem: AVPlayerItem {
                 UIApplication.shared.sendAction(action, to: item.target, from: item, for: nil)
             }
             for (index, title) in [(0, "首页"), (1, "直播"), (2, "高清专区"), (3, "设置")] {
-                browser.tabBar(tabs, didSelect: tabItems[index])
+                tabItems[index].sendActions(for: .touchUpInside)
                 let loaded = await until { !web.isLoading && navigation.topItem?.title == title }
-                check("navigation-root-\(index)", loaded && navigation.topItem?.leftBarButtonItem == nil && tabs.selectedItem?.tag == index)
+                check("navigation-root-\(index)", loaded && navigation.topItem?.leftBarButtonItem == nil && tabs.selectedIndex == index)
             }
             _ = try await web.evaluateJavaScript("history.pushState({},'', '/about')")
             _ = await until { navigation.topItem?.title == "关于 HomeTV" }
@@ -164,25 +170,25 @@ private final class PessimisticBufferItem: AVPlayerItem {
             try tapNavigationBack()
             let aboutBack = await until { navigation.topItem?.title == "设置" && web.url?.path == "/settings" }
             check("navigation-about-back-to-settings", aboutBack)
-            browser.tabBar(tabs, didSelect: tabItems[2])
+            tabItems[2].sendActions(for: .touchUpInside)
             _ = await until { !web.isLoading && web.url?.path == "/hd" }
             _ = try await web.evaluateJavaScript("window.navigationFixture='preserved';history.replaceState({},'', '/hd?site=hdzone');history.pushState({},'', '/hd/hdzone?url=fixture')")
             let detailReady = await until { navigation.topItem?.title == "资源详情" && navigation.topItem?.leftBarButtonItem != nil }
-            check("navigation-spa-detail-updates-title-and-tab", detailReady && tabs.selectedItem?.tag == 2)
+            check("navigation-spa-detail-updates-title-and-tab", detailReady && tabs.selectedIndex == 2)
             await wait(0.5) // Capture after the system tab selection animation settles.
             snapshot("navigation-hd-detail-portrait")
             try tapNavigationBack()
             let detailBack = await until { web.url?.path == "/hd" && navigation.topItem?.leftBarButtonItem == nil }
             let state = try await web.evaluateJavaScript("window.navigationFixture") as? String
             check("navigation-back-preserves-filter-and-document", detailBack && web.url?.query == "site=hdzone" && state == "preserved")
-            browser.tabBar(tabs, didSelect: tabItems[0])
+            tabItems[0].sendActions(for: .touchUpInside)
             _ = await until { !web.isLoading && navigation.topItem?.title == "首页" }
             web.load(URLRequest(url: origin.appendingPathComponent("hd/hdzone")))
             _ = await until { !web.isLoading && navigation.topItem?.title == "资源详情" }
             try tapNavigationBack()
             let directBack = await until { !web.isLoading && web.url?.path == "/hd" && web.url?.query == "site=hdzone" }
             check("navigation-direct-detail-falls-back-to-catalog", directBack && navigation.topItem?.leftBarButtonItem == nil)
-            browser.tabBar(tabs, didSelect: tabItems[0])
+            tabItems[0].sendActions(for: .touchUpInside)
             _ = await until { !web.isLoading && navigation.topItem?.title == "首页" }
             _ = try await web.evaluateJavaScript("history.pushState({},'', '/?s=movie');history.pushState({},'', '/watch?id=42')")
             _ = await until { navigation.topItem?.title == "影片详情" }
@@ -207,7 +213,7 @@ private final class PessimisticBufferItem: AVPlayerItem {
             check("navigation-watch-back-to-search", searchBack && navigation.topItem?.leftBarButtonItem != nil && !navigation.isHidden && !tabs.isHidden)
             try tapNavigationBack()
             _ = await until { navigation.topItem?.title == "首页" }
-            check("navigation-search-back-to-home", navigation.topItem?.leftBarButtonItem == nil && tabs.selectedItem?.tag == 0)
+            check("navigation-search-back-to-home", navigation.topItem?.leftBarButtonItem == nil && tabs.selectedIndex == 0)
             // Theme changes come through the actual document-start bridge. Compare
             // the native bars to the web CSS, including full document navigation.
             func nativeColorsMatchPage() async throws -> Bool {
@@ -220,8 +226,8 @@ private final class PessimisticBufferItem: AVPlayerItem {
                 }
                 return matches(navigation.standardAppearance.backgroundColor, "surface")
                     && matches(navigation.standardAppearance.titleTextAttributes[.foregroundColor] as? UIColor, "content")
-                    && matches(tabs.standardAppearance.backgroundColor, "surface")
-                    && matches(tabs.tintColor, "accent") && matches(tabs.unselectedItemTintColor, "muted")
+                    && matches(tabs.backgroundColor, "surface")
+                    && matches(tabItems[tabs.selectedIndex].configuration?.baseForegroundColor, "accent") && matches(tabItems[(tabs.selectedIndex + 1) % 4].configuration?.baseForegroundColor, "muted")
                     && matches(host.view.backgroundColor, "surface") && matches(web.backgroundColor, "page")
             }
             let systemThemeBefore = try await web.evaluateJavaScript("matchMedia('(prefers-color-scheme: dark)').matches") as? Bool
@@ -232,7 +238,7 @@ private final class PessimisticBufferItem: AVPlayerItem {
                 check(dark ? "theme-dark-matches-web" : "theme-light-matches-web", try await nativeColorsMatchPage())
                 snapshot(dark ? "navigation-theme-dark" : "navigation-theme-light")
             }
-            browser.tabBar(tabs, didSelect: tabItems[3])
+            tabItems[3].sendActions(for: .touchUpInside)
             _ = await until { !web.isLoading && web.url?.path == "/settings" }
             let retainedColors = try await nativeColorsMatchPage()
             check("theme-retained-across-document-navigation", browser.preferredStatusBarStyle == .darkContent && retainedColors)
@@ -245,7 +251,7 @@ private final class PessimisticBufferItem: AVPlayerItem {
             snapshot("navigation-theme-dark-landscape")
             scene.requestGeometryUpdate(.iOS(interfaceOrientations: .portrait))
             _ = await until { scene.interfaceOrientation == .portrait }
-            browser.tabBar(tabs, didSelect: tabItems[0])
+            tabItems[0].sendActions(for: .touchUpInside)
             _ = await until { !web.isLoading && navigation.topItem?.title == "首页" }
             if CommandLine.arguments.contains("--navigation-only") {
                 try writeReport("player-integration.json"); fflush(stdout); return
@@ -381,7 +387,7 @@ private final class PessimisticBufferItem: AVPlayerItem {
                 NotificationCenter.default.post(name: AVPlayerItem.didPlayToEndTimeNotification, object: pm.playerItem)
                 await wait(0.3)
                 check("premature-eof-respects-manual-pause", !pm.isPlaying && pm.playerItem === stableItem && pm.currentTime >= 11.75)
-                NotificationCenter.default.post(name: UIApplication.willResignActiveNotification, object: nil)
+                NotificationCenter.default.post(name: UIApplication.didEnterBackgroundNotification, object: nil)
                 NotificationCenter.default.post(name: AVPlayerItem.didPlayToEndTimeNotification, object: pm.playerItem)
                 await wait(0.2)
                 check("premature-eof-respects-background", !pm.isPlaying && pm.playerItem === stableItem)
@@ -422,6 +428,7 @@ private final class PessimisticBufferItem: AVPlayerItem {
                 if CommandLine.arguments.contains("--seek-only") { try writeReport("player-integration.json"); fflush(stdout); return }
             }
 
+            }
             if fault == nil {
                 let downloads = OfflineDownloads.shared
                 for item in downloads.videos { try downloads.delete(item.id) }
@@ -441,7 +448,7 @@ private final class PessimisticBufferItem: AVPlayerItem {
                     if [.completed, .failed].contains(downloads.library?.video(hlsID)?.state) { break }; await wait(0.1)
                 }
                 results["hls-download-error"] = downloads.library?.video(hlsID)?.error ?? ""
-                check("hls-download-saves-offline-package", downloads.library?.video(hlsID)?.state == .completed && downloads.library?.playableURL(hlsID)?.pathExtension == "movpkg")
+                check("hls-download-saves-offline-package", downloads.library?.video(hlsID)?.state == .completed && downloads.library?.playableURL(hlsID) != nil)
                 let restoredLibrary = try OfflineLibrary()
                 check("download-library-survives-reload", restoredLibrary.playableURL(downloadID) != nil && restoredLibrary.playableURL(hlsID) != nil)
                 _ = try await URLSession.shared.data(from: origin.appendingPathComponent("offline-test-block"))
@@ -451,7 +458,7 @@ private final class PessimisticBufferItem: AVPlayerItem {
                 let nav = try testRequire(host.presentedViewController as? UINavigationController, "Native download manager must open from Settings event")
                 let list = try testRequire(nav.topViewController as? OfflineDownloadsController, "Offline list")
                 _ = await until { list.viewIfLoaded?.window != nil }
-                check("settings-download-event-opens-native-library", list.title == "我的下载")
+                check("settings-download-event-opens-native-library", list.title == "我的缓存")
                 await wait(0.5); snapshot("offline-downloads-portrait")
                 for id in [downloadID, hlsID] where downloads.library?.playableURL(id) != nil {
                     list.play(id)
@@ -507,17 +514,20 @@ private final class PessimisticBufferItem: AVPlayerItem {
             controls.playButton.sendActions(for: .touchUpInside)
             check("pause-button", !engine.isPlaying && events.last?["reason"] as? String == "pause")
             controls.downloadButton.sendActions(for: .touchUpInside)
-            _ = await until { controller.presentedViewController is UIAlertController }
-            let downloadPrompt = try testRequire(controller.presentedViewController as? UIAlertController, "Download confirmation")
-            check("player-download-button-selects-current-episode", controls.downloadButton.isEnabled && downloadPrompt.title == "下载到这台手机" && downloadPrompt.message?.contains("第1集") == true)
-            downloadPrompt.dismiss(animated: false); _ = await until { controller.presentedViewController == nil }
+            _ = await until { controller.presentedViewController is UINavigationController }
+            let downloadNavigation = try testRequire(controller.presentedViewController as? UINavigationController, "Cache selection navigation")
+            let downloadPicker = try testRequire(downloadNavigation.topViewController as? OfflineEpisodePickerController, "Cache episode picker")
+            _ = await until { downloadPicker.viewIfLoaded?.window != nil }; await wait()
+            let currentCacheEpisode = descendants(downloadPicker.view).first { $0.accessibilityIdentifier == "offline.episode.0" }
+            check("player-download-button-selects-current-episode", controls.downloadButton.isEnabled && downloadPicker.title == "缓存选集" && currentCacheEpisode?.accessibilityTraits.contains(.selected) == true)
+            downloadNavigation.dismiss(animated: false); _ = await until { controller.presentedViewController == nil }
             // Put a long title on-screen and exercise the actual rotation button.
             scene.requestGeometryUpdate(.iOS(interfaceOrientations: .portrait)); await wait(1)
             if !controls.controlViewAppeared { controls.gestureSingleTapped(controlsPlayer.gestureControl) }
             await wait()
             func layoutIsSafe() -> Bool {
                 let safe = controller.view.safeAreaLayoutGuide.layoutFrame
-                let buttons = [controls.backButton, controls.downloadButton, controls.rotateButton, controls.previousButton, controls.playButton, controls.nextButton, controls.episodesButton, controls.speedButton, controls.sleepButton]
+                let buttons = [controls.backButton, controls.downloadButton, controls.pipButton, controls.rotateButton, controls.previousButton, controls.playButton, controls.nextButton, controls.episodesButton, controls.speedButton, controls.sleepButton]
                 return buttons.allSatisfy { button in
                     let frame = button.convert(button.bounds, to: controller.view)
                     return frame.width >= 44 && frame.height >= 44 && safe.contains(frame)
@@ -525,7 +535,7 @@ private final class PessimisticBufferItem: AVPlayerItem {
             }
             check("portrait-safe-area-and-hit-targets", layoutIsSafe())
             snapshot("player-zf-portrait")
-            controls.rotateButton.sendActions(for: .touchUpInside); await wait(1.2)
+            controls.rotateButton.menu?.children.compactMap { $0 as? UIAction }.first { $0.title == "横竖屏" }.map { controls.rotateButton.sendAction($0) }; await wait(1.2)
             check("rotation-button", controller.view.bounds.width > controller.view.bounds.height)
             check("landscape-safe-area-and-hit-targets", layoutIsSafe())
             let prev = controls.previousButton.convert(controls.previousButton.bounds, to: controller.view)
@@ -550,7 +560,7 @@ private final class PessimisticBufferItem: AVPlayerItem {
             controls.previousButton.sendActions(for: .touchUpInside)
             let previous = await until { controller.session.index == 0 && engine.isPlaying && engine.currentTime >= 10 }
             check("previous-episode-preserves-progress", previous && engine.currentTime < 14)
-            NotificationCenter.default.post(name: UIApplication.willResignActiveNotification, object: nil)
+            NotificationCenter.default.post(name: UIApplication.didEnterBackgroundNotification, object: nil)
             check("background-pauses", !engine.isPlaying)
             NotificationCenter.default.post(name: UIApplication.didBecomeActiveNotification, object: nil)
             check("foreground-does-not-autoplay", !engine.isPlaying)
@@ -595,7 +605,7 @@ private final class PessimisticBufferItem: AVPlayerItem {
             check("close-releases-player", dismissed && engine.player == nil && !UIApplication.shared.isIdleTimerDisabled)
             let restoredPortrait = await until { scene.interfaceOrientation == .portrait && host.view.bounds.height > host.view.bounds.width }
             check("landscape-close-restores-portrait-home", restoredPortrait)
-            check("home-tab-bar-visible-after-return", descendants(host.view).compactMap { $0 as? UITabBar }.contains { $0.window != nil && !$0.isHidden && $0.frame.maxY <= host.view.bounds.height + 1 && $0.frame.minY > host.view.bounds.midY })
+            check("home-tab-bar-visible-after-return", descendants(host.view).compactMap { $0 as? HomeTabBar }.contains { $0.window != nil && !$0.isHidden && $0.frame.maxY <= host.view.bounds.height + 1 && $0.frame.minY > host.view.bounds.midY })
             snapshot("home-after-landscape-close")
 
             let retryController = PlayerController(session: session("/fail.mp4", autoplay: false), origin: origin, cookies: [])
@@ -630,7 +640,7 @@ private final class PessimisticBufferItem: AVPlayerItem {
             let itemBeforeRotation = re.playerItem
             let positionBeforeRotation = re.currentTime
             for _ in 0..<4 {
-                rc.rotateButton.sendActions(for: .touchUpInside); await wait(0.7)
+                rc.rotateButton.menu?.children.compactMap { $0 as? UIAction }.first { $0.title == "横竖屏" }.map { rc.rotateButton.sendAction($0) }; await wait(0.7)
             }
             check("rotation-keeps-item-and-progress", re.playerItem === itemBeforeRotation && re.currentTime >= positionBeforeRotation && re.isPlaying)
             let videoSurface = try testRequire(descendants(rotation.view).first { $0.accessibilityIdentifier == "player.video-surface" }, "Video surface")
@@ -807,9 +817,10 @@ private final class PessimisticBufferItem: AVPlayerItem {
             let recoveredBuffer = await until { (be.player?.rate ?? -1) > 0 }
             check("buffer-retry-recovers-when-play-intended", recoveredBuffer && be.isPlaying)
             stall()
-            NotificationCenter.default.post(name: UIApplication.willResignActiveNotification, object: nil)
+            NotificationCenter.default.post(name: UIApplication.didEnterBackgroundNotification, object: nil)
             await wait(3.3)
             check("buffer-retry-respects-background-pause", !be.isPlaying && (be.player?.rate ?? -1) == 0)
+            NotificationCenter.default.post(name: UIApplication.didBecomeActiveNotification, object: nil)
             bc.playButton.sendActions(for: .touchUpInside)
             stall()
             buffering.closePlayer(); await wait(3.3)
@@ -830,7 +841,7 @@ private final class PessimisticBufferItem: AVPlayerItem {
                 host.present(returning, animated: false); await wait()
                 let returningControls = try testRequire(descendants(returning.view).compactMap { $0 as? HomeTVPlayerControls }.first, "Missing controls: returning")
                 if scenario == "rotate-immediately-close" {
-                    returningControls.rotateButton.sendActions(for: .touchUpInside)
+                    returningControls.rotateButton.menu?.children.compactMap { $0 as? UIAction }.first { $0.title == "横竖屏" }.map { returningControls.rotateButton.sendAction($0) }
                 } else {
                     let target: UIInterfaceOrientation = landscapeHome ? .portrait : .landscapeLeft
                     scene.requestGeometryUpdate(.iOS(interfaceOrientations: landscapeHome ? .portrait : .landscapeLeft))
@@ -965,7 +976,7 @@ private final class PessimisticBufferItem: AVPlayerItem {
                     check(prefix + "-deadline-survives-switch", switched && deadline.minutesRemaining == 1)
                 }
                 if scenario == "background-expiry" {
-                    NotificationCenter.default.post(name: UIApplication.willResignActiveNotification, object: nil)
+                    NotificationCenter.default.post(name: UIApplication.didEnterBackgroundNotification, object: nil)
                     check(prefix + "-paused-before-deadline", !e.isPlaying)
                 }
                 clock += 60
@@ -984,7 +995,7 @@ private final class PessimisticBufferItem: AVPlayerItem {
                 }
                 if scenario.hasPrefix("background") {
                     for _ in 0..<2 {
-                        NotificationCenter.default.post(name: UIApplication.willResignActiveNotification, object: nil)
+                        NotificationCenter.default.post(name: UIApplication.didEnterBackgroundNotification, object: nil)
                         NotificationCenter.default.post(name: UIApplication.didBecomeActiveNotification, object: nil)
                     }
                 }

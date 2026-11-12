@@ -1,7 +1,9 @@
 import UIKit
 import AVFoundation
+import AVKit
+import MediaPlayer
 
-final class PlayerController: UIViewController {
+final class PlayerController: UIViewController, AVPictureInPictureControllerDelegate {
     var session: PlaybackSession
     let origin: URL
     let cookies: [HTTPCookie]
@@ -22,6 +24,17 @@ final class PlayerController: UIViewController {
     private var episodePicker: EpisodePickerController?
     private var returnOrientation: UIInterfaceOrientationMask?
     private let playbackPosition: PlaybackPosition
+    private var pip: AVPictureInPictureController?
+    private var pipObservation: NSKeyValueObservation?
+    private var playbackRateObservation: NSKeyValueObservation?
+    private var restoringPiP = false, startingPiP = false
+    private var minimized = false, appInBackground = false
+    private var audioInterrupted = false, resumeAfterInterruption = false
+    private var remoteTargets: [(MPRemoteCommand, Any)] = []
+    var hasStopped: Bool { closed }
+    var isPlaybackRunning: Bool { !closed && !sleeping && !userPaused && !audioInterrupted && engine.isPlaying }
+    var isPictureInPictureActive: Bool { pip?.isPictureInPictureActive == true }
+
 
     init(session: PlaybackSession, origin: URL, cookies: [HTTPCookie], sleepTimer: SleepTimer = SleepTimer()) {
         self.sleepTimer = sleepTimer
@@ -29,7 +42,7 @@ final class PlayerController: UIViewController {
         super.init(nibName: nil, bundle: nil)
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
-    override var prefersStatusBarHidden: Bool { true }
+    override var prefersStatusBarHidden: Bool { !minimized }
     override var prefersHomeIndicatorAutoHidden: Bool { true }
     override var supportedInterfaceOrientations: UIInterfaceOrientationMask { .allButUpsideDown }
     override func viewWillAppear(_ animated: Bool) {
@@ -60,7 +73,7 @@ final class PlayerController: UIViewController {
         }
         engine.canPlay = { [weak self] in
             guard let self, !self.closed, !self.sleeping else { return false }
-            return !self.checkDeadline() && !self.userPaused && !self.playbackPosition.isRestoring
+            return !self.checkDeadline() && !self.userPaused && !self.audioInterrupted && !self.playbackPosition.isRestoring && !(self.appInBackground && BackgroundPlaybackMode.current == .pause)
         }
         player = ZFPlayerController(playerManager: engine, containerView: surface)
         player.controlView = controls
@@ -86,8 +99,14 @@ final class PlayerController: UIViewController {
             return { [weak self] in self?.playbackPosition.finishSeek(id) }
         }
         controls.downloadButton.addTarget(self, action: #selector(downloadEpisode), for: .touchUpInside)
-        controls.backButton.addTarget(self, action: #selector(closePlayer), for: .touchUpInside)
-        controls.rotateButton.addTarget(self, action: #selector(rotate), for: .touchUpInside)
+        controls.backButton.addTarget(self, action: #selector(minimizePlayer), for: .touchUpInside)
+        controls.pipButton.addTarget(self, action: #selector(startPictureInPicture), for: .touchUpInside)
+        controls.rotateButton.showsMenuAsPrimaryAction = true
+        controls.rotateButton.menu = UIMenu(children: [
+            UIAction(title: "横竖屏", image: UIImage(systemName: "rotate.right")) { [weak self] _ in self?.rotate() },
+            UIAction(title: "后台播放", image: UIImage(systemName: "play.rectangle.on.rectangle")) { [weak self] _ in self?.showBackgroundSettings() },
+            UIAction(title: "停止播放", image: UIImage(systemName: "stop.fill"), attributes: .destructive) { [weak self] _ in self?.closePlayer() }
+        ])
         controls.previousButton.addTarget(self, action: #selector(previous), for: .touchUpInside)
         controls.playButton.addTarget(self, action: #selector(toggle), for: .touchUpInside)
         controls.nextButton.addTarget(self, action: #selector(nextEpisode), for: .touchUpInside)
@@ -109,13 +128,15 @@ final class PlayerController: UIViewController {
         controls.failBtn.setTitle("重试播放", for: .normal)
         player.playerPlayStateChanged = { [weak self] _, _ in
             guard let self, !self.closed else { return }
-            self.controls.updatePlaying(self.engine.isPlaying)
+            self.updateTime()
         }
         player.playerLoadStateChanged = { [weak self] _, _ in self?.engine.trace("buffer-state") }
-        NotificationCenter.default.addObserver(self, selector: #selector(background), name: UIApplication.willResignActiveNotification, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(background), name: UIApplication.didEnterBackgroundNotification, object: nil)
         NotificationCenter.default.addObserver(self, selector: #selector(foreground), name: UIApplication.didBecomeActiveNotification, object: nil)
         NotificationCenter.default.addObserver(self, selector: #selector(audioInterruption), name: AVAudioSession.interruptionNotification, object: nil)
         NotificationCenter.default.addObserver(self, selector: #selector(audioRouteChanged), name: AVAudioSession.routeChangeNotification, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(applyBackgroundMode), name: .backgroundPlaybackChanged, object: nil)
+        installRemoteControls()
         load(session.index)
     }
     override func viewDidLayoutSubviews() {
@@ -130,7 +151,7 @@ final class PlayerController: UIViewController {
     private func startPlaybackWork() {
         try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .moviePlayback)
         try? AVAudioSession.sharedInstance().setActive(true)
-        UIApplication.shared.isIdleTimerDisabled = true
+        UIApplication.shared.isIdleTimerDisabled = !minimized && !appInBackground
         player.pauseWhenAppResignActive = false
         guard tick == nil else { return }
         let timer = Timer(timeInterval: 1, repeats: true) { [weak self] _ in
@@ -146,6 +167,8 @@ final class PlayerController: UIViewController {
         guard !closed, session.episodes.indices.contains(index), !checkDeadline() else { return }
         resolveTask?.cancel(); generation = UUID(); let token = generation
         player.playerReadyToPlay = nil; player.playerPlayFailed = nil; player.playerDidToEnd = nil
+        pipObservation = nil; pip?.delegate = nil; pip?.stopPictureInPicture(); pip = nil
+        playbackRateObservation = nil
         engine.stop()
         session.index = index; userPaused = false; sleeping = false; finished = false; proxied = false
         earlyEndRetried = false; playbackInterrupted = false
@@ -186,28 +209,35 @@ final class PlayerController: UIViewController {
         }
     }
     @objc private func downloadEpisode() {
-        guard let url = engine.assetURL ?? resolvedURL, !url.isFileURL else { return }
-        let title = session.title + (session.episodes.count > 1 ? " 第\(session.index + 1)集" : "")
-        let prompt = UIAlertController(title: "下载到这台手机", message: "\(title)\n下载会占用手机空间并可能使用蜂窝流量。完成后可离线观看，在「设置 → 下载管理」中删除。", preferredStyle: .alert)
-        prompt.addAction(UIAlertAction(title: "取消", style: .cancel))
-        prompt.addAction(UIAlertAction(title: "下载", style: .default) { [weak self, weak prompt] _ in
-            guard let self, let prompt else { return }
+        guard !closed, !session.episodes.isEmpty, URL(string: session.episodes[session.index].url)?.isFileURL != true else { return }
+        if session.episodes.count == 1, let url = URL(string: session.episodes[0].url) {
             do {
-                try OfflineDownloads.shared.enqueue(url: url, title: title, origin: self.origin, cookies: self.cookies)
-                let notice = UIAlertController(title: "已加入手机下载", message: "可继续观看，下载进度请在「设置 → 下载管理」查看。", preferredStyle: .alert)
-                notice.addAction(UIAlertAction(title: "好", style: .default))
-                prompt.dismiss(animated: true) { self.present(notice, animated: true) }
-            } catch {
-                let alert = UIAlertController(title: "无法下载", message: error.localizedDescription, preferredStyle: .alert)
-                alert.addAction(UIAlertAction(title: "好", style: .default))
-                prompt.dismiss(animated: true) { self.present(alert, animated: true) }
-            }
-        })
-        present(prompt, animated: true)
+                let group = OfflineIdentity.group(origin: origin, source: session.sourceKey, video: session.vodId)
+                try OfflineDownloads.shared.enqueue(url: url, title: session.title, origin: origin, cookies: cookies, identity: OfflineIdentity.episode(group: group, index: 0), groupID: group, groupTitle: session.title, episodeTitle: "电影")
+                showCacheNotice(1)
+            } catch { controls.message.text = error.localizedDescription }
+            return
+        }
+        let picker = OfflineEpisodePickerController(session: session, origin: origin)
+        picker.onAdded = { [weak self] count in self?.showCacheNotice(count) }
+        let navigation = UINavigationController(rootViewController: picker)
+        navigation.modalPresentationStyle = .pageSheet
+        navigation.sheetPresentationController?.detents = [.large()]
+        present(navigation, animated: true)
+    }
+    private func showCacheNotice(_ count: Int) {
+        guard !closed else { return }
+        controls.message.text = "已加入 \(count) 项缓存，可继续添加其他影片"
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self] in
+            if self?.controls.message.text?.hasPrefix("已加入") == true { self?.controls.message.text = "" }
+        }
     }
     private var restoreAttempt = UUID()
     private var attachmentID = UUID()
     private func attach(_ url: URL, token: UUID) {
+        // Retries can replace the underlying player without going through load().
+        pipObservation = nil; pip?.delegate = nil; pip?.stopPictureInPicture(); pip = nil
+        playbackRateObservation = nil; startingPiP = false; restoringPiP = false
         restoreAttempt = UUID()
         let attempt = restoreAttempt
         attachmentID = UUID()
@@ -218,6 +248,9 @@ final class PlayerController: UIViewController {
         player.playerReadyToPlay = { [weak self] _, assetURL in
             guard let self, self.generation == token, self.attachmentID == attachment, assetURL == url, !self.closed else { return }
             self.controls.message.text = ""
+            // A user seek can cancel the initial resume completion; PiP setup
+            // must not depend on that completion succeeding.
+            self.configurePictureInPicture()
             let item = self.engine.playerItem
             let duration = item?.duration.seconds ?? 0
             let start = restorePosition.isFinite && restorePosition > 0 && duration.isFinite && restorePosition < duration - 2 ? restorePosition : 0
@@ -226,7 +259,8 @@ final class PlayerController: UIViewController {
                     guard let self, completed, self.restoreAttempt == attempt, self.generation == token, self.engine.playerItem === item, !self.closed else { return }
                     self.engine.trace("restore-completed")
                     self.playbackPosition.didRestore()
-                    if !self.checkDeadline() && !self.userPaused && !self.sleeping { self.engine.rate = self.session.rate; self.engine.play() }
+                    if !self.checkDeadline() && !self.userPaused && !self.sleeping && !self.audioInterrupted { self.engine.rate = self.session.rate; self.engine.play() }
+                    self.updateTime()
                 }
             }
         }
@@ -277,13 +311,28 @@ final class PlayerController: UIViewController {
         }
         engine.rate = session.rate
         player.assetURL = url
+        engine.player?.audiovisualBackgroundPlaybackPolicy = BackgroundPlaybackMode.current == .pause ? .pauses : .continuesIfPossible
+        // HomeTV owns lifecycle and interruptions. ZFPlayer's default callbacks
+        // would reactivate audio on resign-active and resume after route changes.
+        player.notification?.willResignActive = { _ in }
+        player.notification?.didBecomeActive = { _ in }
+        player.notification?.oldDeviceUnavailable = { _ in }
+        playbackRateObservation = engine.player?.observe(\.rate, options: [.new]) { [weak self] observed, _ in
+            DispatchQueue.main.async {
+                guard let self, !self.closed, self.engine.player === observed, self.isPictureInPictureActive, !self.restoringPiP else { return }
+                if self.sleeping || self.audioInterrupted { if observed.rate != 0 { self.engine.pause() }; return }
+                guard !self.playbackPosition.hasPendingSeek, !self.playbackPosition.isRestoring else { return }
+                if observed.rate == 0 && self.engine.isPlaying { self.pausePlayback() }
+                else if observed.rate > 0 && !self.engine.isPlaying { self.userPaused = false; self.engine.rate = self.session.rate; self.engine.play(); self.updateTime() }
+            }
+        }
         controls.downloadButton.isEnabled = !url.isFileURL
         controls.showTitle(controls.heading.text ?? session.title, cover: nil, fullScreenMode: .landscape)
     }
     private func handlePrematureEnd(url: URL, token: UUID) {
         engine.trace("end-premature")
         // A late notification must never override a user's pause or background.
-        guard !userPaused, !sleeping, !closed else { return }
+        guard !userPaused, !sleeping, !closed, !audioInterrupted else { return }
         playbackPosition.prepareRetry(currentPosition: position)
         engine.pause(); emit("interrupted")
         if !earlyEndRetried, !url.isFileURL {
@@ -326,6 +375,7 @@ final class PlayerController: UIViewController {
         player.playerReadyToPlay = nil; player.playerPlayFailed = nil; player.playerDidToEnd = nil
         // Prevent ZFPlayer from reactivating audio when auto-lock resigns active.
         player.pauseWhenAppResignActive = true
+        restoringPiP = false; pip?.stopPictureInPicture()
         engine.stop()
         controls.downloadButton.isEnabled = false
         controls.failBtn.isHidden = true
@@ -340,17 +390,17 @@ final class PlayerController: UIViewController {
         controls.speedButton.setTitle("\(session.rate)×", for: .normal)
         controls.sleepButton.tintColor = sleepTimer.minutesRemaining == nil ? .white : .systemYellow
         controls.sleepButton.accessibilityLabel = sleepTimer.minutesRemaining.map { "定时停止，剩余 \($0) 分钟" } ?? "定时停止"
+        if !closed {
+            updateNowPlaying()
+            PlaybackCoordinator.shared.updateMini()
+            UIApplication.shared.isIdleTimerDisabled = !minimized && !appInBackground && !sleeping && !userPaused && !audioInterrupted
+        }
     }
     @objc private func toggle() {
         engine.trace("toggle-request")
         guard !closed, !checkDeadline() else { return }
-        if sleeping { load(session.index); return }
-        if playbackInterrupted { retry(); return }
-        if !engine.isPlaying || finished {
-            userPaused = false; sleeping = false; controls.message.text = ""
-            if finished { finished = false; engine.replay() }
-            else if !playbackPosition.isRestoring { engine.rate = session.rate; engine.play() }
-        } else { userPaused = true; engine.pause(); emit("pause") }
+        if !engine.isPlaying || finished || sleeping || playbackInterrupted { playFromControl() }
+        else { pausePlayback() }
     }
     @objc private func retry() {
         engine.trace("retry-request")
@@ -362,43 +412,204 @@ final class PlayerController: UIViewController {
     @objc private func nextEpisode() { selectEpisode(session.index + 1) }
     private func selectEpisode(_ index: Int) { guard session.episodes.indices.contains(index), index != session.index else { return }; emit("pause"); load(index) }
     @objc private func background() {
-        engine.trace("app-resign-active")
-        guard !closed, !sleeping else { return }
-        userPaused = true
-        engine.pause()
-        emit("pause")
+        engine.trace("app-enter-background"); appInBackground = true
+        UIApplication.shared.isIdleTimerDisabled = false
+        guard !closed, !sleeping, !checkDeadline() else { return }
+        if BackgroundPlaybackMode.current == .pause { pausePlayback() }
+        else {
+            emit("progress")
+            // Automatic PiP is initiated by AVKit during the user's app switch.
+            // Once that transition settles, detach the screen layer for audio-only playback.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) { [weak self] in self?.updateBackgroundLayer() }
+        }
     }
-    @objc private func foreground() { engine.trace("app-become-active"); _ = checkDeadline(); updateTime() }
+    @objc private func foreground() {
+        engine.trace("app-become-active"); appInBackground = false
+        guard !closed else { return }
+        engine.avPlayerLayer?.player = engine.player
+        _ = checkDeadline(); updateTime()
+    }
+    private func updateBackgroundLayer() {
+        guard !closed, appInBackground, !isPictureInPictureActive, !startingPiP, BackgroundPlaybackMode.current != .pause else { return }
+        engine.avPlayerLayer?.player = nil
+    }
     @objc private func audioInterruption(_ notification: Notification) {
-        let type = (notification.userInfo?[AVAudioSessionInterruptionTypeKey] as? NSNumber)?.intValue ?? -1
-        DispatchQueue.main.async { [weak self] in self?.engine.trace("audio-interruption type=\(type)") }
+        guard let raw = (notification.userInfo?[AVAudioSessionInterruptionTypeKey] as? NSNumber)?.uintValue,
+              let type = AVAudioSession.InterruptionType(rawValue: raw), !closed else { return }
+        if type == .began {
+            resumeAfterInterruption = !userPaused && !sleeping && !finished
+            audioInterrupted = true; engine.pause(); emit("pause"); updateTime()
+        } else {
+            let options = AVAudioSession.InterruptionOptions(rawValue: (notification.userInfo?[AVAudioSessionInterruptionOptionKey] as? NSNumber)?.uintValue ?? 0)
+            let resume = resumeAfterInterruption && options.contains(.shouldResume)
+            audioInterrupted = false; resumeAfterInterruption = false
+            if resume && !userPaused && !sleeping && !checkDeadline() { playFromControl() }
+            else { userPaused = true; updateTime() }
+        }
     }
     @objc private func audioRouteChanged(_ notification: Notification) {
-        let reason = (notification.userInfo?[AVAudioSessionRouteChangeReasonKey] as? NSNumber)?.intValue ?? -1
-        DispatchQueue.main.async { [weak self] in self?.engine.trace("audio-route-change reason=\(reason)") }
+        let reason = (notification.userInfo?[AVAudioSessionRouteChangeReasonKey] as? NSNumber)?.uintValue
+        if reason == AVAudioSession.RouteChangeReason.oldDeviceUnavailable.rawValue { pausePlayback() }
+    }
+    @objc private func applyBackgroundMode() {
+        guard !closed else { return }
+        engine.player?.audiovisualBackgroundPlaybackPolicy = BackgroundPlaybackMode.current == .pause ? .pauses : .continuesIfPossible
+        pip?.canStartPictureInPictureAutomaticallyFromInline = BackgroundPlaybackMode.current == .pictureInPicture
+        if appInBackground && BackgroundPlaybackMode.current == .pause { pausePlayback() }
+        updateTime()
+    }
+    func persistPlaybackProgress() { if !closed { emit("progress") } }
+    func rebindWebSession(_ incoming: PlaybackSession) {
+        persistPlaybackProgress()
+        // Keep the active episode catalog paired with its per-episode position tracker.
+        var next = incoming; next.episodes = session.episodes
+        next.rate = session.rate; next.autoplayNext = session.autoplayNext
+        session = next; emit("progress")
+    }
+    func togglePlayback() { toggle(); updateTime() }
+    func pausePlayback() {
+        guard !closed else { return }
+        userPaused = true; resumeAfterInterruption = false; engine.pause(); emit("pause"); updateTime()
+    }
+    private func playFromControl() {
+        guard !closed, !audioInterrupted, !checkDeadline() else { return }
+        if appInBackground && BackgroundPlaybackMode.current == .pause { return }
+        try? AVAudioSession.sharedInstance().setActive(true)
+        if sleeping || playbackInterrupted { retry(); return }
+        userPaused = false
+        if finished { finished = false; engine.replay() }
+        else if !playbackPosition.isRestoring { engine.rate = session.rate; engine.play() }
+        updateTime()
+    }
+    func setMinimized(_ value: Bool) {
+        if value && !minimized { emit("close") } // Existing web UI treats this as full-screen dismissal.
+        minimized = value; controls.isHidden = value; view.isUserInteractionEnabled = !value
+        dismissEpisodes(); controls.isHidden = value; updateTime()
+    }
+    @objc func minimizePlayer() {
+        guard !closed else { return }
+        if PlaybackCoordinator.shared.current === self { PlaybackCoordinator.shared.minimize(self) }
+        else { closePlayer() }
+    }
+    func dismissTransientPanels() {
+        dismissEpisodes()
+        if presentedViewController != nil { dismiss(animated: false) }
+    }
+    func restorePageOrientation(in scene: UIWindowScene?, presenter: UIViewController?) {
+        presenter?.setNeedsUpdateOfSupportedInterfaceOrientations()
+        scene?.requestGeometryUpdate(.iOS(interfaceOrientations: returnOrientation ?? .portrait))
+    }
+    @objc private func showBackgroundSettings() {
+        present(UINavigationController(rootViewController: BackgroundPlaybackSettingsController()), animated: true)
+    }
+    private func configurePictureInPicture() {
+        guard !closed, AVPictureInPictureController.isPictureInPictureSupported(), let layer = engine.avPlayerLayer else { return }
+        pipObservation = nil; pip?.delegate = nil
+        pip = AVPictureInPictureController(playerLayer: layer)
+        pip?.delegate = self
+        pip?.canStartPictureInPictureAutomaticallyFromInline = BackgroundPlaybackMode.current == .pictureInPicture
+        pipObservation = pip?.observe(\.isPictureInPicturePossible, options: [.initial, .new]) { [weak self] _, _ in
+            DispatchQueue.main.async { self?.controls.pipButton.accessibilityHint = self?.pip?.isPictureInPicturePossible == true ? "系统画中画" : "App 内小窗" }
+        }
+        updateBackgroundLayer()
+    }
+    @objc private func startPictureInPicture() {
+        guard !closed else { return }
+        if pip?.isPictureInPicturePossible == true { pip?.startPictureInPicture() }
+        else { minimizePlayer() }
+    }
+    func pictureInPictureControllerWillStartPictureInPicture(_ pictureInPictureController: AVPictureInPictureController) {
+        guard pictureInPictureController === pip, !closed else { return }; startingPiP = true
+    }
+    func pictureInPictureControllerDidStartPictureInPicture(_ pictureInPictureController: AVPictureInPictureController) {
+        guard pictureInPictureController === pip, !closed else { return }
+        startingPiP = false
+        if PlaybackCoordinator.shared.current === self { PlaybackCoordinator.shared.minimize(self) }
+    }
+    func pictureInPictureController(_ pictureInPictureController: AVPictureInPictureController, failedToStartPictureInPictureWithError error: Error) {
+        guard pictureInPictureController === pip, !closed else { return }
+        startingPiP = false; updateBackgroundLayer()
+        if !appInBackground { controls.message.text = "系统小窗暂不可用，可返回页面使用小窗" }
+    }
+    func pictureInPictureController(_ pictureInPictureController: AVPictureInPictureController, restoreUserInterfaceForPictureInPictureStopWithCompletionHandler completionHandler: @escaping (Bool) -> Void) {
+        guard pictureInPictureController === pip, !closed else { completionHandler(false); return }
+        restoringPiP = true
+        if PlaybackCoordinator.shared.current === self {
+            PlaybackCoordinator.shared.expand(self) { [weak self] restored in
+                if let self, restored, !self.userPaused, !self.sleeping, !self.audioInterrupted { self.playFromControl() }
+                completionHandler(restored)
+            }
+        } else { completionHandler(presentingViewController != nil) }
+    }
+    func pictureInPictureControllerDidStopPictureInPicture(_ pictureInPictureController: AVPictureInPictureController) {
+        guard pictureInPictureController === pip, !closed else { return }
+        startingPiP = false
+        let restore = restoringPiP; restoringPiP = false
+        if restore || sleeping { updateBackgroundLayer(); PlaybackCoordinator.shared.updateMini() }
+        else { closePlayer() }
+    }
+    private func installRemoteControls() {
+        let center = MPRemoteCommandCenter.shared()
+        func bind(_ command: MPRemoteCommand, _ action: @escaping (PlayerController, MPRemoteCommandEvent) -> Void) {
+            command.isEnabled = true
+            let target = command.addTarget { [weak self] event in
+                DispatchQueue.main.async { if let self, !self.closed { action(self, event) } }
+                return .success
+            }
+            remoteTargets.append((command, target))
+        }
+        bind(center.playCommand) { player, _ in player.playFromControl() }
+        bind(center.pauseCommand) { player, _ in player.pausePlayback() }
+        bind(center.togglePlayPauseCommand) { player, _ in player.togglePlayback() }
+        bind(center.skipForwardCommand) { player, _ in player.remoteSeek(player.position + 15) }
+        bind(center.skipBackwardCommand) { player, _ in player.remoteSeek(player.position - 15) }
+        bind(center.changePlaybackPositionCommand) { player, event in
+            if let event = event as? MPChangePlaybackPositionCommandEvent { player.remoteSeek(event.positionTime) }
+        }
+        bind(center.stopCommand) { player, _ in player.closePlayer() }
+        center.skipForwardCommand.preferredIntervals = [15]; center.skipBackwardCommand.preferredIntervals = [15]
+        center.nextTrackCommand.isEnabled = false; center.previousTrackCommand.isEnabled = false
+    }
+    private func remoteSeek(_ time: Double) {
+        guard !closed, !sleeping, !checkDeadline(), duration > 0, time.isFinite else { return }
+        finished = false
+        if playbackPosition.isRestoring { restoreAttempt = UUID(); playbackPosition.didRestore(); engine.playerItem?.cancelPendingSeeks() }
+        engine.seek(toTime: min(max(0, time), max(0, duration - 0.1))) { [weak self] _ in self?.emit("progress"); self?.updateTime() }
+    }
+    private func updateNowPlaying() {
+        MPNowPlayingInfoCenter.default().nowPlayingInfo = [
+            MPMediaItemPropertyTitle: session.title,
+            MPMediaItemPropertyAlbumTitle: session.episodes[session.index].title,
+            MPMediaItemPropertyPlaybackDuration: duration,
+            MPNowPlayingInfoPropertyElapsedPlaybackTime: position,
+            MPNowPlayingInfoPropertyPlaybackRate: isPlaybackRunning ? session.rate : 0,
+            MPNowPlayingInfoPropertyDefaultPlaybackRate: session.rate
+        ]
+        MPRemoteCommandCenter.shared().changePlaybackPositionCommand.isEnabled = duration > 0 && !sleeping
     }
     @objc private func rotate() {
         guard let scene = view.window?.windowScene else { return }
         let landscape = view.bounds.width > view.bounds.height
         scene.requestGeometryUpdate(.iOS(interfaceOrientations: landscape ? .portrait : .landscapeRight))
     }
+    /// Explicit stop remains separate from returning to the browser/minimizing.
     @objc func closePlayer() {
-        engine.trace("close-request")
-        guard !closed else { return }; emit("close"); closed = true; resolveTask?.cancel(); tick?.invalidate(); player.stop()
-        UIApplication.shared.isIdleTimerDisabled = false; try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
-        let scene = view.window?.windowScene
-        let presenter = presentingViewController
-        let orientation = returnOrientation ?? .portrait
-        let onClose = onClose
-        dismissEpisodes()
-        // Restore only once the underlying page is visible.
-        let finish = {
-            presenter?.setNeedsUpdateOfSupportedInterfaceOrientations()
-            scene?.requestGeometryUpdate(.iOS(interfaceOrientations: orientation))
-            onClose?()
-        }
-        if let presenter { presenter.dismiss(animated: true, completion: finish) }
-        else { dismiss(animated: true, completion: finish) }
+        if PlaybackCoordinator.shared.current === self { PlaybackCoordinator.shared.stop(self); return }
+        guard !closed else { return }
+        let presenter = presentingViewController, scene = view.window?.windowScene
+        stopPlayback()
+        dismiss(animated: true) { [weak self, weak presenter] in self?.restorePageOrientation(in: scene, presenter: presenter) }
+    }
+    func stopPlayback() {
+        guard !closed else { return }
+        emit("close"); closed = true; generation = UUID(); resolveTask?.cancel(); tick?.invalidate(); tick = nil
+        playbackRateObservation = nil; pipObservation = nil; pip?.delegate = nil; pip?.stopPictureInPicture(); pip = nil
+        dismissEpisodes(); player?.stop()
+        for (command, target) in remoteTargets { command.removeTarget(target); command.isEnabled = false }
+        remoteTargets.removeAll(); MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
+        UIApplication.shared.isIdleTimerDisabled = false
+        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        onClose?()
     }
     @objc private func episodes() {
         guard !closed, presentedViewController == nil else { return }
@@ -422,7 +633,11 @@ final class PlayerController: UIViewController {
         controls.isHidden = false
         layoutPlaybackRegions()
     }
-    deinit { tick?.invalidate(); resolveTask?.cancel(); NotificationCenter.default.removeObserver(self) }
+    deinit {
+        tick?.invalidate(); resolveTask?.cancel()
+        for (command, target) in remoteTargets { command.removeTarget(target) }
+        NotificationCenter.default.removeObserver(self)
+    }
 }
 
 private final class SameOriginRedirects: NSObject, URLSessionTaskDelegate {
