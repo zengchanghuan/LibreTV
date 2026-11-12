@@ -1,7 +1,7 @@
 import type Artplayer from 'artplayer';
 import { formatTime } from './utils';
 
-/** Preview a drag locally; only the final position should start a media request. */
+/** Keep the timeline on the media clock, except while previewing an active seek. */
 export function bindProgressSeek(art: Artplayer, preview: (time: number | null) => void): () => void {
   const bar = art.template.$progress;
   const doc = bar.ownerDocument;
@@ -25,12 +25,14 @@ export function bindProgressSeek(art: Artplayer, preview: (time: number | null) 
   };
 
   const render = () => {
+    // A seeked event can be missed or superseded. Once the media is no longer
+    // seeking, a remembered target must not overwrite ongoing playback updates.
+    if (pending !== undefined && !art.video.seeking) pending = undefined;
     const time = pointer !== undefined ? target : pending;
-    if (time === undefined) return;
     // The persistent time label previews the target. Hide ArtPlayer's stale
     // mouse-hover tooltip while its continuous-seek handlers are suspended.
-    art.template.$player.classList.remove('art-progress-hover');
-    display(time);
+    if (time !== undefined) art.template.$player.classList.remove('art-progress-hover');
+    display(time ?? null);
   };
   const schedule = () => {
     if (pointer !== undefined && frame === undefined) frame = requestAnimationFrame(() => { frame = undefined; render(); });
@@ -103,6 +105,7 @@ export function bindProgressSeek(art: Artplayer, preview: (time: number | null) 
   const keepControls = (visible: boolean) => {
     if (!visible && pointer !== undefined) art.controls.show = true;
   };
+  const clockEvents = ['video:timeupdate', 'video:progress', 'video:playing', 'video:pause', 'video:loadedmetadata', 'video:durationchange'] as const;
   bar.addEventListener('pointerdown', down, true);
   bar.addEventListener('mousedown', legacyStart, true);
   bar.addEventListener('touchstart', legacyStart, { capture: true, passive: false });
@@ -113,8 +116,7 @@ export function bindProgressSeek(art: Artplayer, preview: (time: number | null) 
   // Capture can be lost just before a physical mouse release. Keep the gesture
   // until document's pointerup; only pointercancel/blur mean it was abandoned.
   doc.defaultView?.addEventListener('blur', cancel);
-  art.on('video:timeupdate', render);
-  art.on('video:progress', render);
+  for (const event of clockEvents) art.on(event, render);
   art.on('video:seeked', settled);
   art.on('video:emptied', reset);
   art.on('video:error', reset);
@@ -132,8 +134,7 @@ export function bindProgressSeek(art: Artplayer, preview: (time: number | null) 
     doc.removeEventListener('pointerup', up, true);
     doc.removeEventListener('pointercancel', cancelPointer, true);
     doc.defaultView?.removeEventListener('blur', cancel);
-    art.off('video:timeupdate', render);
-    art.off('video:progress', render);
+    for (const event of clockEvents) art.off(event, render);
     art.off('video:seeked', settled);
     art.off('video:emptied', reset);
     art.off('video:error', reset);
