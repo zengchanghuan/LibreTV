@@ -1,30 +1,28 @@
-/** Pause on screen lock/backgrounding, including delayed autoplay and recovery. */
+/** Keep background tabs playing; stop media when the document is actually left. */
 export function bindPlaybackVisibility(video: HTMLVideoElement): () => void {
-  let pageHidden = false;
-  const pauseIfHidden = () => {
-    if (pageHidden || document.hidden) video.pause();
+  let pageLeft = false;
+  const pauseIfPageLeft = () => {
+    if (pageLeft) video.pause();
   };
   const pageHide = () => {
-    pageHidden = true;
+    pageLeft = true;
     video.pause();
   };
   const pageShow = () => {
-    pageHidden = false;
-    pauseIfHidden();
-    // Returning to the page must not automatically resume playback.
+    pageLeft = false;
+    // Restoring a document must not resume a manual pause or a sleep timer.
   };
-  document.addEventListener('visibilitychange', pauseIfHidden);
+  // visibilitychange also fires when opening another tab. It must not pause
+  // playback or reject buffering recovery in a still-open background tab.
   window.addEventListener('pagehide', pageHide);
   window.addEventListener('pageshow', pageShow);
-  // Media loading/recovery can call play after the page has already been hidden.
-  video.addEventListener('play', pauseIfHidden);
-  video.addEventListener('playing', pauseIfHidden);
-  pauseIfHidden();
+  // Suppress late autoplay/recovery after navigation or entering the back cache.
+  video.addEventListener('play', pauseIfPageLeft);
+  video.addEventListener('playing', pauseIfPageLeft);
   return () => {
-    document.removeEventListener('visibilitychange', pauseIfHidden);
     window.removeEventListener('pagehide', pageHide);
     window.removeEventListener('pageshow', pageShow);
-    video.removeEventListener('play', pauseIfHidden);
-    video.removeEventListener('playing', pauseIfHidden);
+    video.removeEventListener('play', pauseIfPageLeft);
+    video.removeEventListener('playing', pauseIfPageLeft);
   };
 }
