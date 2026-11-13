@@ -2,7 +2,7 @@ import type Artplayer from 'artplayer';
 import { isPlaybackFullscreen } from './player-fullscreen';
 
 const IDLE_MS = 3000;
-const INTERACTIVE = '.art-controls, .art-progress, .art-settings, .playback-tools-panel';
+const INTERACTIVE = '.art-controls, .art-progress, .art-settings, .playback-tools-panel, .playback-settings-overlay';
 
 /** One visibility policy for mouse entry, fullscreen idle and active controls. */
 export function bindPlaybackControls(art: Artplayer): () => void {
@@ -17,7 +17,7 @@ export function bindPlaybackControls(art: Artplayer): () => void {
   let disposed = false;
   let modeUpdateQueued = false;
   let fullscreen = isPlaybackFullscreen(art);
-  let panelOpen = !!root.querySelector('.playback-tools-panel');
+  let panelOpen = !!root.querySelector('.playback-tools-panel, .playback-settings-overlay');
   const interactive = (target: EventTarget | null) => target instanceof Element
     && root.contains(target) && !!target.closest(INTERACTIVE);
   const rememberPosition = (event: PointerEvent) => {
@@ -119,7 +119,7 @@ export function bindPlaybackControls(art: Artplayer): () => void {
     });
   };
   const panelChanged = () => {
-    const next = !!root.querySelector('.playback-tools-panel');
+    const next = !!root.querySelector('.playback-tools-panel, .playback-settings-overlay');
     if (next !== panelOpen) { panelOpen = next; reveal(); }
   };
   const observer = new MutationObserver(panelChanged);

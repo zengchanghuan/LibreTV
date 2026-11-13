@@ -548,7 +548,7 @@ export function PlayerShell({
     const shortcuts = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement;
       // 输入框或按钮获得焦点时不劫持按键：否则空格会吞掉按钮的默认激活
-      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName) || target.closest('button, .playback-tools-panel')) return;
+      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName) || target.closest('button, .playback-tools-panel, .playback-settings-overlay')) return;
       const current = artRef.current;
       if (!current) return;
       if (e.altKey && e.key === 'ArrowLeft') { e.preventDefault(); return; } // 由父层处理集数切换
@@ -591,7 +591,7 @@ export function PlayerShell({
       // 松手后倍速永久卡在 3x；旧定时器句柄也会被覆盖成无法清除的幽灵触发
       if (isLongPress || longPressTimer) return;
       // 控制栏 / 设置面板上的长按不触发倍速（按住进度条拖动、长按倍速菜单项会误触）
-      if ((e.target as HTMLElement).closest?.('.art-controls, .art-progress, .art-settings, .playback-tools-panel')) return;
+      if ((e.target as HTMLElement).closest?.('.art-controls, .art-progress, .art-settings, .playback-tools-panel, .playback-settings-overlay')) return;
       originalRate = art.video.playbackRate;
       longPressTimer = setTimeout(() => {
         if (art.video?.paused) return;

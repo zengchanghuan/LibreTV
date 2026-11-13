@@ -126,6 +126,36 @@ header.sticky { top: env(safe-area-inset-top, 0px); }
   .art-video-player.art-has-playback-tools .art-controls .art-control-fullscreen { display: none; }
 }
 .playback-tools-panel p { font-size: 11px; line-height: 1.5; color: #b9c5d6; margin-top: 10px; }
+.art-video-player.hometv-vod-player:has(.playback-settings-overlay) .playback-resolution,
+.art-video-player.hometv-vod-player:has(.playback-settings-overlay) .hometv-progress-time,
+.art-video-player.hometv-vod-player[data-hometv-controls]:has(.playback-settings-overlay) .art-bottom { opacity: 0; visibility: hidden; pointer-events: none; transition: none; }
+/* Timer and episodes sit on the video, without an opaque settings card. */
+.playback-settings-overlay { position: absolute; inset: 0; z-index: 110; color: #fff; font-size: 16px; line-height: 1.5; text-align: left; }
+.playback-settings-backdrop { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; background: transparent; cursor: default; }
+.playback-settings-drawer { position: absolute; inset: 0 0 0 auto; display: flex; flex-direction: column; width: min(320px, 75%); padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) 0; background: rgb(0 0 0 / .56); color: #fff; }
+.playback-settings-header { display: flex; flex: 0 0 auto; align-items: center; justify-content: space-between; min-height: 48px; padding: 0 8px 0 24px; color: rgb(255 255 255 / .72); font-size: 13px; }
+.playback-settings-overlay button { font: inherit; color: inherit; border: 0; cursor: pointer; }
+.playback-settings-overlay button:focus-visible { outline: 2px solid #fff; outline-offset: -3px; }
+.playback-settings-close { display: grid; place-items: center; width: 44px; height: 44px; padding: 0; border-radius: 8px; background: transparent; }
+.playback-settings-tabs { display: flex; gap: 16px; }
+.playback-settings-tabs button { position: relative; min-height: 44px; padding: 0 4px; background: transparent; }
+.playback-settings-tabs button[aria-pressed="true"] { color: #fff; }
+.playback-settings-tabs button[aria-pressed="true"]::after { content: ''; position: absolute; height: 2px; left: 4px; right: 4px; bottom: 4px; border-radius: 1px; background: currentColor; }
+.playback-settings-scroll { min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: rgb(255 255 255 / .3) transparent; padding: 0 8px 12px; touch-action: pan-y; }
+.playback-overlay-list { display: flex; flex-direction: column; gap: 2px; }
+.playback-overlay-option { display: flex; flex: 0 0 auto; align-items: center; gap: 12px; width: 100%; min-height: 56px; padding: 10px 16px; border-radius: 8px; background: transparent; text-align: left; }
+.playback-option-check { flex: 0 0 20px; font-size: 21px; line-height: 1; text-align: center; }
+.playback-overlay-option[aria-pressed="true"] { font-weight: 500; }
+.playback-settings-note { margin: 14px 16px 0 48px; font-size: 11px; line-height: 1.6; color: rgb(255 255 255 / .6); }
+@media (hover: hover) {
+  .playback-overlay-option:hover, .playback-settings-close:hover, .playback-settings-tabs button:hover { background: rgb(255 255 255 / .16); }
+}
+.playback-overlay-option:active { background: rgb(255 255 255 / .22); }
+@container (max-width: 640px) {
+  .playback-settings-drawer { width: min(280px, 80%); }
+  .playback-overlay-option { min-height: 44px; padding-top: 7px; padding-bottom: 7px; }
+  .playback-settings-header { min-height: 44px; }
+}
 .playback-timer-status { position: absolute; z-index: 20; top: max(8px, env(safe-area-inset-top)); left: max(8px, env(safe-area-inset-left)); padding: 3px 7px; background: #0009; color: white; border-radius: 5px; font-size: 11px; pointer-events: none; }
 .art-fullscreen-web .art-bottom, .art-fullscreen .art-bottom { padding-bottom: env(safe-area-inset-bottom); padding-left: env(safe-area-inset-left); padding-right: env(safe-area-inset-right); }
 

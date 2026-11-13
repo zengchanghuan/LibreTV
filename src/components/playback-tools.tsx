@@ -7,6 +7,7 @@ import { sleepTimerExpired } from '@/lib/media-support';
 const MIN_RATE = 0.5;
 const MAX_RATE = 3;
 const RATE_STEP = 0.05;
+const TIMER_MINUTES = [0, 15, 30, 45, 60, 90, 120];
 const QUICK_RATES = [1, 1.25, 1.5, 2, 3];
 const normalizeRate = (value: number) => Math.round(Math.min(MAX_RATE, Math.max(MIN_RATE, value)) * 20) / 20;
 
@@ -19,6 +20,7 @@ export function PlaybackTools({ player, count, index, onEpisode, onSleep }: {
   onSleep: () => void;
 }) {
   const [panel, setPanel] = useState<'speed' | 'settings' | null>(null);
+  const [settingsTab, setSettingsTab] = useState<'episodes' | 'timer'>('timer');
   const [rate, setRate] = useState(1);
   const [minutes, setMinutes] = useState(0);
   const [remaining, setRemaining] = useState('');
@@ -29,6 +31,7 @@ export function PlaybackTools({ player, count, index, onEpisode, onSleep }: {
   const gearButton = useRef<HTMLElement | null>(null);
   const settingsButton = useRef<HTMLButtonElement | null>(null);
   const panelElement = useRef<HTMLDivElement | null>(null);
+  const restoreFocus = useRef<HTMLElement | null>(null);
   const panelId = useId();
   sleep.current = onSleep;
 
@@ -82,7 +85,8 @@ export function PlaybackTools({ player, count, index, onEpisode, onSleep }: {
     button.className = 'playback-tools-button';
     button.setAttribute('aria-haspopup', 'dialog');
     button.setAttribute('aria-controls', panelId);
-    button.onclick = () => {
+    button.onclick = event => {
+      event.stopPropagation();
       player.setting.show = false;
       setPanel(value => value === 'settings' ? null : 'settings');
     };
@@ -142,9 +146,28 @@ export function PlaybackTools({ player, count, index, onEpisode, onSleep }: {
   }, [rate, panel, player]);
 
   useEffect(() => {
-    if (!panel) return;
+    const button = settingsButton.current;
+    if (!button) return;
+    button.textContent = count > 1 ? '选集/定时' : '定时';
+    button.setAttribute('aria-label', count > 1 ? '选集与定时停止' : '定时停止');
+  }, [count, player]);
+
+  useEffect(() => {
+    if (!panel) {
+      restoreFocus.current?.focus();
+      restoreFocus.current = null;
+      return;
+    }
     player.controls.show = true;
-    panelElement.current?.querySelector<HTMLElement>('input, button')?.focus();
+    const selected = panel === 'settings' ? panelElement.current?.querySelector<HTMLElement>('.playback-overlay-option[aria-pressed="true"]') : null;
+    (selected ?? panelElement.current?.querySelector<HTMLElement>('input, button'))?.focus({ preventScroll: true });
+    // Reveal the selection inside the drawer without scrolling the watch page.
+    const scroller = selected?.closest('.playback-settings-scroll');
+    if (selected && scroller) {
+      const item = selected.getBoundingClientRect(), viewport = scroller.getBoundingClientRect();
+      if (item.top < viewport.top) scroller.scrollTop += item.top - viewport.top;
+      else if (item.bottom > viewport.bottom) scroller.scrollTop += item.bottom - viewport.bottom;
+    }
     const dismiss = (event: PointerEvent) => {
       const target = event.target as Node;
       if (!panelElement.current?.contains(target) && !speedButton.current?.contains(target) && !settingsButton.current?.contains(target)) setPanel(null);
@@ -155,7 +178,7 @@ export function PlaybackTools({ player, count, index, onEpisode, onSleep }: {
 
   const closePanel = () => {
     player.controls.show = true;
-    (panel === 'speed' ? gearButton : settingsButton).current?.focus();
+    restoreFocus.current = (panel === 'speed' ? gearButton : settingsButton).current;
     setPanel(null);
   };
 
@@ -175,38 +198,70 @@ export function PlaybackTools({ player, count, index, onEpisode, onSleep }: {
     try { localStorage.setItem('libretv-playback-rate', String(nextRate)); } catch { /* optional */ }
   };
 
+  const chooseTimer = (value: number) => {
+    deadline.current = value ? Date.now() + value * 60_000 : null;
+    setMinutes(value);
+    setRemaining(value ? `${value} 分钟后停止` : '');
+    closePanel();
+  };
+
   return <>
     {remaining && <span className="playback-timer-status" role="status">{remaining}</span>}
-    {panel && <div ref={panelElement} id={panelId} className={`playback-tools-panel${panel === 'speed' ? ' playback-speed-panel' : ''}`} role="dialog" aria-label={panel === 'speed' ? '播放速度' : '播放设置'} onClick={event => event.stopPropagation()} onKeyDown={event => {
+    {panel === 'speed' && <div ref={panelElement} id={panelId} className="playback-tools-panel playback-speed-panel" role="dialog" aria-label="播放速度" onClick={event => event.stopPropagation()} onKeyDown={event => {
       event.stopPropagation();
       if (event.key === 'Escape') closePanel();
     }}>
-      <div className="playback-tools-heading"><div className="playback-tools-title">{panel === 'speed' && <button type="button" onClick={backToSettings} aria-label="返回播放设置">‹</button>}<strong>{panel === 'speed' ? '播放速度' : '播放设置'}</strong></div><button type="button" onClick={closePanel} aria-label={panel === 'speed' ? '关闭播放速度' : '关闭播放设置'}>关闭</button></div>
-      {panel === 'speed' ? <>
-        <output className="playback-speed-value" htmlFor={`${panelId}-range`}>{rate.toFixed(2)}×</output>
-        <div className="playback-speed-slider">
-          <button type="button" onClick={() => changeRate(rate - RATE_STEP)} disabled={rate <= MIN_RATE} aria-label="降低速度 0.05 倍">−</button>
-          <input id={`${panelId}-range`} type="range" aria-label="播放速度" aria-valuetext={`${rate} 倍速`} min={MIN_RATE} max={MAX_RATE} step={RATE_STEP} value={rate} onChange={event => changeRate(Number(event.target.value))} />
-          <button type="button" onClick={() => changeRate(rate + RATE_STEP)} disabled={rate >= MAX_RATE} aria-label="提高速度 0.05 倍">＋</button>
-        </div>
-        <div className="playback-speed-presets" role="group" aria-label="常用倍速">
-          {QUICK_RATES.map(value => <button type="button" key={value} aria-pressed={rate === value} onClick={() => changeRate(value)}>{value}×</button>)}
-        </div>
-      </> : <>
-      {count > 1 && <label>播放选集<select value={index} onChange={event => { onEpisode?.(Number(event.target.value)); setPanel(null); }}>
-        {Array.from({ length: count }, (_, i) => <option key={i} value={i}>第 {i + 1} 集</option>)}
-      </select></label>}
-      <label>定时停止<select value={minutes} onChange={event => {
-        const value = Number(event.target.value);
-        deadline.current = value ? Date.now() + value * 60_000 : null;
-        setMinutes(value); setRemaining(value ? `${value} 分钟后停止` : '');
+      <div className="playback-tools-heading"><div className="playback-tools-title"><button type="button" onClick={backToSettings} aria-label="返回播放设置">‹</button><strong>播放速度</strong></div><button type="button" onClick={closePanel} aria-label="关闭播放速度">关闭</button></div>
+      <output className="playback-speed-value" htmlFor={`${panelId}-range`}>{rate.toFixed(2)}×</output>
+      <div className="playback-speed-slider">
+        <button type="button" onClick={() => changeRate(rate - RATE_STEP)} disabled={rate <= MIN_RATE} aria-label="降低速度 0.05 倍">−</button>
+        <input id={`${panelId}-range`} type="range" aria-label="播放速度" aria-valuetext={`${rate} 倍速`} min={MIN_RATE} max={MAX_RATE} step={RATE_STEP} value={rate} onChange={event => changeRate(Number(event.target.value))} />
+        <button type="button" onClick={() => changeRate(rate + RATE_STEP)} disabled={rate >= MAX_RATE} aria-label="提高速度 0.05 倍">＋</button>
+      </div>
+      <div className="playback-speed-presets" role="group" aria-label="常用倍速">
+        {QUICK_RATES.map(value => <button type="button" key={value} aria-pressed={rate === value} onClick={() => changeRate(value)}>{value}×</button>)}
+      </div>
+    </div>}
+    {panel === 'settings' && <div className="playback-settings-overlay"
+      onPointerDown={event => event.stopPropagation()}
+      onTouchStart={event => event.stopPropagation()}
+      onTouchMove={event => event.stopPropagation()}
+      onClick={event => event.stopPropagation()}
+      onDoubleClick={event => event.stopPropagation()}
+      onKeyDown={event => {
+        event.stopPropagation();
+        if (event.key === 'Escape') { event.preventDefault(); closePanel(); }
+        if (event.key !== 'Tab') return;
+        const buttons = panelElement.current?.querySelectorAll<HTMLButtonElement>('button:not(:disabled)');
+        if (!buttons?.length) return;
+        const first = buttons[0], last = buttons[buttons.length - 1];
+        if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+        else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
       }}>
-        <option value={0}>关闭定时</option>
-        {[15, 30, 45, 60, 90, 120].map(value => <option key={value} value={value}>{value} 分钟后停止</option>)}
-      </select></label>
-      <button onClick={() => { player.fullscreenWeb = !player.fullscreenWeb; setPanel(null); }}>切换页面全屏（保留选集）</button>
-      <p>定时到点暂停并停止连播，不会关闭应用或锁屏。系统挂起页面时，返回应用后会立即检查。</p>
-      </>}
+      <button type="button" className="playback-settings-backdrop" tabIndex={-1} aria-label="收起播放面板" onClick={closePanel} />
+      <div ref={panelElement} id={panelId} className="playback-settings-drawer" role="dialog" aria-modal="true" aria-label={count > 1 ? '选集与定时停止' : '定时停止'}>
+        <div className="playback-settings-header">
+          {count > 1 ? <div className="playback-settings-tabs" role="group" aria-label="播放面板">
+            <button type="button" aria-pressed={settingsTab === 'episodes'} onClick={() => setSettingsTab('episodes')}>选集</button>
+            <button type="button" aria-pressed={settingsTab === 'timer'} onClick={() => setSettingsTab('timer')}>定时</button>
+          </div> : <span>定时停止</span>}
+          <button type="button" className="playback-settings-close" onClick={closePanel} aria-label="收起播放面板"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" /></svg></button>
+        </div>
+        <div className="playback-settings-scroll">
+          {count > 1 && settingsTab === 'episodes' ? <div className="playback-overlay-list" role="group" aria-label="播放选集">
+            {Array.from({ length: count }, (_, i) => <button type="button" key={i} className="playback-overlay-option" aria-pressed={index === i} onClick={() => { closePanel(); onEpisode?.(i); }}>
+              <span className="playback-option-check" aria-hidden="true">{index === i ? '✓' : ''}</span><span>第 {i + 1} 集</span>
+            </button>)}
+          </div> : <>
+            <div className="playback-overlay-list" role="group" aria-label="定时时长">
+              {TIMER_MINUTES.map(value => <button type="button" key={value} className="playback-overlay-option" aria-pressed={minutes === value} onClick={() => chooseTimer(value)}>
+                <span className="playback-option-check" aria-hidden="true">{minutes === value ? '✓' : ''}</span><span>{value ? `${value} 分钟` : '关闭'}</span>
+              </button>)}
+            </div>
+            <p className="playback-settings-note">{minutes ? `剩余 ${remaining.replace('后停止', '')} · ` : ''}到时暂停并停止连播</p>
+          </>}
+        </div>
+      </div>
     </div>}
   </>;
 }
