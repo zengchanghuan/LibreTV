@@ -1,3 +1,4 @@
+import { correctVideoDetail } from '@/lib/source-content-corrections';
 import { siteAdapterFor, detailSite } from '@/lib/site-adapters/site-adapters';
 import { NextResponse } from 'next/server';
 import { guardRequest } from '@/lib/api-guard';
@@ -49,7 +50,7 @@ export async function GET(req: Request) {
     const cacheKey = `detail:${source.url}|${detailRootForCache}|${id}`;
     const cached = getCache<VideoDetail>(cacheKey);
     if (cached) {
-      return NextResponse.json(cached);
+      return NextResponse.json(correctVideoDetail(cached, source.url, id));
     }
 
     // 用户可控地址发起服务端请求，先过 SSRF 校验（协议白名单 + 内网/保留地址）
@@ -59,7 +60,7 @@ export async function GET(req: Request) {
     }
 
     if (siteAdapterFor(source.url)) {
-      const detail = await detailSite(source, id, AbortSignal.any([req.signal, AbortSignal.timeout(30000)]));
+      const detail = correctVideoDetail(await detailSite(source, id, AbortSignal.any([req.signal, AbortSignal.timeout(30000)])), source.url, id);
       detail.videoInfo = enrichVideoInfo(detail.videoInfo);
       setCache(cacheKey, detail, DETAIL_CACHE_TTL);
       return NextResponse.json(detail);
@@ -104,6 +105,7 @@ export async function GET(req: Request) {
     if (!resolved || resolved.episodes.length === 0) {
       return NextResponse.json({ error: '未找到播放资源' }, { status: 404 });
     }
+    resolved = correctVideoDetail(resolved, source.url, id);
     resolved.videoInfo = enrichVideoInfo(resolved.videoInfo);
     setCache(cacheKey, resolved, DETAIL_CACHE_TTL);
     return NextResponse.json(resolved);

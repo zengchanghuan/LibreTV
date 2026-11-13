@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useRankedSources } from './use-ranked-sources';
 import { SourceRecommendation } from './source-recommendation';
+import { canRecommendSource } from '@/lib/source-content-corrections';
 import { api } from '@/lib/client-api';
 import type { SourceConfig, SearchResultItem } from '@/lib/types';
 import { buildWatchUrl, cn } from '@/lib/utils';
@@ -102,7 +103,7 @@ export function SwitchSourceModal({
         const title = currentTitle.trim();
         const matched: Candidate[] = [];
         for (const s of sources) {
-          const hits = list.filter((r) => r.sourceKey === s.key);
+          const hits = list.filter((r) => r.sourceKey === s.key && canRecommendSource(r, s.url));
           const exact =
             hits.find((r) => (r.name || '').trim() === title) ??
             hits.find((r) => (r.name || '').trim().startsWith(title));
@@ -133,9 +134,10 @@ export function SwitchSourceModal({
     const probe = quality.probeOf(item);
     return { ...candidate, ...probe };
   });
-  const recommended = sorted.find(c => c.ok && !(c.source.key === currentSourceKey && String(c.result.vodId) === String(currentVodId)));
+  const recommended = sorted.find(c => canRecommendSource(c.result, c.source.url) && c.ok && !(c.source.key === currentSourceKey && String(c.result.vodId) === String(currentVodId)));
 
   const switchTo = (c: Candidate) => {
+    if (!canRecommendSource(c.result, c.source.url)) { toast('该资源内容不符，已隔离', 'warning'); return; }
     if (!c.episodes) {
       toast('该源无可用播放资源', 'warning');
       return;
@@ -181,7 +183,7 @@ export function SwitchSourceModal({
               {phase === 'searching'
                 ? '正在搜索各资源...'
                 : quality.testing
-                  ? `已检测 ${quality.progress.done}/${quality.progress.total} · ${quality.progress.ok} 条通过`
+                  ? `已检测 ${quality.progress.done}/${quality.progress.total} · ${quality.progress.ok} 条媒体检测通过`
                   : `共 ${sorted.length} 个来源 · ${sorted.filter((c) => c.ok).length} 个可用`}
             </p>
           </div>

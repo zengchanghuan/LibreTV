@@ -1,3 +1,5 @@
+import type { SourceContentIssue } from './source-content-corrections';
+
 // 采集站（Apple CMS 资源站）描述
 export interface SourceConfig {
   /** 唯一标识，如 "custom_0"；内置源直接用短名 */
@@ -34,6 +36,7 @@ export interface SearchResultItem {
 }
 
 export interface VideoInfo {
+  contentIssue?: SourceContentIssue;
   title?: string;
   cover?: string;
   desc?: string;

@@ -1,3 +1,4 @@
+import { correctSearchItem } from './source-content-corrections';
 import { isAdultContent, prepareSearchResults, searchTitleKey } from './cms-parser';
 import { type MediaType } from './media-type';
 import type { SearchResultItem } from './types';
@@ -86,8 +87,8 @@ export function prepareWorkSearchResults(items: SearchResultItem[], plan: Search
     if (status === 'reject') continue;
     const key = JSON.stringify([item.sourceKey, item.vodId]);
     const identity = searchResultIdentity(item);
-    matches.set(key, { ...item, workId: identity.work?.id, identityUnconfirmed: status === 'unconfirmed' || undefined,
-      identityReason: status === 'unconfirmed' ? identity.reason || '作品归属待确认' : undefined });
+    matches.set(key, correctSearchItem({ ...item, workId: identity.work?.id, identityUnconfirmed: status === 'unconfirmed' || undefined,
+      identityReason: status === 'unconfirmed' ? identity.reason || '作品归属待确认' : undefined }));
   }
   const exact = new Set(titles.map(searchTitleKey));
   const score = (item: SearchResultItem) => Number(Boolean(item.identityUnconfirmed)) * 20

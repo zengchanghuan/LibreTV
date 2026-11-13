@@ -14,6 +14,8 @@ import { copyToClipboard } from '@/lib/clipboard';
 import { EmptyState, ErrorState, LoadingState } from './states';
 import { useFocusTrap } from './use-focus-trap';
 import { Icon } from './icon';
+import { correctVideoDetail, sourceContentIssue } from '@/lib/source-content-corrections';
+import { SourceContentWarning } from './source-content-warning';
 
 /**
  * 详情弹窗：剧集列表 + 排序 + 复制链接。
@@ -91,7 +93,9 @@ export function DetailModal({ item, onClose }: { item: SearchResultItem | null; 
   if (!item) return null;
 
   const episodes = detail ? (reversed ? [...detail.episodes].reverse() : detail.episodes) : [];
-  const info = detail?.videoInfo;
+  const sourceUrl = resolveSource(store, item.sourceKey, { url: item.sourceUrl })?.url || item.sourceUrl;
+  const info = detail ? correctVideoDetail(detail, sourceUrl, item.vodId).videoInfo : undefined;
+  const contentIssue = info?.contentIssue || sourceContentIssue(sourceUrl, item.vodId);
 
   const play = (index: number) => {
     if (!detail || !detail.episodes[index]) return;
@@ -156,6 +160,7 @@ export function DetailModal({ item, onClose }: { item: SearchResultItem | null; 
         </div>
 
         <div className="p-5 pt-4">
+          <SourceContentWarning issue={contentIssue} />
           {loading && <LoadingState label="正在获取剧集信息..." />}
 
           {!loading && error && <ErrorState message={error || '获取失败'} />}
@@ -163,7 +168,7 @@ export function DetailModal({ item, onClose }: { item: SearchResultItem | null; 
           {!loading && !error && detail && (
             <>
               <div className="flex flex-col sm:flex-row gap-4 mb-4">
-                {item?.pic && !posterFailed && (
+                {item?.pic && !contentIssue && !posterFailed && (
                   <SmartImage
                     url={item.pic}
                     mode={store.imageProxyMode}

@@ -1,5 +1,6 @@
 'use client';
 
+import { correctVideoDetail } from './source-content-corrections';
 import type { SearchContext } from './work-search';
 import type { HomeRecommendations } from './home-discovery-types';
 import type { HDResourceCatalog, HDResourceDetail } from './hd-resource-sites';
@@ -156,7 +157,7 @@ export const api = {
 
   detail: (id: string, source: SourceConfig, signal?: AbortSignal) => {
     const sp = new URLSearchParams({ id, source: JSON.stringify(source) });
-    return request<VideoDetail>(`/api/detail?${sp.toString()}`, { signal });
+    return request<VideoDetail>(`/api/detail?${sp.toString()}`, { signal }).then(detail => correctVideoDetail(detail, source.url, id));
   },
 
   related: (id: string, source: SourceConfig, filterAdult: boolean, signal?: AbortSignal) => {

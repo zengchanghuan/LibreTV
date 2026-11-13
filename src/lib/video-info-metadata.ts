@@ -10,6 +10,7 @@ function people(value?: string) {
 
 /** Match source evidence, never an unverified rating or a title without a year. */
 export function matchVideoWork(info: VideoInfo): CatalogWork | undefined {
+  if (info.contentIssue) return;
   const title = splitSearchTitle(info.title || '');
   const year = resultYear(info.year) || title.year;
   if (!year || (title.year && title.year !== year) || isDerivativeTitle((info.title || '') + (info.typeName || ''))) return;

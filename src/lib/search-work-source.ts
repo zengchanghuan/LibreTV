@@ -1,3 +1,4 @@
+import { sourceContentIssue } from './source-content-corrections';
 import { searchSource } from './search-source';
 import { prepareWorkSearchResults, workResultStatus, type SearchPlan } from './work-search';
 import { readSourceVideoDetails } from './source-video-details';
@@ -42,7 +43,7 @@ export async function searchWorkSource(source: SourceConfig, plan: SearchPlan, o
     }));
     signal.throwIfAborted();
     // At most three metadata lookups, in parallel, inside the same ten-second budget.
-    const missing = items.filter(item => workResultStatus(item, plan) === 'unconfirmed').slice(0, 3);
+    const missing = items.filter(item => !sourceContentIssue(source.url, item.vodId) && workResultStatus(item, plan) === 'unconfirmed').slice(0, 3);
     await Promise.all(missing.map(async item => {
       try {
         const detail = await readSourceVideoDetails(source, item.vodId, signal);

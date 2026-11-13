@@ -1,3 +1,4 @@
+import { correctSearchItem, sourceContentIssue } from './source-content-corrections';
 import { classifyMediaType, type MediaType } from './media-type';
 import { searchTitleKey } from './cms-parser';
 import type { SearchResultItem } from './types';
@@ -23,7 +24,7 @@ function buildGroup(name: string, year: string | undefined, mediaType: MediaType
     key: `${name}|${year ?? ''}|${mediaType}|${items.map((i) => `${i.sourceKey}_${i.vodId}`).join(',')}`,
     name,
     year,
-    typeName: items.map(i => i.identityDetails?.typeName || i.typeName).find(type => classifyMediaType(type) === mediaType && type),
+    typeName: items.some(item => sourceContentIssue(item.sourceUrl, item.vodId)) ? undefined : items.map(i => i.identityDetails?.typeName || i.typeName).find(type => classifyMediaType(type) === mediaType && type),
     mediaType,
     pic: items.find((i) => i.pic)?.pic,
     remarks: items.find((i) => i.remarks)?.remarks,
@@ -33,6 +34,7 @@ function buildGroup(name: string, year: string | undefined, mediaType: MediaType
 
 /** 同名/同季异写按内容类型和年份聚合，同名的电影与电视剧分别展示。 */
 export function aggregateResults(list: SearchResultItem[]): AggregatedGroup[] {
+  list = list.map(correctSearchItem);
   const identities = new Map(list.map(item => [item, searchResultIdentity(item)]));
   const byName = new Map<string, SearchResultItem[]>();
   for (const item of list) {

@@ -5,8 +5,9 @@ import { clearMediaProbeCache, probePool, probeVideo, type MediaProbe } from '@/
 import { compareSourcePreference, mediaPreferenceLabel } from '@/lib/source-preference';
 import { usePlaybackQuality } from '@/lib/playback-quality-store';
 import type { SearchResultItem } from '@/lib/types';
+import { canRecommendSource } from '@/lib/source-content-corrections';
 
-type ProbePhase = 'probing' | 'subtitles' | 'done';
+type ProbePhase = 'probing' | 'subtitles' | 'done' | 'excluded';
 interface Snapshot {
   scope: string;
   probes: Record<string, MediaProbe>;
@@ -14,6 +15,7 @@ interface Snapshot {
   complete: boolean;
 }
 const sourceOf = (item: SearchResultItem) => resolveSource(useAppStore.getState(), item.sourceKey, { url: item.sourceUrl });
+const eligible = (item: SearchResultItem) => canRecommendSource(item, sourceOf(item)?.url || item.sourceUrl);
 const keyOf = (item: SearchResultItem) => item.sourceUrl || sourceOf(item)?.url || item.sourceKey;
 
 export function useRankedSources(items: SearchResultItem[], active: boolean, index = 0) {
@@ -70,6 +72,7 @@ export function useRankedSources(items: SearchResultItem[], active: boolean, ind
     ));
     void probePool(queued, async item => {
       const key = probeKey(item);
+      if (!eligible(item)) { publish(key, 'excluded'); return; }
       publish(key, 'probing');
       const source = sourceOf(item);
       let result: MediaProbe;
@@ -93,8 +96,9 @@ export function useRankedSources(items: SearchResultItem[], active: boolean, ind
   }, [scope]);
   const preferenceOf = (item: SearchResultItem) => ({ probe: probeOf(item), history: entries[keyOf(item)], remarks: item.remarks });
   const ranked = [...items].sort((a, b) => compareSourcePreference(preferenceOf(a), preferenceOf(b)));
-  const best = ranked.find(i => probeOf(i)?.ok);
+  const best = ranked.find(i => eligible(i) && probeOf(i)?.ok);
   const statusOf = (item: SearchResultItem) => {
+    if (!eligible(item)) return '内容不符 · 已隔离';
     const phase = current?.phases[probeKey(item)];
     if (!phase) return '排队中';
     if (phase === 'probing') return '检测中';
@@ -102,10 +106,10 @@ export function useRankedSources(items: SearchResultItem[], active: boolean, ind
     const probe = probeOf(item);
     return probe?.ok ? '检测完成' : probe?.timedOut ? '检测超时' : '检测未通过';
   };
-  const labelOf = (item: SearchResultItem) => mediaPreferenceLabel(probeOf(item), item.remarks);
+  const labelOf = (item: SearchResultItem) => eligible(item) ? mediaPreferenceLabel(probeOf(item), item.remarks) : '待核实，不参与智能优选';
   const progress = {
     done: items.filter(item => probeOf(item) !== undefined).length,
-    total: items.length,
+    total: items.filter(eligible).length,
     ok: items.filter(item => probeOf(item)?.ok).length,
     subtitles: items.filter(item => current?.phases[probeKey(item)] === 'subtitles').length,
   };

@@ -31,7 +31,7 @@ export function SourceRecommendation({ quality, recommended, onSelect, switching
       )}
       <div className="mt-3 border-t border-accent/15 pt-2">
         <p className="text-xs text-muted" role="status">
-          已检测 {progress.done}/{progress.total} · {progress.ok} 条通过
+          已检测 {progress.done}/{progress.total} · {progress.ok} 条媒体检测通过
           {progress.subtitles > 0 && ` · ${progress.subtitles} 条补充字幕中`}
         </p>
         <div className="mt-2 h-1 overflow-hidden rounded-full bg-chip" role="progressbar" aria-label="片源检测进度"
@@ -44,7 +44,7 @@ export function SourceRecommendation({ quality, recommended, onSelect, switching
       </div>
       <details className="mt-2 text-xs text-faint">
         <summary className="cursor-pointer">检测说明</summary>
-        <p className="mt-1 leading-5">字幕未确认不代表没有字幕；画面内嵌字幕可能无法识别。速度为当前网络抽样，不保证整片流畅。</p>
+        <p className="mt-1 leading-5">字幕未确认不代表没有字幕；画面内嵌字幕可能无法识别。速度为当前网络抽样，不保证整片流畅，也不代表已核验影片身份。</p>
       </details>
     </section>
   );

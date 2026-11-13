@@ -6,6 +6,8 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/client-api';
+import { correctVideoDetail, sourceContentIssue } from '@/lib/source-content-corrections';
+import { SourceContentWarning } from '@/components/source-content-warning';
 // 播放器（artplayer + hls.js）按需加载：拆出独立 chunk，不占首屏 First Load JS
 const PlayerShell = dynamic(() => import('@/components/player-shell').then((m) => m.PlayerShell), {
   ssr: false,
@@ -102,9 +104,15 @@ function WatchContent() {
     staleTime: 5 * 60_000,
   });
 
-  const episodes = useMemo(() => detailQuery.data?.episodes ?? [], [detailQuery.data]);
+  // Reapply the same rule to old query-cache entries and direct watch links.
+  const safeDetail = useMemo(() => detailQuery.data
+    ? correctVideoDetail(detailQuery.data, source?.url, vodId) : undefined,
+  [detailQuery.data, source?.url, vodId]);
+  const contentIssue = safeDetail?.videoInfo.contentIssue || sourceContentIssue(source?.url, vodId);
+
+  const episodes = useMemo(() => safeDetail?.episodes ?? [], [safeDetail]);
   const multipleEpisodes = episodes.length > 1;
-  const videoTitle = titleParam || detailQuery.data?.videoInfo?.title || '未知视频';
+  const videoTitle = titleParam || safeDetail?.videoInfo?.title || '未知视频';
 
   // 当前播放地址：优先取剧集列表中的当前集，其次直连 URL 参数
   const currentUrl = useMemo(() => {
@@ -164,7 +172,7 @@ function WatchContent() {
         sourceUrl: source?.url,
         vodId: vodId || currentUrl,
         title: videoTitle,
-        pic: detailQuery.data?.videoInfo?.cover,
+        pic: safeDetail?.videoInfo?.cover,
         episodeIndex: currentIndex,
         totalEpisodes: episodes.length,
         playbackPosition: 0,
@@ -276,11 +284,12 @@ function WatchContent() {
       </header>
 
       <main className="flex-1 max-w-7xl w-full mx-auto px-5 pt-5 pb-[max(24px,env(safe-area-inset-bottom))] sm:px-4 sm:py-4">
+        <SourceContentWarning issue={contentIssue} />
         <div className={cn('mb-6', !legacyNativeHeader && 'sm:hidden')}>
           <div className="flex items-start justify-between gap-3"><h1 className="text-2xl font-semibold leading-tight tracking-tight text-content">{videoTitle}</h1>
             {legacyNativeHeader && <button className="btn-ghost -mr-2 !min-h-11 !min-w-11 !p-2" aria-label="更多操作" onClick={() => setMoreOpen(true)}><Icon name="more" /></button>}
           </div>
-          {videoInfoSummary(detailQuery.data?.videoInfo) && <p className="mt-2 text-xs leading-relaxed text-muted">{videoInfoSummary(detailQuery.data?.videoInfo)}</p>}
+          {videoInfoSummary(safeDetail?.videoInfo) && <p className="mt-2 text-xs leading-relaxed text-muted">{videoInfoSummary(safeDetail?.videoInfo)}</p>}
         </div>
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-4">
           <div>
@@ -393,7 +402,7 @@ function WatchContent() {
               </div></>}
             {detailQuery.isLoading && <LoadingState label="正在读取影片资料…" />}
             {detailQuery.isError && <EmptyState variant="plain" title="暂未获取到影片资料" />}
-            <VideoInfoPanel info={detailQuery.data?.videoInfo} compactOnMobile />
+            <VideoInfoPanel info={safeDetail?.videoInfo} compactOnMobile />
             <details className="hidden md:block text-xs text-muted mt-4 border-t border-line pt-3 leading-relaxed">
               <summary className="cursor-pointer min-h-8">播放快捷键</summary>
               <p className="pt-2">空格 播放/暂停 · ←/→ 快退/快进 5s · ↑/↓ 音量 · F 全屏 · Alt+←/→ 切换集数</p>
@@ -403,7 +412,7 @@ function WatchContent() {
         <RelatedVideos
           source={source}
           vodId={vodId}
-          info={detailQuery.data?.videoInfo || { title: videoTitle, sourceKey: source.key, sourceName: source.name }}
+          info={safeDetail?.videoInfo || { title: videoTitle, sourceKey: source.key, sourceName: source.name }}
           ready={detailQuery.isSuccess || detailQuery.isError}
           section={searchParams.get('section') === 'hd' ? 'hd' : undefined}
         />

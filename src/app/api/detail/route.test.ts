@@ -33,4 +33,23 @@ describe('detail API metadata enrichment', () => {
     vi.mocked(getCache).mockReturnValue(data);
     expect(await (await GET(request())).json()).toEqual(data);
   });
+  it.each([false, true])('quarantines known wrong metadata on fresh and cached detail responses (cached=%s)', async cached => {
+    const badSource = { key: 'custom_360', name: '360资源', url: 'https://360zy.com/api.php/provide/vod/' };
+    const playback = 'https://vod2.maowushi.com/jqp/PgtkJlCJ/index.m3u8';
+    if (cached) vi.mocked(getCache).mockReturnValue({ episodes: [playback], videoInfo: {
+      title: '局内人', year: '2015', cover: 'wrong.jpg', director: '禹民镐', actor: '李秉宪,曹承佑,白润植',
+      sourceKey: badSource.key, sourceName: badSource.name, rating: { value: '8.1', source: '豆瓣' },
+    } });
+    else vi.mocked(fetchUpstream).mockResolvedValue(Response.json({ list: [{ vod_name: '局内人', vod_year: '2015',
+      type_name: '剧情片', vod_pic: 'wrong.jpg', vod_director: '禹民镐', vod_actor: '李秉宪,曹承佑,白润植', vod_play_url: `HD中字$${playback}` }] }));
+    const req = new Request(`https://app.example/api/detail?${new URLSearchParams({ id: '8737', source: JSON.stringify(badSource) })}`,
+      { headers: { cookie: `${SESSION_COOKIE}=${signSession().token}` } });
+    const response = await GET(req);
+    expect(response.status).toBe(200);
+    const data = await response.json();
+    expect(data.episodes).toEqual([playback]);
+    expect(data.videoInfo.contentIssue.status).toBe('content-mismatch');
+    for (const key of ['year', 'cover', 'director', 'actor', 'rating', 'desc']) expect(data.videoInfo[key]).toBeUndefined();
+  });
+
 });

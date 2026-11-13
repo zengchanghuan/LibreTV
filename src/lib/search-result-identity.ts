@@ -1,3 +1,4 @@
+import { sourceContentIssue } from './source-content-corrections';
 import { classifyMediaType, type MediaType } from './media-type';
 import { workCatalog, workTitleKey, isDerivativeTitle, type CatalogWork } from './work-catalog';
 import type { SearchResultItem } from './types';
@@ -43,6 +44,8 @@ function corroborates(work: CatalogWork, details: SearchResultItem['identityDeta
 
 /** Recomputed from source evidence, never from a previously assigned workId. */
 export function searchResultIdentity(item: SearchResultItem): SearchIdentity {
+  const issue = sourceContentIssue(item.sourceUrl, item.vodId);
+  if (issue) return { title: item.name, mediaType: 'unknown', reason: issue.message };
   const details = item.identityDetails;
   const rawTitle = details?.title || item.name;
   const title = splitSearchTitle(rawTitle);

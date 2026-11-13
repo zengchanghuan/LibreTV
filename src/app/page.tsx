@@ -407,7 +407,7 @@ function HomeContent() {
                 {pendingGroups.length > 0 && (
                   <details key={`${section}:${urlQuery}:${JSON.stringify(searchContext)}`} className="mt-4 rounded-lg border border-line bg-surface-raised p-3">
                     <summary className="cursor-pointer text-sm text-muted">待确认片源（{pendingGroups.length} 条）</summary>
-                    <p className="mt-2 mb-3 text-xs text-faint">以下片源的年份、类型缺失或存在冲突，暂未计入作品数。保留原始资料，点击卡片仍可查看详情和播放。</p>
+                    <p className="mt-2 mb-3 text-xs text-faint">以下片源的年份、类型缺失、存在冲突，或已发现资料与视频不符，暂未计入作品数。保留原始资料，点击卡片仍可查看详情和播放。</p>
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 items-start mt-3">
                       {pendingGroups.slice(0, pendingVisibleCount).map(group => (
                         <AggregatedCard key={group.key} group={group} onOpen={setDetailItem} />
