@@ -4,7 +4,7 @@ vi.mock('./client-api', () => ({ api: { detail: vi.fn() } }));
 afterEach(() => { vi.unstubAllGlobals(); vi.clearAllMocks(); });
 import { clearMediaProbeCache, firstMediaReference, probePool, probeVideo } from './media-probe';
 import { rewriteM3u8 } from './m3u8';
-afterEach(clearMediaProbeCache);
+afterEach(() => clearMediaProbeCache());
 describe('media probing', () => {
   it('rejects HTML and finds real media or initialization segments', () => {
     expect(()=>firstMediaReference('<html>access denied</html>')).toThrow();
@@ -89,6 +89,39 @@ describe('media probe requests', () => {
       return new Response(new Uint8Array(131072), { headers: { 'content-type': 'video/mp2t' } });
     }));
     expect(await probeVideo(source, uri, 0, new AbortController().signal)).toMatchObject({ ok: true, height: 720, subtitles: 'declared' });
+  });
+  it('publishes playable video before a delayed subtitle and preserves the preliminary snapshot', async () => {
+    vi.mocked(api.detail).mockResolvedValue({ episodes: ['https://cdn.example.org/master.m3u8'], videoInfo: { sourceKey: 'test', sourceName: 'test' } });
+    let release!: (response: Response) => void;
+    const subtitle = new Promise<Response>(resolve => { release = resolve; });
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (url.endsWith('master.m3u8')) return new Response('#EXTM3U\n#EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID="sub",LANGUAGE="zh",URI="zh.vtt"\n#EXT-X-STREAM-INF:RESOLUTION=1280x720,SUBTITLES="sub"\nvideo.m3u8');
+      if (url.endsWith('video.m3u8')) return new Response('#EXTM3U\n#EXTINF:5\nvideo.ts');
+      if (url.endsWith('zh.vtt')) return subtitle;
+      return new Response(new Uint8Array(131072), { headers: { 'content-type': 'video/mp2t' } });
+    }));
+    const onPlayable = vi.fn();
+    let settled = false;
+    const pending = probeVideo(source, 'early', 0, new AbortController().signal, onPlayable).then(result => { settled = true; return result; });
+    await vi.waitFor(() => expect(onPlayable).toHaveBeenCalledTimes(1));
+    expect(settled).toBe(false);
+    expect(onPlayable.mock.calls[0][0]).toMatchObject({ ok: true, height: 720, episodes: 1, subtitles: 'declared' });
+    release(new Response('WEBVTT\n\n00:00.000 --> 00:03.000\n中文字幕'));
+    expect(await pending).toMatchObject({ ok: true, subtitles: 'verified', subtitleLanguage: 'zh' });
+    expect(onPlayable.mock.calls[0][0].subtitles).toBe('declared');
+  });
+  it('refreshes only the requested film and episode', async () => {
+    vi.mocked(api.detail).mockResolvedValue({ episodes: ['https://cdn.example.org/movie.mp4', 'https://cdn.example.org/two.mp4'], videoInfo: { sourceKey: 'test', sourceName: 'test' } });
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(new Uint8Array(131072), { headers: { 'content-type': 'video/mp4' } })));
+    const signal = new AbortController().signal;
+    await probeVideo(source, 'film', 0, signal);
+    await probeVideo(source, 'film', 1, signal);
+    await probeVideo(source, 'other', 0, signal);
+    clearMediaProbeCache(source, 'film', 0);
+    await probeVideo(source, 'film', 0, signal);
+    await probeVideo(source, 'film', 1, signal);
+    await probeVideo(source, 'other', 0, signal);
+    expect(api.detail).toHaveBeenCalledTimes(4);
   });
   it('propagates user cancellation without producing a failed score', async () => {
     const c = new AbortController();c.abort(new DOMException('cancelled','AbortError'));vi.mocked(api.detail).mockRejectedValue(new DOMException('cancelled','AbortError'));

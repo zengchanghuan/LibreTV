@@ -13,8 +13,11 @@ function compact(entries: Record<string, PlaybackQuality>) {
 }
 export const usePlaybackQuality = create<State>()(persist((set) => ({
   entries: {},
-  resetNetwork: () => set({ entries: {} }),
+  // A network change invalidates samples, not actual playback history.
+  resetNetwork: () => set(s => ({ entries: compact(Object.fromEntries(
+    Object.entries(s.entries).map(([key, value]) => [key, { ...value, probe: undefined }])
+  )) })),
   record: (source, delta) => { if (source) set(s => ({ entries: compact({ ...s.entries, [source]: updateQuality(s.entries[source], delta) }) })); },
   probe: (source, result) => set(s => { const old = s.entries[source]; const fresh = old && Date.now() - old.at < QUALITY_TTL ? old : undefined;
-    return { entries: compact({ ...s.entries, [source]: { starts: 0, playedMs: 0, stalledMs: 0, stalls: 0, ...fresh, at: Date.now(), probe: { ...result, at: Date.now() } } }) }; }),
+    return { entries: compact({ ...s.entries, [source]: { starts: 0, playedMs: 0, stalledMs: 0, stalls: 0, ...fresh, at: fresh?.at ?? Date.now(), probe: { ...result, at: Date.now() } } }) }; }),
 }), { name: 'libretv-playback-quality-v1', partialize: s => ({ entries: s.entries }) }));

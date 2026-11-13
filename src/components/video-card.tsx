@@ -1,5 +1,6 @@
 'use client';
 import { useRankedSources } from './use-ranked-sources';
+import { SourceRecommendation } from './source-recommendation';
 
 import { useEffect, useMemo, useState } from 'react';
 import type { SearchResultItem } from '@/lib/types';
@@ -129,13 +130,8 @@ export function AggregatedCard({
 
       {multi && expanded && (
         <div className="border-t border-line p-2.5 animate-fade-in">
-          <div className="flex items-center justify-between gap-2 mb-2">
-            <p className="text-xs text-faint">{quality.testing ? '正在检测清晰度、字幕和速度…' : '优先高清有字幕、速度足够的来源'}</p>
-            <button className="btn-ghost btn-sm shrink-0" disabled={quality.testing} onClick={quality.retest}>重新检测</button>
-            <button className="btn-primary btn-sm" disabled={!quality.best}
-              onClick={() => quality.best && onOpen(quality.best)}>智能优选</button>
-          </div>
-          <p className="text-xs text-faint mb-2">字幕未确认不代表没有字幕；画面内嵌字幕可能无法识别。速度为当前网络抽样。</p>
+          <SourceRecommendation quality={quality} recommended={quality.best}
+            onSelect={() => quality.best && onOpen(quality.best)} />
           <div className="flex flex-col gap-1.5">
             {quality.ranked.map((item) => (
               <button
@@ -143,7 +139,8 @@ export function AggregatedCard({
                 className={cn(
                   'group flex items-center justify-between gap-1.5 w-full rounded-lg border px-2.5 py-2 text-left',
                   'text-xs transition-all cursor-pointer',
-                  'border-line bg-chip hover:border-accent hover:bg-accent/10',
+                  'hover:border-accent hover:bg-accent/10',
+                  quality.best === item ? 'border-accent/40 bg-accent/5' : 'border-line bg-chip',
                   item.isAdult && 'border-pink-500/30'
                 )}
                 onClick={(e) => {
@@ -155,6 +152,7 @@ export function AggregatedCard({
                 <span className="min-w-0">
                   <span className="block font-medium text-content break-words">{item.sourceName}{quality.best === item ? ' · 推荐' : ''}</span>
                   <span className="block text-faint">片源原始资料：{item.name} · {item.year || '年份未知'} · {item.typeName || '未分类'}</span>
+                  <span className="mt-1 block text-muted">{quality.statusOf(item)}</span>
                   <span className="mt-1 block text-faint leading-5">{quality.labelOf(item)}</span>
                 </span>
                 <svg

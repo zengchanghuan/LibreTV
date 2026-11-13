@@ -2,7 +2,7 @@
 import { api } from './client-api';
 import type { SourceConfig } from './types';
 import { hasSubtitleCue, inspectHls, type MediaCapabilities, type SubtitleTrack } from './media-capabilities';
-export interface MediaProbe extends MediaCapabilities { ok: boolean; ms: number; kbps?: number; episodes: number; error?: string }
+export interface MediaProbe extends MediaCapabilities { ok: boolean; ms: number; kbps?: number; episodes: number; error?: string; timedOut?: boolean }
 /** Follow HLS master lists and the first media object, not merely the catalog response. */
 export function firstMediaReference(text: string): string | undefined {
   if (!text.trimStart().startsWith('#EXTM3U')) throw new Error('不是有效的视频列表');
@@ -58,8 +58,11 @@ async function readPlaylist(res: Response): Promise<string> {
   } finally { await reader.cancel().catch(() => {}); }
 }
 const cache = new Map<string, { at: number; value: MediaProbe }>();
-export function clearMediaProbeCache() { cache.clear(); }
-export async function probeVideo(source: SourceConfig, id: string, index: number, parent: AbortSignal): Promise<MediaProbe> {
+export function clearMediaProbeCache(source?: SourceConfig, id?: string, index?: number) {
+  if (source) cache.delete(JSON.stringify([source.url, source.detail, id, index]));
+  else cache.clear();
+}
+export async function probeVideo(source: SourceConfig, id: string, index: number, parent: AbortSignal, onPlayable?: (result: MediaProbe) => void): Promise<MediaProbe> {
   parent.throwIfAborted();
   const key = JSON.stringify([source.url, source.detail, id, index]), cached = cache.get(key);
   if (cached && Date.now() - cached.at < 300000) return cached.value;
@@ -108,13 +111,16 @@ export async function probeVideo(source: SourceConfig, id: string, index: number
     finally { await reader.cancel().catch(() => {}); }
     if (!bytes) throw new Error('媒体数据为空');
     const result: MediaProbe = { ok: true, episodes, ms: Math.round(performance.now() - started), kbps: bytes >= 32768 ? Math.round(bytes * 8 / Math.max(1, performance.now() - sampleStart)) : undefined, ...capabilities };
+    parent.throwIfAborted();
+    // Publish video evidence before waiting for optional subtitle requests.
+    if (tracks.length) onPlayable?.({ ...result });
     const subtitle = await verifySubtitles(tracks, signal);
     parent.throwIfAborted();
     if (subtitle) { result.subtitles = 'verified'; result.subtitleLanguage = subtitle.language; }
     if (cache.size > 100) cache.clear(); cache.set(key, { at: Date.now(), value: result }); return result;
   } catch (error) {
     if (parent.aborted) throw error;
-    return { ok: false, episodes, ms: Math.round(performance.now() - started), ...capabilities, error: error instanceof Error ? error.message : '测速失败' };
+    return { ok: false, episodes, ms: Math.round(performance.now() - started), ...capabilities, timedOut: signal.aborted, error: error instanceof Error ? error.message : '测速失败' };
   }
 }
 export async function probePool<T>(items: T[], run: (item: T) => Promise<void>, signal: AbortSignal) {

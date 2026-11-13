@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useRankedSources } from './use-ranked-sources';
+import { SourceRecommendation } from './source-recommendation';
 import { api } from '@/lib/client-api';
 import type { SourceConfig, SearchResultItem } from '@/lib/types';
 import { buildWatchUrl, cn } from '@/lib/utils';
@@ -132,7 +133,7 @@ export function SwitchSourceModal({
     const probe = quality.probeOf(item);
     return { ...candidate, ...probe };
   });
-  const recommended = sorted.find(c => c.ok && !(c.source.key === currentSourceKey && c.result.vodId === currentVodId));
+  const recommended = sorted.find(c => c.ok && !(c.source.key === currentSourceKey && String(c.result.vodId) === String(currentVodId)));
 
   const switchTo = (c: Candidate) => {
     if (!c.episodes) {
@@ -180,7 +181,7 @@ export function SwitchSourceModal({
               {phase === 'searching'
                 ? '正在搜索各资源...'
                 : quality.testing
-                  ? '正在检测清晰度、字幕和速度…'
+                  ? `已检测 ${quality.progress.done}/${quality.progress.total} · ${quality.progress.ok} 条通过`
                   : `共 ${sorted.length} 个来源 · ${sorted.filter((c) => c.ok).length} 个可用`}
             </p>
           </div>
@@ -191,12 +192,10 @@ export function SwitchSourceModal({
           </button>
         </div>
 
-        {phase === 'done' && <div className="mb-3 flex flex-wrap items-center gap-3">
-          <p className="w-full text-xs text-faint">优先高清有字幕、速度足够的来源。字幕未确认不代表没有；速度为当前网络抽样。</p>
-          <button className="btn-ghost btn-sm shrink-0" disabled={quality.testing} onClick={quality.retest}>重新检测</button>
-          <button className="btn-primary btn-sm shrink-0" disabled={!recommended}
-            onClick={() => recommended && switchTo(recommended)}>切换推荐源</button>
-        </div>}
+        {phase === 'done' && sorted.length > 0 && (
+          <SourceRecommendation quality={quality} recommended={recommended?.result} switching
+            onSelect={() => recommended && switchTo(recommended)} />
+        )}
         {phase !== 'done' ? (
           <LoadingState label={phase === 'searching' ? '搜索各资源中...' : '测速中...'} />
         ) : sorted.length === 0 ? (
@@ -236,7 +235,7 @@ export function SwitchSourceModal({
                         c.ok === undefined ? 'bg-black/70 text-white' : !c.ok ? 'bg-danger-solid/85 text-white' : c.ms! > 2000 ? 'bg-warning-solid/85 text-white' : 'bg-success-solid/85 text-white'
                       )}
                     >
-                      {c.ok === undefined ? '测速中' : !c.ok ? '测速未通过' : `媒体 ${(c.ms! / 1000).toFixed(1)}s`}
+                      {quality.statusOf(c.result)}
                     </span>
                     {isCurrent && (
                       <span className="absolute inset-x-0 bottom-0 bg-accent/90 text-on-accent text-xs text-center py-1">当前播放</span>
