@@ -15,6 +15,7 @@ import { chungmuroCollection } from '@/lib/chungmuro-collection';
 import { koreanBoxOfficeCollection } from '@/lib/korean-box-office-collection';
 import { peopleCollections } from '@/lib/people-collections';
 import { koreanGrandSlamCollection } from '@/lib/korean-grand-slam';
+import { DemocracyTimeline, democracyTopic } from './democracy-timeline';
 import { KoreanGrandSlam } from './korean-grand-slam';
 import { FilmPosterGrid } from './film-poster-grid';
 import { KoreanThrillers } from './korean-thrillers';
@@ -29,6 +30,7 @@ const WEEKDAYS = ['周一', '周二', '周三', '周四', '周五', '周六', '�
 
 const topicOptions = [
   { id: 'home', name: '首页推荐' },
+  democracyTopic,
   { id: koreanGrandSlamCollection.id, name: koreanGrandSlamCollection.name },
   { id: 'korean', name: '韩国政治惊悚片' },
   { id: koreanBoxOfficeCollection.id, name: koreanBoxOfficeCollection.name },
@@ -113,7 +115,7 @@ export function RecommendSection({ visible, onPick, sources = [], section }: { v
       const person = peopleCollections.find(p => p.id === id);
       setDirectory(person ? person.role === 'actor' ? 'actors' : 'directors' : 'topics');
       setFilter(''); setCollection(id === 'topics' ? 'home' : id); setDiscovery(false);
-    }} /> : collection === koreanGrandSlamCollection.id ? <KoreanGrandSlam onPick={onPick} /> : selected ? <CollectionList collection={selected} onPick={onPick} /> :
+    }} /> : collection === democracyTopic.id ? <DemocracyTimeline onPick={onPick} /> : collection === koreanGrandSlamCollection.id ? <KoreanGrandSlam onPick={onPick} /> : selected ? <CollectionList collection={selected} onPick={onPick} /> :
       collection === 'korean' || collection === 'zhangyan' ? <KoreanThrillers onPick={onPick} zhangYan={collection === 'zhangyan'} /> :
       recommendSource === 'bangumi' ? <BangumiView onPick={onPick} /> :
       recommendSource === 'hot-list' ? <HotListView onPick={onPick} /> : <DoubanView onPick={onPick} />}

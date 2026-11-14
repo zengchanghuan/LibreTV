@@ -1,0 +1,40 @@
+.sheet {
+  --ink: #780f21;
+  background: #faf6ef;
+  color: #211d1a;
+  border-radius: 14px;
+  padding: clamp(16px, 3vw, 44px);
+  font-family: Georgia, "Songti SC", "Noto Serif CJK SC", serif;
+}
+.sheet header { border-left: 6px solid var(--ink); padding-left: 18px; margin-bottom: 36px; }
+.sheet h2 { font-size: clamp(28px, 4.2vw, 58px); line-height: 1.15; font-weight: 800; }
+.sheet header p { font-size: clamp(17px, 2vw, 26px); letter-spacing: .12em; }
+.row { display: grid; grid-template-columns: clamp(110px, 15%, 170px) minmax(0, 1fr); }
+.date { font-weight: 700; padding-right: 14px; font-size: clamp(16px, 2vw, 24px); }
+.event { position: relative; border-left: 2px solid var(--ink); padding: 0 0 28px clamp(16px, 2.4vw, 32px); }
+.event::before { content: ''; position: absolute; left: -7px; top: .55em; width: 12px; height: 12px; border-radius: 50%; background: var(--ink); }
+.row:last-child .event { padding-bottom: 0; border-color: transparent; }
+.event h3 { font-size: clamp(19px, 2.2vw, 29px); color: var(--ink); font-weight: 700; margin-bottom: 9px; }
+.cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.card { display: block; min-width: 0; text-align: left; border: 1px solid #dcd4ca; border-radius: 10px; overflow: hidden; background: #fffcf7; }
+.card:only-child { grid-column: 1 / -1; }
+.card:hover, .card:focus-visible { border-color: var(--ink); }
+.art { height: clamp(120px, 15vw, 210px); display: grid; place-items: center; background: repeating-linear-gradient(125deg, transparent 0 8px, #ffffff09 8px 9px), linear-gradient(110deg, #352c30, #724e47); color: #fff4dc; }
+.art > span { font-size: clamp(18px, 2.6vw, 34px); letter-spacing: .12em; }
+.art img { object-position: center 32%; }
+.caption { padding: 8px 12px; }
+.caption strong, .caption small { display: block; }
+.caption strong { font-size: clamp(16px, 1.7vw, 23px); }
+.caption small { color: #61564c; }
+@media (max-width: 639px) {
+  .sheet header { margin-bottom: 24px; }
+  .row { display: block; position: relative; padding-left: 17px; border-left: 2px solid var(--ink); }
+  .row:last-child { border-color: transparent; }
+  .row::before { content: ''; position: absolute; left: -6px; top: 7px; width: 10px; height: 10px; border-radius: 50%; background: var(--ink); }
+  .event { border: 0; padding: 0 0 24px; }
+  .event::before { display: none; }
+  .cards { grid-template-columns: 1fr; gap: 7px; }
+  .card { display: grid; grid-template-columns: 32% 1fr; align-items: center; }
+  .art { height: 78px; }
+  .art > span { font-size: 14px; text-align: center; }
+}
