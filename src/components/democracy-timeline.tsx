@@ -18,8 +18,6 @@ const events: { date: string; event: string; films: Film[] }[] = [
   { date: '约2020年', event: '光州事件四十年后', films: [['以儿子的名义', 2021]] },
 ];
 const officialPages: Partial<Record<string, { label: string; href: string }>> = {
-  '第二共和国': { label: 'MBC 官方回看', href: 'https://playvod.imbc.com/Vod/VodPlay?broadcastId=1001756100010100000' },
-  '路上的金大中': { label: 'Watcha 韩国站', href: 'https://watcha.com/ko/contents/mO8X7Nq' },
   '金大中就职影像': { label: '查看官方档案', href: 'https://www.ehistory.go.kr/view/movie?mediadtl=9173&mediagbn=DT&mediaid=2303&mediasrcgbn=KV' },
 };
 const kinds = { movie: '电影', tv: '电视剧', documentary: '纪录片', archive: '档案影像' };
@@ -34,12 +32,14 @@ export function DemocracyTimeline({ onPick }: { onPick: PickFilm }) {
         <div className={styles.cards}>{films.map(([title, year, kind = 'movie']: Film) => {
           const poster = getFilmPosterMetadata(title, year)?.poster;
           const official = officialPages[title];
+          const unavailable = title === '第二共和国' || title === '路上的金大中';
           const content = <>
             <div className={styles.art}>{poster
               ? <FilmPoster mode="direct" url={poster} title={title} />
               : <span aria-hidden="true">{title}</span>}</div>
-            <div className={styles.caption}><strong>《{title}》</strong><small>{year} · {kinds[kind]}{official && ` · ${official.label} ↗`}</small></div>
+            <div className={styles.caption}><strong>《{title}》</strong><small>{year} · {kinds[kind]}{unavailable && ' · 暂无已验证正片'}{official && ` · ${official.label} ↗`}</small></div>
           </>;
+          if (unavailable) return <article key={title} className={styles.card}>{content}</article>;
           if (official) return <a key={title} className={styles.card} href={official.href} target="_blank" rel="noreferrer" aria-label={`前往${official.label}：《${title}》`}>{content}</a>;
           if (kind === 'archive') return null;
           return <button key={title} type="button" className={styles.card} onClick={() => onPick(title, contextForFilm(title, year, kind))} aria-label={`查找《${title}》（${year}）片源`}>{content}</button>;
