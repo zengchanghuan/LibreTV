@@ -16,8 +16,12 @@ const events: { date: string; event: string; films: Film[] }[] = [
   { date: '2006年前后', event: '光州事件二十六年后', films: [['26年', 2012]] },
   { date: '约2020年', event: '光州事件四十年后', films: [['以儿子的名义', 2021]] },
 ];
-const officialPages: Partial<Record<string, { label: string; href: string }>> = {
-  '金大中就职影像': { label: '查看官方档案', href: 'https://www.ehistory.go.kr/view/movie?mediadtl=9173&mediagbn=DT&mediaid=2303&mediasrcgbn=KV' },
+const officialPages: Partial<Record<string, { label: string; href: string; cover: string }>> = {
+  '金大中就职影像': {
+    label: '查看官方档案',
+    cover: '/posters/korean/kim-dae-jung-inauguration.jpg',
+    href: 'https://www.ehistory.go.kr/view/movie?mediadtl=9173&mediagbn=DT&mediaid=2303&mediasrcgbn=KV',
+  },
 };
 const entries = events.flatMap(({ films }) => films);
 const movieCount = entries.filter(([, , kind = 'movie']) => kind === 'movie').length;
@@ -33,11 +37,11 @@ export function DemocracyTimeline({ onPick }: { onPick: PickFilm }) {
         <h3>{event}</h3>
       </div>
       <div className={styles.cards}>{films.map(([title, year, kind = 'movie']: Film) => {
-        const poster = getFilmPosterMetadata(title, year)?.poster;
         const official = officialPages[title];
+        const poster = official?.cover ?? getFilmPosterMetadata(title, year)?.poster;
         const content = <>
           <div className={styles.art}>{poster
-            ? <FilmPoster mode="direct" url={poster} title={title} />
+            ? <FilmPoster mode="direct" url={poster} title={title} imageAlt={official ? `${title}档案画面` : undefined} />
             : <Icon name={official ? 'link' : 'play'} className="h-5 w-5" />}</div>
           <div className={styles.caption}><strong>{title}</strong><small>{year} · {kinds[kind]}{official && ` · ${official.label}`}</small></div>
         </>;
