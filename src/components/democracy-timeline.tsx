@@ -5,7 +5,7 @@ import { FilmPoster } from './film-poster';
 import styles from './democracy-timeline.module.css';
 
 export const democracyTopic = { id: 'korean-democracy', name: '韩国民主化进程' };
-type Film = [title: string, year: number, kind?: 'movie' | 'tv' | 'documentary' | 'archive'];
+type Film = [title: string, year: number, kind?: 'movie' | 'tv' | 'documentary' | 'archive', source?: { title: string; year: number }];
 const events: { date: string; event: string; films: Film[] }[] = [
   { date: '1979年10月', event: '朴正熙遇刺', films: [['南山的部长们', 2020]] },
   { date: '1979年12月', event: '双十二军事叛乱', films: [['首尔之春', 2023]] },
@@ -14,7 +14,7 @@ const events: { date: string; event: string; films: Film[] }[] = [
   { date: '1987年6月', event: '六月民主抗争', films: [['1987：黎明到来的那一天', 2017]] },
   { date: '1997—1998', event: '首次朝野和平轮替', films: [['金大中就职影像', 1998, 'archive']] },
   { date: '2006年前后', event: '光州事件二十六年后', films: [['26年', 2012]] },
-  { date: '约2020年', event: '光州事件四十年后', films: [['以儿子的名义', 2021]] },
+  { date: '约2020年', event: '光州事件四十年后', films: [['以儿子的名义', 2021, 'movie', { title: '以我儿子的名义', year: 2020 }]] },
 ];
 const officialPages: Partial<Record<string, { label: string; href: string; cover: string }>> = {
   '金大中就职影像': {
@@ -36,7 +36,7 @@ export function DemocracyTimeline({ onPick }: { onPick: PickFilm }) {
         <span className={styles.date}>{date}</span>
         <h3>{event}</h3>
       </div>
-      <div className={styles.cards}>{films.map(([title, year, kind = 'movie']: Film) => {
+      <div className={styles.cards}>{films.map(([title, year, kind = 'movie', source]: Film) => {
         const official = officialPages[title];
         const poster = official?.cover ?? getFilmPosterMetadata(title, year)?.poster;
         const content = <>
@@ -47,7 +47,8 @@ export function DemocracyTimeline({ onPick }: { onPick: PickFilm }) {
         </>;
         if (official) return <a key={title} className={styles.card} href={official.href} target="_blank" rel="noreferrer" aria-label={`前往${official.label}：《${title}》`}>{content}</a>;
         if (kind === 'archive') return null;
-        return <button key={title} type="button" className={styles.card} onClick={() => onPick(title, contextForFilm(title, year, kind))} aria-label={`查找《${title}》（${year}）片源`}>{content}</button>;
+        const search = source ?? { title, year };
+        return <button key={title} type="button" className={styles.card} onClick={() => onPick(search.title, contextForFilm(search.title, search.year, kind))} aria-label={`查找《${title}》（${year}）片源`}>{content}</button>;
       })}</div>
     </li>)}</ol>
   </section>;
