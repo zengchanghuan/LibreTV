@@ -1,14 +1,20 @@
 'use client';
 
 import Link from 'next/link';
-import { useState } from 'react';
+import { useState, useSyncExternalStore } from 'react';
 import { useAuth } from '@/components/auth';
 import { useFamily } from '@/components/family';
 import { SourceManagerDrawer } from '@/components/source-manager';
 import { requestShowDownloadManager } from '@/components/download-manager';
 import { useTheme, type ThemeChoice } from '@/components/theme';
 
+function subscribeNativeReady(update: () => void) {
+  window.addEventListener('libretv:native-ready', update);
+  return () => window.removeEventListener('libretv:native-ready', update);
+}
+
 export default function SettingsPage() {
+  const hasDownloadsTab = useSyncExternalStore(subscribeNativeReady, () => window.__LIBRETV_NATIVE__?.downloadsTab === true, () => false);
   const [sourcesOpen, setSourcesOpen] = useState(false);
   const { verified, openLogin, logout } = useAuth();
   const family = useFamily();
@@ -19,7 +25,7 @@ export default function SettingsPage() {
     <section className="rounded-xl border border-line bg-surface-raised overflow-hidden">
       <button className={row} onClick={() => setSourcesOpen(true)}><span>视频源管理</span><span aria-hidden>›</span></button>
       <button className={row} onClick={family.open}><span>播放历史与同步</span><span className="text-sm text-muted">{family.profile?.name || (family.accountSync ? '账号自动同步' : '登录后同步')} ›</span></button>
-      <button className={row} onClick={requestShowDownloadManager}><span>下载管理</span><span aria-hidden>›</span></button>
+      {!hasDownloadsTab && <button className={row} onClick={requestShowDownloadManager}><span>下载管理</span><span aria-hidden>›</span></button>}
       <label className={row}><span>外观</span><select aria-label="外观" value={theme} onChange={event => setTheme(event.target.value as ThemeChoice)} className="input text-sm">
         <option value="dark">深色</option><option value="light">浅色</option><option value="system">跟随系统</option>
       </select></label>
