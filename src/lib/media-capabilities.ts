@@ -4,6 +4,7 @@ export interface MediaCapabilities {
   bandwidth?: number;
   subtitles?: 'verified' | 'declared' | 'unknown';
   subtitleLanguage?: string;
+  burnedInSubtitleHint?: boolean;
 }
 export interface SubtitleTrack { uri: string; language?: string }
 function attributes(line: string): Record<string, string> {

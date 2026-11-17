@@ -126,7 +126,7 @@ final class OfflineDownloads: NSObject, AVAssetDownloadDelegate, URLSessionDownl
     func pause(_ id: String) { suspend(id, state: .paused); schedule() }
     func resume(_ id: String) {
         guard let video = library?.video(id), [.paused, .failed].contains(video.state) else { return }
-        if video.state == .failed { restart(id, state: .queued) }
+        if video.state == .failed { restart(id, state: .queued, findMovieSource: video.episodeTitle == "电影" || video.episodeTitle == nil) }
         else { update(id) { $0.state = .queued; $0.retryAfter = nil } }
         schedule()
     }
@@ -150,9 +150,9 @@ final class OfflineDownloads: NSObject, AVAssetDownloadDelegate, URLSessionDownl
         preparations.removeValue(forKey: id)?.cancel()
         if let task = tasks[id], task.state == .running { task.suspend() }
     }
-    private func restart(_ id: String, state: OfflineVideo.State) {
+    private func restart(_ id: String, state: OfflineVideo.State, findMovieSource: Bool = false) {
         guard let video = library?.video(id) else { return }
-        guard update(id, { $0.attempt = UUID().uuidString; $0.state = state; $0.localPath = nil; $0.progress = 0; $0.bytes = 0; $0.error = nil; $0.detail = nil; $0.retries = 0; $0.retryAfter = nil; $0.note = video.progress > 0 ? "正在重新缓存" : nil }) else { return }
+        guard update(id, { $0.attempt = UUID().uuidString; $0.state = state; $0.localPath = nil; $0.progress = 0; $0.bytes = 0; $0.error = nil; $0.detail = nil; $0.findMovieSource = findMovieSource; $0.retries = 0; $0.retryAfter = nil; $0.note = video.progress > 0 ? "正在重新缓存" : nil }) else { return }
         preparations.removeValue(forKey: id)?.cancel()
         retireTransfer(video)
     }
@@ -177,7 +177,7 @@ final class OfflineDownloads: NSObject, AVAssetDownloadDelegate, URLSessionDownl
         guard restored, !scheduling, library != nil, storageError == nil else { return }
         scheduling = true; defer { scheduling = false; armRetry() }
         for video in videos where video.isScheduled && needsNetworkMigration(video) && (tasks[video.id] != nil || preparations[video.id] != nil) {
-            restart(video.id, state: .queued)
+            restart(video.id, state: .queued, findMovieSource: video.findMovieSource == true)
         }
         if !mayDownload {
             for video in videos where video.isScheduled { suspend(video.id, state: .waitingForNetwork) }
@@ -212,11 +212,24 @@ final class OfflineDownloads: NSObject, AVAssetDownloadDelegate, URLSessionDownl
                     WKWebsiteDataStore.default().httpCookieStore.getAllCookies { continuation.resume(returning: $0) }
                 }
                 guard !Task.isCancelled else { return }
-                let (media, kind) = try await self.prepare(url: url, origin: origin, cookies: cookies, cellular: cellular)
+                let (media, kind): (URL, String)
+                var selected = url
+                if video.findMovieSource == true {
+                    do {
+                        (selected, media, kind) = try await self.retryMovie(video, original: url, origin: origin, cookies: cookies, cellular: cellular)
+                    } catch {
+                        let searchError = error
+                        try Task.checkCancellation()
+                        guard let restored = try? await self.prepare(url: url, origin: origin, cookies: cookies, cellular: cellular) else { throw searchError }
+                        (media, kind) = restored
+                    }
+                } else {
+                    (media, kind) = try await self.prepare(url: url, origin: origin, cookies: cookies, cellular: cellular)
+                }
                 guard !Task.isCancelled, let current = self.library?.video(id), current.attempt == attempt, current.state == .preparing else { return }
                 // Remove an interrupted partial only after the replacement source resolves.
                 try self.library?.removeFile(id)
-                guard self.update(id, { $0.localPath = nil; $0.systemAsset = kind == "hls"; $0.progress = 0 }) else { return }
+                guard self.update(id, { $0.localPath = nil; $0.findMovieSource = nil; $0.sourceURL = selected.absoluteString; $0.systemAsset = kind == "hls"; $0.progress = 0 }) else { return }
                 let task: URLSessionTask
                 if kind == "hls" {
                     let options: [String: Any] = sameOrigin(media, origin) ? [AVURLAssetHTTPCookiesKey: cookies] : [:]
@@ -243,6 +256,78 @@ final class OfflineDownloads: NSObject, AVAssetDownloadDelegate, URLSessionDownl
             request.allHTTPHeaderFields = HTTPCookie.requestHeaderFields(with: matching)
         }
         return request
+    }
+    private func retryMovie(_ video: OfflineVideo, original: URL, origin: URL, cookies: [HTTPCookie], cellular: Bool) async throws -> (URL, URL, String) {
+        let config = URLSessionConfiguration.ephemeral
+        config.httpCookieStorage = nil
+        config.httpShouldSetCookies = false
+        let session = URLSession(configuration: config, delegate: DownloadRedirects(), delegateQueue: nil)
+        defer { session.invalidateAndCancel() }
+
+        func api(_ path: String, query: [URLQueryItem] = [], body: [String: Any]? = nil) async throws -> [String: Any] {
+            var parts = URLComponents(url: origin.appendingPathComponent(path), resolvingAgainstBaseURL: false)!
+            if !query.isEmpty { parts.queryItems = query }
+            var req = request(parts.url!, origin: origin, cookies: cookies, cellular: cellular)
+            if let body {
+                req.httpMethod = "POST"
+                req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+                req.httpBody = try JSONSerialization.data(withJSONObject: body)
+                req.timeoutInterval = 120
+            }
+            let (data, response) = try await session.data(for: req)
+            if (response as? HTTPURLResponse)?.statusCode == 401 {
+                throw DownloadError.message("请先登录 HomeTV，再重试缓存")
+            }
+            guard (response as? HTTPURLResponse)?.statusCode == 200,
+                  let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                throw DownloadError.message("片源搜索服务暂时不可用，请重试")
+            }
+            return json
+        }
+
+        let title = video.groupTitle ?? video.title
+        let status = try await api("api/status")
+        guard status["verified"] as? Bool == true else { throw DownloadError.message("请先登录 HomeTV，再重试缓存") }
+        let sources = (status["defaultSources"] as? [[String: Any]] ?? []).filter { $0["isAdult"] as? Bool != true }
+        guard !sources.isEmpty else { throw DownloadError.message("没有可搜索的预置点播源") }
+        let search = try await api("api/search", body: ["wd": title, "sources": sources, "context": ["mediaType": "movie"]])
+        let items = search["list"] as? [[String: Any]] ?? []
+        let group = video.groupID.flatMap { try? JSONDecoder().decode([String].self, from: Data($0.utf8)) }
+        let originalItem = items.first { item in
+            guard let group, group.count == 3 else { return false }
+            return item["sourceKey"] as? String == group[1] && item["vodId"] as? String == group[2]
+        }
+        let verified = items.filter { $0["identityUnconfirmed"] as? Bool != true }
+        let matchingIDs = Set(verified.filter { $0["name"] as? String == title }.compactMap { $0["workId"] as? String })
+        let workID = originalItem?["workId"] as? String ?? (matchingIDs.count == 1 ? matchingIDs.first : nil)
+        var seen = Set([original.absoluteString])
+        var candidates = verified
+        if let workID, let originalItem, originalItem["identityUnconfirmed"] as? Bool != true,
+           originalItem["workId"] as? String == workID {
+            // Providers sometimes classify the same catalogued film differently.
+            // Limit this lookup to the verified original work and non-adult providers.
+            let exact = try await api("api/search", body: ["wd": title, "sources": sources, "filterAdult": false,
+                                                          "context": ["mediaType": "movie", "workId": workID]])
+            candidates = (exact["list"] as? [[String: Any]] ?? []).filter { $0["identityUnconfirmed"] as? Bool != true }
+        }
+        for item in candidates {
+            try Task.checkCancellation()
+            guard let workID, item["workId"] as? String == workID,
+                  let id = item["vodId"] as? String, let key = item["sourceKey"] as? String,
+                  let source = sources.first(where: { $0["key"] as? String == key }) else { continue }
+            let sourceJSON = try JSONSerialization.data(withJSONObject: source)
+            let query = [URLQueryItem(name: "id", value: id), URLQueryItem(name: "source", value: String(decoding: sourceJSON, as: UTF8.self))]
+            guard let detail = try? await api("api/detail", query: query),
+                  let episodes = detail["episodes"] as? [String], episodes.count == 1,
+                  let candidate = URL(string: episodes[0], relativeTo: origin)?.absoluteURL,
+                  ["https", "http"].contains(candidate.scheme), candidate.host != nil, candidate.user == nil, candidate.password == nil,
+                  seen.insert(candidate.absoluteString).inserted else { continue }
+            if let (media, kind) = try? await prepare(url: candidate, origin: origin, cookies: cookies, cellular: cellular) {
+                return (candidate, media, kind)
+            }
+        }
+        try Task.checkCancellation()
+        throw DownloadError.message("未找到可缓存的同一部电影，请稍后重试")
     }
     private func prepare(url: URL, origin: URL, cookies: [HTTPCookie], cellular: Bool) async throws -> (URL, String) {
         let config = URLSessionConfiguration.ephemeral; config.httpCookieStorage = nil; config.httpShouldSetCookies = false; config.allowsCellularAccess = cellular

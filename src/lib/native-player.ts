@@ -11,9 +11,14 @@ export interface NativeProgress {
   sequence: number; baseRevision: number; openedAt: number; ended: boolean; reason: string;
   rate?: number;
 }
+export type NativeSubtitleScan = (message: { id: string; url: string } | { id: string; cancel: true }) => Promise<boolean>;
 declare global {
   interface Window {
-    __LIBRETV_NATIVE__?: { version: number; platform: string; watchLayout?: boolean; downloadsTab?: boolean; postMessage: (message: unknown) => void };
+    __LIBRETV_NATIVE__?: {
+      version: number; platform: string; watchLayout?: boolean; downloadsTab?: boolean;
+      postMessage: (message: unknown) => void;
+      scanSubtitleFrames?: NativeSubtitleScan;
+    };
   }
 }
 export function isNativeApp(): boolean {

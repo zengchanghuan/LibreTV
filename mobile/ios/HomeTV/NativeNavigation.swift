@@ -47,10 +47,10 @@ enum NativeNavigation {
     static func tabIndex(for url: URL, origin: URL) -> Int? {
         guard sameOrigin(url, origin) else { return nil }
         let path = url.path
-        if path == "/live" || path.hasPrefix("/live/") { return 1 }
-        if path == "/hd" || path.hasPrefix("/hd/") { return 2 }
-        if path == "/watch", URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.contains(where: { $0.name == "section" && $0.value == "hd" }) == true { return 2 }
-        return path == "/settings" || path.hasPrefix("/settings/") || path == "/about" || path == "/about/" ? 3 : 0
+        if path == "/live" || path.hasPrefix("/live/") { return 2 }
+        if path == "/hd" || path.hasPrefix("/hd/") { return 3 }
+        if path == "/watch", URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.contains(where: { $0.name == "section" && $0.value == "hd" }) == true { return 3 }
+        return path == "/settings" || path.hasPrefix("/settings/") || path == "/about" || path == "/about/" ? 4 : 0
     }
 
     struct Page {
@@ -83,7 +83,7 @@ enum NativeNavigation {
         case "settings": return Page(title: "设置", parent: nil)
         case "about": return Page(title: "关于 HomeTV", parent: origin.appendingPathComponent("settings"))
         case "watch":
-            return Page(title: "影片详情", parent: tabIndex(for: url, origin: origin) == 2 ? origin.appendingPathComponent("hd") : origin)
+            return Page(title: "影片详情", parent: tabIndex(for: url, origin: origin) == 3 ? origin.appendingPathComponent("hd") : origin)
         default:
             if path.hasPrefix("hd/") {
                 var parent = URLComponents(url: origin.appendingPathComponent("hd"), resolvingAgainstBaseURL: false)!
@@ -108,13 +108,13 @@ enum NativeNavigation {
     static func url(forTab index: Int, origin: URL, currentURL: URL? = nil, retrying: Bool = false) -> URL? {
         // A live page owns playback and search state. Reselecting its tab must
         // not replace the document; a failed navigation still needs a retry.
-        if [1, 2].contains(index), !retrying, let currentURL, currentURL.path != "/watch",
+        if [2, 3].contains(index), !retrying, let currentURL, currentURL.path != "/watch",
            tabIndex(for: currentURL, origin: origin) == index { return nil }
         switch index {
         case 0: return origin
-        case 1: return origin.appendingPathComponent("live")
-        case 2: return origin.appendingPathComponent("hd")
-        case 3: return origin.appendingPathComponent("settings")
+        case 2: return origin.appendingPathComponent("live")
+        case 3: return origin.appendingPathComponent("hd")
+        case 4: return origin.appendingPathComponent("settings")
         default: return nil
         }
     }

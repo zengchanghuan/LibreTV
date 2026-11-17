@@ -25,6 +25,7 @@ struct OfflineVideo: Codable, Identifiable {
     var systemAsset: Bool?
     var detail: String?
     var retries: Int?
+    var findMovieSource: Bool?
     var retryAfter: Date?
     var note: String?
     var token: String { attempt.map { id + "|" + $0 } ?? id }

@@ -18,6 +18,13 @@ describe('point-of-play resource ranking', () => {
     expect(order({ slow: { probe: probe({ height: 1080, subtitles: 'verified', ms: 2000, kbps: 3000 }) },
       fast: { probe: probe({ height: 1080, subtitles: 'verified' }) } })).toEqual(['fast', 'slow']);
   });
+  it('labels frame OCR separately and ranks it below a verified track in the same tier', () => {
+    const hint = probe({ height: 720, burnedInSubtitleHint: true, subtitles: 'declared' });
+    expect(mediaPreferenceLabel(hint)).toContain('字幕轨待验证 · 疑似画面字幕');
+    expect(order({ unknown: { probe: probe({ height: 720 }) }, hint: { probe: hint },
+      track: { probe: probe({ height: 720, subtitles: 'verified' }) }
+    })).toEqual(['track', 'hint', 'unknown']);
+  });
   it('does not mistake a declared track or a source label for verified subtitles', () => {
     expect(order({ declared: { probe: probe({ height: 1080, subtitles: 'declared' }), remarks: '4K 中字' },
       verified: { probe: probe({ height: 1080, subtitles: 'verified' }) } })).toEqual(['verified', 'declared']);

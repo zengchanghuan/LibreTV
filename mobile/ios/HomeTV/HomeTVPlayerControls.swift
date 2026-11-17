@@ -5,6 +5,7 @@ import UIKit
 final class HomeTVPlayerControls: ZFPlayerControlView {
     var onToggle: (() -> Void)?
     var onSeek: (() -> Void)?
+    var onDoubleTapSeek: ((Int) -> Void)?
     /// A portrait 16:9 video is also wider than tall, so the owning screen must
     /// supply the orientation instead of deriving it from this view's bounds.
     var landscapeLayout = false {
@@ -15,6 +16,9 @@ final class HomeTVPlayerControls: ZFPlayerControlView {
         }
     }
     private(set) var controlsLocked = false
+    override var isHidden: Bool {
+        didSet { if isHidden && !oldValue { clearSeekFeedback() } }
+    }
     let heading = UILabel()
     let message = UILabel()
     let backButton = UIButton(type: .system)
@@ -32,6 +36,7 @@ final class HomeTVPlayerControls: ZFPlayerControlView {
     private let footer = UIView()
     private let timeline = UIView()
     private let timeSeparator = UILabel()
+    private let seekFeedback = HomeTVSeekFeedback()
     private let shade = CAGradientLayer()
     private let topShade = CAGradientLayer()
 
@@ -123,6 +128,8 @@ final class HomeTVPlayerControls: ZFPlayerControlView {
         }
         message.textColor = .white; message.numberOfLines = 0; message.textAlignment = .center
         message.font = .systemFont(ofSize: 14); message.isUserInteractionEnabled = false
+        seekFeedback.isHidden = true
+        addSubview(seekFeedback)
         addSubview(header); addSubview(footer); addSubview(lockButton); addSubview(message)
         controlViewAppearedCallback = { [weak self] appeared in self?.applyVisibility(appeared) }
     }
@@ -148,6 +155,7 @@ final class HomeTVPlayerControls: ZFPlayerControlView {
         landScapeControlView.isHidden = true
         let horizontal: CGFloat = landscapeLayout ? 12 : 4
         let safe = bounds.inset(by: safeAreaInsets).insetBy(dx: horizontal, dy: 4)
+        if !seekFeedback.isHidden { layoutSeekFeedback() }
         header.frame = CGRect(x: safe.minX, y: safe.minY, width: safe.width, height: 44)
         backButton.frame = CGRect(x: 0, y: 0, width: 44, height: 44)
         moreButton.frame = CGRect(x: safe.width - 44, y: 0, width: 44, height: 44)
@@ -234,7 +242,10 @@ final class HomeTVPlayerControls: ZFPlayerControlView {
     @objc private func toggleControlLock() {
         controlsLocked.toggle()
         updateLockSymbol()
-        if controlsLocked { applyVisibility(controlViewAppeared) }
+        if controlsLocked {
+            clearSeekFeedback()
+            applyVisibility(controlViewAppeared)
+        }
         else { revealControls() }
     }
     private func updateLockSymbol() {
@@ -251,13 +262,14 @@ final class HomeTVPlayerControls: ZFPlayerControlView {
         if !controlViewAppeared, let gesture = player?.gestureControl { super.gestureSingleTapped(gesture) }
         applyVisibility(controlViewAppeared)
     }
+    private func acceptsVideoGesture(at point: CGPoint) -> Bool {
+        guard !isHidden, !controlsLocked, bounds.contains(point) else { return false }
+        return ![header, footer, lockButton, failBtn].contains { view in
+            !view.isHidden && view.alpha > 0 && view.frame.contains(point)
+        }
+    }
     override func gestureTriggerCondition(_ gestureControl: ZFPlayerGestureControl, gestureType: ZFPlayerGestureType, gestureRecognizer: UIGestureRecognizer, touch: UITouch) -> Bool {
-        guard !isHidden, !controlsLocked else { return false }
-        let point = touch.location(in: self)
-        if header.alpha > 0 && (header.frame.contains(point) || footer.frame.contains(point)) { return false }
-        if !lockButton.isHidden && lockButton.alpha > 0 && lockButton.frame.contains(point) { return false }
-        // The original ZF hit test assumes its old bottom bar still parents the
-        // slider. We use the actual custom footer above, avoiding a stale rect.
+        guard acceptsVideoGesture(at: touch.location(in: self)) else { return false }
         if !customDisablePanMovingDirection { player?.disablePanMovingDirection = [] }
         return true
     }
@@ -271,13 +283,122 @@ final class HomeTVPlayerControls: ZFPlayerControlView {
         super.gestureBeganPan(gestureControl, panDirection: direction, panLocation: location)
     }
     override func gestureDoubleTapped(_ gestureControl: ZFPlayerGestureControl) {
-        guard !controlsLocked else { return }
-        onToggle?()
+        let tap = gestureControl.doubleTap
+        guard tap.state == .ended else { return }
+        let point = tap.location(in: self)
+        guard acceptsVideoGesture(at: point) else { return }
+        let fraction = (point.x - bounds.minX) / bounds.width
+        if fraction < 1.0 / 3 {
+            onDoubleTapSeek?(-1)
+        } else if fraction >= 2.0 / 3 {
+            onDoubleTapSeek?(1)
+        } else {
+            onToggle?()
+        }
+    }
+    func showSeekFeedback(direction: Int, seconds: Int) {
+        guard !controlsLocked, !isHidden else { return }
+        let forward = direction > 0
+        let text: String
+        if seconds > 0 {
+            text = "\(forward ? "快进" : "后退") \(seconds) 秒"
+        } else {
+            text = forward ? "已到片尾" : "已到片头"
+        }
+        seekFeedback.configure(forward: forward, text: text)
+        layoutSeekFeedback()
+        NSObject.cancelPreviousPerformRequests(withTarget: self, selector: #selector(hideSeekFeedback), object: nil)
+        seekFeedback.layer.removeAllAnimations()
+        seekFeedback.alpha = 1
+        seekFeedback.isHidden = false
+        if UIAccessibility.isVoiceOverRunning {
+            UIAccessibility.post(notification: .announcement, argument: text)
+        }
+        perform(#selector(hideSeekFeedback), with: nil, afterDelay: 0.7)
+    }
+    private func layoutSeekFeedback() {
+        let width = bounds.width * 0.34
+        seekFeedback.frame = CGRect(x: seekFeedback.forward ? bounds.maxX - width : bounds.minX,
+                                    y: bounds.minY, width: width, height: bounds.height)
+    }
+    private func clearSeekFeedback() {
+        NSObject.cancelPreviousPerformRequests(withTarget: self, selector: #selector(hideSeekFeedback), object: nil)
+        seekFeedback.layer.removeAllAnimations()
+        seekFeedback.isHidden = true
+    }
+    @objc private func hideSeekFeedback() {
+        UIView.animate(withDuration: UIAccessibility.isReduceMotionEnabled ? 0 : 0.15) {
+            self.seekFeedback.alpha = 0
+        } completion: { finished in
+            if finished && self.seekFeedback.alpha == 0 { self.seekFeedback.isHidden = true }
+        }
     }
     func updatePlaying(_ playing: Bool) {
         playButton.setImage(UIImage(systemName: playing ? "pause.fill" : "play.fill", withConfiguration: UIImage.SymbolConfiguration(pointSize: 23, weight: .medium)), for: .normal)
         playButton.accessibilityLabel = playing ? "暂停" : "播放"
         setNeedsLayout()
+    }
+}
+
+private final class HomeTVSeekFeedback: UIView {
+    private let arrows = UIImageView()
+    private let label = UILabel()
+    private(set) var forward = true
+    private static let gradient = CGGradient(
+        colorsSpace: CGColorSpaceCreateDeviceRGB(),
+        colors: [
+            UIColor(red: 0.075, green: 0.133, blue: 0.169, alpha: 0.69).cgColor,
+            UIColor(red: 0.090, green: 0.165, blue: 0.208, alpha: 0.44).cgColor,
+            UIColor(red: 0.090, green: 0.165, blue: 0.208, alpha: 0).cgColor
+        ] as CFArray,
+        locations: [0, 0.44, 0.72]
+    )
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        isOpaque = false
+        isUserInteractionEnabled = false
+        contentMode = .redraw
+        arrows.contentMode = .scaleAspectFit
+        arrows.tintColor = .white
+        label.accessibilityIdentifier = "player.seek-feedback"
+        label.font = .monospacedDigitSystemFont(ofSize: 15, weight: .semibold)
+        label.textAlignment = .center
+        label.textColor = .white
+        label.adjustsFontSizeToFitWidth = true
+        label.minimumScaleFactor = 0.8
+        for view in [arrows, label] {
+            view.layer.shadowColor = UIColor.black.cgColor
+            view.layer.shadowOpacity = 0.5
+            view.layer.shadowRadius = 3
+            view.layer.shadowOffset = CGSize(width: 0, height: 1)
+            addSubview(view)
+        }
+    }
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    func configure(forward: Bool, text: String) {
+        self.forward = forward
+        arrows.image = UIImage(systemName: forward ? "chevron.right.2" : "chevron.left.2",
+                               withConfiguration: UIImage.SymbolConfiguration(pointSize: 26, weight: .medium))
+        label.text = text
+        setNeedsDisplay()
+    }
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        let safe = bounds.inset(by: safeAreaInsets)
+        arrows.frame = CGRect(x: safe.midX - 19, y: safe.midY - 26, width: 38, height: 26)
+        label.frame = CGRect(x: safe.minX + 2, y: safe.midY + 3, width: max(0, safe.width - 4), height: 23)
+    }
+    override func draw(_ rect: CGRect) {
+        guard !bounds.isEmpty, let context = UIGraphicsGetCurrentContext(), let gradient = Self.gradient else { return }
+        // Match the design's farthest-corner ellipse, centered near the outer edge.
+        context.saveGState()
+        context.translateBy(x: bounds.width * (forward ? 0.85 : 0.15), y: bounds.midY)
+        context.scaleBy(x: bounds.width * 0.85 * sqrt(2), y: bounds.height * 0.5 * sqrt(2))
+        context.drawRadialGradient(gradient, startCenter: .zero, startRadius: 0,
+                                   endCenter: .zero, endRadius: 1, options: [])
+        context.restoreGState()
     }
 }
 

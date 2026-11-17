@@ -2,6 +2,8 @@
 import { api } from './client-api';
 import type { SourceConfig } from './types';
 import { hasSubtitleCue, inspectHls, type MediaCapabilities, type SubtitleTrack } from './media-capabilities';
+import { PROXY_BASE } from './m3u8';
+import type { NativeSubtitleScan } from './native-player';
 export interface MediaProbe extends MediaCapabilities { ok: boolean; ms: number; kbps?: number; episodes: number; error?: string; timedOut?: boolean }
 /** Follow HLS master lists and the first media object, not merely the catalog response. */
 export function firstMediaReference(text: string): string | undefined {
@@ -46,6 +48,22 @@ async function verifySubtitles(tracks: SubtitleTrack[], signal: AbortSignal): Pr
     if (deadline.aborted) break;
   }
 }
+async function scanSubtitleFrames(scan: NativeSubtitleScan, url: string, parent: AbortSignal): Promise<boolean> {
+  const signal = AbortSignal.any([parent, AbortSignal.timeout(11500)]);
+  if (signal.aborted || !globalThis.crypto?.randomUUID) return false;
+  const id = crypto.randomUUID();
+  let stop: () => void = () => {};
+  const cancelled = new Promise<false>(resolve => {
+    stop = () => {
+      resolve(false);
+      void scan({ id, cancel: true }).catch(() => {});
+    };
+    signal.addEventListener('abort', stop, { once: true });
+  });
+  try { return (await Promise.race([scan({ id, url }), cancelled])) === true; }
+  catch { return false; }
+  finally { signal.removeEventListener('abort', stop); }
+}
 async function readPlaylist(res: Response): Promise<string> {
   const reader = res.body?.getReader(); if (!reader) throw new Error('视频列表为空');
   const decoder = new TextDecoder(); let text = '', bytes = 0;
@@ -81,9 +99,11 @@ export async function probeVideo(source: SourceConfig, id: string, index: number
       url = data.url; mp4 = data.type === 'mp4';
     }
     if (!/^https?:\/\//i.test(url)) throw new Error('无效的媒体地址');
+    let frameUrl = url;
     if (!mp4) {
       for (let depth = 0; depth < 3; depth++) {
         const res = await fetchMedia(url, signal);
+        frameUrl = res.url || url;
         if ((res.headers.get('content-type') || '').includes('video/mp4')) { await res.body?.cancel(); break; }
         const text = await readPlaylist(res);
         const manifest = inspectHls(text);
@@ -103,6 +123,11 @@ export async function probeVideo(source: SourceConfig, id: string, index: number
       }
     }
     const sampleStart = performance.now(), res = await fetchMedia(url, signal, true);
+    // If only the sampled segment required the proxy, decode its playlist through the same route.
+    if (typeof window !== 'undefined' && res.url && new URL(res.url).origin === window.location.origin &&
+      new URL(res.url).pathname === '/api/proxy' && new URL(frameUrl).origin !== window.location.origin) {
+      frameUrl = new URL(PROXY_BASE + encodeURIComponent(frameUrl), window.location.origin).href;
+    }
     const ct = res.headers.get('content-type') || '';
     if (/html|json|xml|mpegurl/i.test(ct)) { await res.body?.cancel(); throw new Error('返回的不是媒体数据'); }
     const reader = res.body?.getReader(); if (!reader) throw new Error('无媒体数据');
@@ -113,10 +138,13 @@ export async function probeVideo(source: SourceConfig, id: string, index: number
     const result: MediaProbe = { ok: true, episodes, ms: Math.round(performance.now() - started), kbps: bytes >= 32768 ? Math.round(bytes * 8 / Math.max(1, performance.now() - sampleStart)) : undefined, ...capabilities };
     parent.throwIfAborted();
     // Publish video evidence before waiting for optional subtitle requests.
-    if (tracks.length) onPlayable?.({ ...result });
+    const scan = typeof window !== 'undefined' ? window.__LIBRETV_NATIVE__?.scanSubtitleFrames : undefined;
+    if (tracks.length || scan) onPlayable?.({ ...result });
     const subtitle = await verifySubtitles(tracks, signal);
     parent.throwIfAborted();
     if (subtitle) { result.subtitles = 'verified'; result.subtitleLanguage = subtitle.language; }
+    else if (scan && await scanSubtitleFrames(scan, frameUrl, parent)) { result.burnedInSubtitleHint = true; }
+    parent.throwIfAborted();
     if (cache.size > 100) cache.clear(); cache.set(key, { at: Date.now(), value: result }); return result;
   } catch (error) {
     if (parent.aborted) throw error;

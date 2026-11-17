@@ -4,7 +4,7 @@ final class OfflineDownloadsController: UITableViewController {
     private let downloads: OfflineDownloads
     private var groups: [(title: String, videos: [OfflineVideo])] = []
     private let summary = UILabel(), policySummary = UILabel(), queueSummary = UILabel(), disclosure = UILabel()
-    private let filter = UISegmentedControl(items: ["缓存中", "已缓存"])
+    private let filter = UISegmentedControl(items: ["已缓存", "缓存中"])
     private let policy = UIButton(type: .system), all = UIButton(type: .system)
     private let queueRow = UIStackView()
     private let header = UIStackView()
@@ -18,7 +18,7 @@ final class OfflineDownloadsController: UITableViewController {
     override func viewDidLoad() {
         super.viewDidLoad(); title = "我的缓存"
         managementItem = UIBarButtonItem(title: "管理", style: .plain, target: self, action: #selector(toggleEditing))
-        if navigationController?.viewControllers.first === self {
+        if navigationController?.viewControllers.first === self && navigationController?.parent == nil {
             navigationItem.rightBarButtonItem = UIBarButtonItem(title: "完成", style: .plain, target: self, action: #selector(close))
             navigationItem.leftBarButtonItem = managementItem
         } else {
@@ -46,7 +46,7 @@ final class OfflineDownloadsController: UITableViewController {
         NSLayoutConstraint.activate([policyRow.leadingAnchor.constraint(equalTo: policy.leadingAnchor), policyRow.trailingAnchor.constraint(equalTo: policy.trailingAnchor), policyRow.topAnchor.constraint(equalTo: policy.topAnchor, constant: 8), policyRow.bottomAnchor.constraint(equalTo: policy.bottomAnchor, constant: -8), policy.heightAnchor.constraint(greaterThanOrEqualToConstant: 44)])
         policy.accessibilityIdentifier = "offline.open-settings"
         policy.addTarget(self, action: #selector(openSettings), for: .touchUpInside)
-        filter.selectedSegmentIndex = downloads.videos.isEmpty || downloads.videos.contains { $0.state != .completed } ? 0 : 1; filter.addTarget(self, action: #selector(changeFilter), for: .valueChanged)
+        filter.selectedSegmentIndex = downloads.videos.isEmpty || downloads.videos.contains { $0.state != .completed } ? 1 : 0; filter.addTarget(self, action: #selector(changeFilter), for: .valueChanged)
         filter.accessibilityIdentifier = "offline.filter"
         all.addTarget(self, action: #selector(toggleAll), for: .touchUpInside)
         all.contentHorizontalAlignment = .trailing; all.heightAnchor.constraint(greaterThanOrEqualToConstant: 44).isActive = true
@@ -110,14 +110,14 @@ final class OfflineDownloadsController: UITableViewController {
         let failed = videos.filter { $0.state == .failed }.count
         summary.text = downloads.storageError ?? "已缓存 \(size)\(free)"
         queueSummary.text = "\(running) 个缓存中 · \(queued) 个等待\(failed > 0 ? " · \(failed) 个失败" : "")"
-        filter.setTitle("缓存中 \(videos.filter { $0.state != .completed }.count)", forSegmentAt: 0)
-        filter.setTitle("已缓存 \(videos.filter { $0.state == .completed }.count)", forSegmentAt: 1)
+        filter.setTitle("缓存中 \(videos.filter { $0.state != .completed }.count)", forSegmentAt: 1)
+        filter.setTitle("已缓存 \(videos.filter { $0.state == .completed }.count)", forSegmentAt: 0)
         policySummary.text = "同时缓存 \(downloads.concurrency) 个 · \(downloads.allowsCellular ? "允许蜂窝网络" : "仅 Wi-Fi")"
         policy.accessibilityLabel = "缓存设置，" + (policySummary.text ?? "")
         all.setTitle(videos.contains(where: \.isScheduled) ? "全部暂停" : "全部继续", for: .normal)
-        queueRow.isHidden = filter.selectedSegmentIndex == 1 || isEditing || !videos.contains { $0.state != .completed }
+        queueRow.isHidden = filter.selectedSegmentIndex == 0 || isEditing || !videos.contains { $0.state != .completed }
         all.isEnabled = videos.contains { $0.isScheduled || $0.state == .paused }
-        let visible = videos.filter { ($0.state == .completed) == (filter.selectedSegmentIndex == 1) }
+        let visible = videos.filter { ($0.state == .completed) == (filter.selectedSegmentIndex == 0) }
         var indexes: [String: Int] = [:]; groups = []
         for video in visible {
             let key = video.groupID ?? video.id
@@ -131,7 +131,7 @@ final class OfflineDownloadsController: UITableViewController {
         }
         if groups.isEmpty {
             let empty = UILabel(); empty.numberOfLines = 0; empty.textAlignment = .center; empty.textColor = theme.muted
-            empty.text = filter.selectedSegmentIndex == 1 ? "还没有已完成的缓存" : "暂无缓存任务\n在播放器中点击缓存，可批量选择剧集"
+            empty.text = filter.selectedSegmentIndex == 0 ? "还没有已完成的缓存" : "暂无缓存任务\n在播放器中点击缓存，可批量选择剧集"
             tableView.backgroundView = empty
         } else { tableView.backgroundView = nil }
         view.setNeedsLayout(); updateToolbar()
@@ -173,7 +173,7 @@ final class OfflineDownloadsController: UITableViewController {
         let status: String, action: String
         switch video.state {
         case .queued: status = video.note ?? "排队中"; action = "优先缓存"
-        case .preparing: status = "正在准备缓存…"; action = "暂停"
+        case .preparing: status = video.findMovieSource == true ? "正在查找可缓存片源…" : "正在准备缓存…"; action = "暂停"
         case .downloading: status = "缓存中 · \(Int(video.progress * 100))%"; action = "暂停"
         case .waitingForNetwork: status = downloads.allowsCellular ? "等待网络连接" : "等待 Wi-Fi"; action = "暂停"
         case .paused: status = "已暂停 · \(Int(video.progress * 100))%"; action = "继续"
@@ -205,7 +205,7 @@ final class OfflineDownloadsController: UITableViewController {
         case .preparing, .downloading, .waitingForNetwork: downloads.pause(id)
         case .paused, .failed: downloads.resume(id)
         case .completed:
-            if downloads.library?.playableURL(id) == nil { downloads.redownload(id); filter.selectedSegmentIndex = 0; refresh() }
+            if downloads.library?.playableURL(id) == nil { downloads.redownload(id); filter.selectedSegmentIndex = 1; refresh() }
             else { play(id) }
         case .verifying: break
         }

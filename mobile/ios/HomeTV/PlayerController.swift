@@ -95,16 +95,10 @@ final class PlayerController: UIViewController, AVPictureInPictureControllerDele
         player.resumePlayRecord = false
         controls.onSeek = { [weak self] in
             guard let self, self.engine.playerItem?.status == .readyToPlay else { return }
-            self.finished = false
-            // A deliberate seek supersedes the initial resume operation. Its late
-            // completion must neither lock the controls nor start playback.
-            if self.playbackPosition.isRestoring {
-                self.restoreAttempt = UUID()
-                self.playbackPosition.didRestore()
-                self.engine.playerItem?.cancelPendingSeeks()
-            }
+            self.prepareForManualSeek()
         }
         controls.onToggle = { [weak self] in self?.engine.trace("gesture-double-tap"); self?.toggle() }
+        controls.onDoubleTapSeek = { [weak self] direction in self?.seekByDoubleTap(direction) }
         engine.onSeek = { [weak self] target in
             guard let self else { return nil }
             let id = self.playbackPosition.beginSeek(to: target)
@@ -273,6 +267,7 @@ final class PlayerController: UIViewController, AVPictureInPictureControllerDele
             // A user seek can cancel the initial resume completion; PiP setup
             // must not depend on that completion succeeding.
             self.configurePictureInPicture()
+            guard self.restoreAttempt == attempt, self.playbackPosition.isRestoring else { return }
             let item = self.engine.playerItem
             let duration = item?.duration.seconds ?? 0
             let start = restorePosition.isFinite && restorePosition > 0 && duration.isFinite && restorePosition < duration - 2 ? restorePosition : 0
@@ -313,6 +308,7 @@ final class PlayerController: UIViewController, AVPictureInPictureControllerDele
                       self.engine.playerItem === item, self.attachmentID == attachment,
                       self.engine.seekRevision == seekRevision else { return }
                 if self.checkDeadline() { return }
+                guard !self.userPaused else { return }
                 guard !wasSeeking, !self.playbackPosition.hasPendingSeek, !self.playbackPosition.isRestoring else {
                     self.engine.trace("end-ignored-during-seek"); return
                 }
@@ -525,7 +521,10 @@ final class PlayerController: UIViewController, AVPictureInPictureControllerDele
         try? AVAudioSession.sharedInstance().setActive(true)
         if sleeping || playbackInterrupted { retry(); return }
         userPaused = false
-        if finished { finished = false; engine.replay() }
+        if finished || (!playbackPosition.isRestoring && duration > 0 && position >= duration) {
+            finished = false
+            engine.replay()
+        }
         else if !playbackPosition.isRestoring { engine.rate = session.rate; engine.play() }
         updateTime()
     }
@@ -663,11 +662,49 @@ final class PlayerController: UIViewController, AVPictureInPictureControllerDele
         center.skipForwardCommand.preferredIntervals = [15]; center.skipBackwardCommand.preferredIntervals = [15]
         center.nextTrackCommand.isEnabled = false; center.previousTrackCommand.isEnabled = false
     }
+    private func prepareForManualSeek() {
+        finished = false
+        if playbackPosition.isRestoring {
+            restoreAttempt = UUID()
+            playbackPosition.didRestore()
+            engine.playerItem?.cancelPendingSeeks()
+        }
+    }
+    private func seekByDoubleTap(_ direction: Int) {
+        let end = duration
+        guard !closed, !sleeping, !minimized, !deviceLocked, !appInBackground,
+              !controls.controlsLocked, !controls.isHidden, !checkDeadline(),
+              engine.playerItem?.status == .readyToPlay, end > 0 else { return }
+
+        // position includes any in-flight target, so consecutive taps accumulate.
+        let start = min(max(0, position), end)
+        let target = min(max(0, start + Double(direction * preferences.doubleTapSeekSeconds)), end)
+        let distance = abs(target - start)
+        controls.showSeekFeedback(direction: direction, seconds: Int(distance.rounded()))
+        guard distance > 0 else { return }
+
+        let resumeInitialPlayback = playbackPosition.isRestoring && !userPaused
+        if target == end {
+            // Hold the last frame until the viewer seeks back or chooses replay.
+            userPaused = true
+            resumeAfterInterruption = false
+            engine.pause()
+        }
+        seekManually(to: target)
+        if resumeInitialPlayback && !userPaused { engine.play() }
+    }
     private func remoteSeek(_ time: Double) {
         guard !closed, !sleeping, !checkDeadline(), duration > 0, time.isFinite else { return }
-        finished = false
-        if playbackPosition.isRestoring { restoreAttempt = UUID(); playbackPosition.didRestore(); engine.playerItem?.cancelPendingSeeks() }
-        engine.seek(toTime: min(max(0, time), max(0, duration - 0.1))) { [weak self] _ in self?.emit("progress"); self?.updateTime() }
+        seekManually(to: min(max(0, time), max(0, duration - 0.1)))
+    }
+    private func seekManually(to target: Double) {
+        prepareForManualSeek()
+        let attachment = attachmentID
+        engine.seek(toTime: target) { [weak self] completed in
+            guard let self, completed, self.attachmentID == attachment, !self.closed, !self.sleeping else { return }
+            self.emit("progress")
+            self.updateTime()
+        }
     }
     private func updateNowPlaying() {
         MPNowPlayingInfoCenter.default().nowPlayingInfo = [

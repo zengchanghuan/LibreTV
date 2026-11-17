@@ -21,5 +21,15 @@ func runPlaybackPreferencesTests() throws {
         defaults.set(legacy, forKey: "playback.backgroundMode")
         try testCheck(preferences.smallWindow == pip && preferences.backgroundAudio == audio, "Preserve explicit legacy choice: " + legacy)
     }
-    print("iOS playback preferences: 10 scenarios passed")
+    try testCheck(preferences.doubleTapSeekSeconds == 10, "New install defaults to a 10-second double tap")
+    for seconds in [5, 10, 15, 30] {
+        preferences.doubleTapSeekSeconds = seconds
+        let restored = PlaybackPreferences(defaults: defaults)
+        try testCheck(restored.doubleTapSeekSeconds == seconds, "Restore double-tap seek interval: \(seconds)")
+    }
+    defaults.set("15", forKey: "playback.doubleTapSeekSeconds")
+    try testCheck(preferences.doubleTapSeekSeconds == 10, "Invalid stored interval uses the default")
+    preferences.doubleTapSeekSeconds = 7
+    try testCheck(reloaded.doubleTapSeekSeconds == 10, "Unsupported seek interval uses the default")
+    print("iOS playback preferences: 17 scenarios passed")
 }

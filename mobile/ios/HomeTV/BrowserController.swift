@@ -1,11 +1,12 @@
 import UIKit
 import WebKit
 
-final class BrowserController: UIViewController, WKScriptMessageHandler, WKNavigationDelegate {
+final class BrowserController: UIViewController, WKScriptMessageHandler, WKScriptMessageHandlerWithReply, WKNavigationDelegate {
     private var web: WKWebView!
     private var origin: URL?
     private var player: PlayerController? { PlaybackCoordinator.shared.current }
     private var openRevision = UUID()
+    private var subtitleScans: [UUID: Task<Void, Never>] = [:]
     private let status = UILabel()
     private let navigationBar = UINavigationBar()
     private let pageNavigationItem = UINavigationItem(title: "首页")
@@ -14,6 +15,7 @@ final class BrowserController: UIViewController, WKScriptMessageHandler, WKNavig
     private var darkTheme = UserDefaults.standard.object(forKey: "native.theme.dark") as? Bool ?? true
     override var preferredStatusBarStyle: UIStatusBarStyle { darkTheme ? .lightContent : .darkContent }
     private let tabBar = HomeTabBar()
+    private var downloadsTab: UINavigationController?
     private var collectionSheetOpen = false
     private var tabBarHeight: NSLayoutConstraint!
     private var navigationBarHeight: NSLayoutConstraint!
@@ -32,8 +34,10 @@ final class BrowserController: UIViewController, WKScriptMessageHandler, WKNavig
         config.allowsInlineMediaPlayback = true
         config.applicationNameForUserAgent = "LibreTVNative/1"
         config.userContentController.add(self, name: "libretvNative")
+        config.userContentController.addScriptMessageHandler(self, contentWorld: .page, name: "libretvSubtitleFrames")
         let bridge = """
-        window.__LIBRETV_NATIVE__={version:1,platform:'ios',watchLayout:true,postMessage:m=>window.webkit.messageHandlers.libretvNative.postMessage(m)};
+        window.__LIBRETV_NATIVE__={version:1,platform:'ios',downloadsTab:true,watchLayout:true,postMessage:m=>window.webkit.messageHandlers.libretvNative.postMessage(m)};
+        window.__LIBRETV_NATIVE__.scanSubtitleFrames=m=>window.webkit.messageHandlers.libretvSubtitleFrames.postMessage(m);
         window.addEventListener('libretv:show-download-manager',e=>{e.stopImmediatePropagation();window.__LIBRETV_NATIVE__.postMessage({type:'downloads'});});
         window.addEventListener('libretv:add-download',e=>{e.stopImmediatePropagation();window.__LIBRETV_NATIVE__.postMessage({type:'download',url:e.detail?.url,title:e.detail?.title});});
         window.dispatchEvent(new Event('libretv:native-ready'));
@@ -76,7 +80,7 @@ final class BrowserController: UIViewController, WKScriptMessageHandler, WKNavig
     }
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
-        let height = watchLayout || collectionSheetOpen ? 0 : 56 + view.safeAreaInsets.bottom
+        let height = tabBar.isHidden ? 0 : 56 + view.safeAreaInsets.bottom
         if abs(tabBarHeight.constant - height) > 0.5 { tabBarHeight.constant = height }
     }
     private func setWatchLayout(_ enabled: Bool) {
@@ -86,9 +90,9 @@ final class BrowserController: UIViewController, WKScriptMessageHandler, WKNavig
         view.setNeedsLayout()
     }
     private func updateChrome() {
-        let hiddenTabs = watchLayout || collectionSheetOpen
+        let hiddenTabs = downloadsTab == nil && (watchLayout || collectionSheetOpen)
         let webHeader = navigationURL.flatMap { url in origin.map { NativeNavigation.usesWebHomeHeader(for: url, origin: $0) } } ?? false
-        let hiddenHeader = watchLayout || collectionSheetOpen || webHeader
+        let hiddenHeader = downloadsTab != nil || watchLayout || collectionSheetOpen || webHeader
         navigationBar.isHidden = hiddenHeader; navigationBarHeight.constant = hiddenHeader ? 0 : 44
         tabBar.isHidden = hiddenTabs; bottomBackground.isHidden = hiddenTabs
         NSLayoutConstraint.deactivate([webBottomToTabs, webBottomToSafeArea])
@@ -117,6 +121,16 @@ final class BrowserController: UIViewController, WKScriptMessageHandler, WKNavig
         tabBar.selectedIndex = 0
     }
     private func selectTab(_ index: Int) {
+        if index == 1 { showDownloads(); return }
+        if let child = downloadsTab {
+            child.willMove(toParent: nil)
+            child.view.removeFromSuperview()
+            child.removeFromParent()
+            downloadsTab = nil
+            web.isHidden = false
+            connectionStatus.isHidden = false
+            updateChrome()
+        }
         guard let origin, let url = NativeNavigation.url(forTab: index, origin: origin, currentURL: web.url, retrying: !retry.isHidden) else { return }
         retry.isHidden = true; offlineButton.isHidden = false; status.text = "正在连接…"
         web.load(URLRequest(url: url))
@@ -134,7 +148,24 @@ final class BrowserController: UIViewController, WKScriptMessageHandler, WKNavig
     }
     @objc private func showDownloads() {
         guard presentedViewController == nil else { return }
-        present(UINavigationController(rootViewController: OfflineDownloadsController()), animated: true)
+        guard downloadsTab == nil else { return }
+        view.endEditing(true)
+        let child = UINavigationController(rootViewController: OfflineDownloadsController())
+        downloadsTab = child
+        addChild(child)
+        child.view.translatesAutoresizingMaskIntoConstraints = false
+        view.insertSubview(child.view, belowSubview: tabBar)
+        NSLayoutConstraint.activate([
+            child.view.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
+            child.view.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            child.view.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            child.view.bottomAnchor.constraint(equalTo: tabBar.topAnchor)
+        ])
+        child.didMove(toParent: self)
+        web.isHidden = true
+        connectionStatus.isHidden = true
+        tabBar.selectedIndex = 1
+        updateChrome()
     }
     private func download(url: URL, title: String) {
         guard let origin else { return }
@@ -156,6 +187,9 @@ final class BrowserController: UIViewController, WKScriptMessageHandler, WKNavig
         if action.navigationType == .linkActivated && ["https", "http"].contains(target.scheme) { UIApplication.shared.open(target) }
         decisionHandler(.cancel)
     }
+    func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
+        for scan in subtitleScans.values { scan.cancel() }
+    }
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         status.text = ""; retry.isHidden = true; offlineButton.isHidden = true
         if let url = web.url { updateSelectedTab(url) }
@@ -163,7 +197,7 @@ final class BrowserController: UIViewController, WKScriptMessageHandler, WKNavig
     }
     private func updateSelectedTab(_ url: URL) {
         guard let origin, let index = NativeNavigation.tabIndex(for: url, origin: origin) else { return }
-        tabBar.selectedIndex = index
+        if downloadsTab == nil { tabBar.selectedIndex = index }
         collectionSheetOpen = false
         navigationURL = url
         setWatchLayout(NativeNavigation.usesWatchLayout(for: url, origin: origin))
@@ -186,7 +220,7 @@ final class BrowserController: UIViewController, WKScriptMessageHandler, WKNavig
         collectionSheetOpen = false
         setWatchLayout(false)
         updateChrome()
-        navigationBar.isHidden = false; navigationBarHeight.constant = 44
+        if downloadsTab == nil { navigationBar.isHidden = false; navigationBarHeight.constant = 44 }
         let detail = "\(failure.domain) (\(failure.code)): \(failure.localizedDescription)"
         UserDefaults.standard.set(detail, forKey: "lastConnectionError")
         status.text = "连接失败：\(failure.localizedDescription)\n错误码 \(failure.code)"
@@ -228,6 +262,25 @@ final class BrowserController: UIViewController, WKScriptMessageHandler, WKNavig
             let controller = PlayerController(session: session, origin: origin, cookies: cookies)
             controller.onProgress = { [weak self] event in self?.record(event) }
             PlaybackCoordinator.shared.start(controller, from: self)
+        }
+    }
+    func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage,
+                               replyHandler: @escaping (Any?, String?) -> Void) {
+        guard message.frameInfo.isMainFrame, let origin, let frame = message.frameInfo.request.url, sameOrigin(frame, origin),
+              let body = message.body as? [String: Any], let key = body["id"] as? String, let id = UUID(uuidString: key)
+        else { replyHandler(false, nil); return }
+        if body["cancel"] as? Bool == true {
+            subtitleScans[id]?.cancel()
+            replyHandler(false, nil); return
+        }
+        guard subtitleScans.count < 3, subtitleScans[id] == nil, let raw = body["url"] as? String, raw.count <= 8192,
+              let url = URL(string: raw), ["http", "https"].contains(url.scheme), url.host != nil,
+              url.user == nil, url.password == nil else { replyHandler(false, nil); return }
+        subtitleScans[id] = Task {
+            let cookies = sameOrigin(url, origin) ? await web.configuration.websiteDataStore.httpCookieStore.allCookies() : []
+            let found = !Task.isCancelled ? await FrameSubtitleProbe.detect(url: url, cookies: cookies) : false
+            subtitleScans[id] = nil
+            replyHandler(found && !Task.isCancelled, nil)
         }
     }
     private func record(_ event: [String: Any]) {

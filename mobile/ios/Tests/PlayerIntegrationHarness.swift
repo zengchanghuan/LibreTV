@@ -13,6 +13,32 @@ private final class EmptySeekableRangesItem: AVPlayerItem {
     override var seekableTimeRanges: [NSValue] { [] }
 }
 
+// Supply a recognized location to ZF's installed callback. Player controls,
+// layout, playback state, media clock and seek completions are the real ones.
+private final class LocatedDoubleTap: UITapGestureRecognizer {
+    weak var coordinateView: UIView?
+    var point = CGPoint.zero
+    override var state: UIGestureRecognizer.State {
+        get { .ended }
+        set {}
+    }
+    override func location(in view: UIView?) -> CGPoint {
+        coordinateView?.convert(point, to: view) ?? point
+    }
+}
+
+private final class LocatedPlayerGesture: ZFPlayerGestureControl {
+    let recognizedTap = LocatedDoubleTap()
+    override var doubleTap: UITapGestureRecognizer { recognizedTap }
+}
+
+@MainActor private func doubleTap(_ controls: HomeTVPlayerControls, x: CGFloat, y: CGFloat = 0.5) {
+    let gesture = LocatedPlayerGesture()
+    gesture.recognizedTap.coordinateView = controls
+    gesture.recognizedTap.point = CGPoint(x: controls.bounds.width * x, y: controls.bounds.height * y)
+    controls.player?.gestureControl.doubleTapped?(gesture)
+}
+
 /// Copied into an isolated app by run-player-integration.py, never into HomeTV.
 @MainActor func runPlayerIntegration(window: UIWindow, scene: UIWindowScene) {
     Task { @MainActor in
@@ -82,6 +108,118 @@ private final class EmptySeekableRangesItem: AVPlayerItem {
               episodes: [Episode(url: "http://127.0.0.1:18085" + path, title: "第一集", position: 4), Episode(url: "http://127.0.0.1:18085/video.mp4?second", title: "第二集", position: 2)],
               rate: 1.5, autoplayNext: autoplay, baseRevision: 0, openedAt: 1)
         }
+        @MainActor func verifyDoubleTaps(host: UIViewController, origin: URL) async throws {
+            let prefKey = "playback.doubleTapSeekSeconds"
+            let defaults = UserDefaults.standard
+            let saved = defaults.object(forKey: prefKey)
+            defaults.removeObject(forKey: prefKey)
+            defer {
+                if let saved { defaults.set(saved, forKey: prefKey) }
+                else { defaults.removeObject(forKey: prefKey) }
+            }
+            scene.requestGeometryUpdate(.iOS(interfaceOrientations: .portrait))
+            let initialPortrait = await until { scene.interfaceOrientation == .portrait && host.view.window != nil }
+            try testCheck(initialPortrait, "Portrait host for gesture regression")
+            check("double-tap-default-10-seconds", PlaybackPreferences().doubleTapSeekSeconds == 10)
+            @MainActor func selectThirtySeconds() async throws {
+                let tab = try testRequire(descendants(host.view).first { $0.accessibilityIdentifier == "browser.tab.4" } as? UIButton, "Settings tab")
+                tab.sendActions(for: .touchUpInside)
+                let bar = try testRequire(descendants(host.view).compactMap { $0 as? UINavigationBar }.first, "Browser navigation")
+                _ = await until { bar.topItem?.rightBarButtonItem?.title == "播放器配置" }
+                let button = try testRequire(bar.topItem?.rightBarButtonItem, "Player settings action")
+                let open = try testRequire(button.action, "Settings target action")
+                UIApplication.shared.sendAction(open, to: button.target, from: button, for: nil)
+                _ = await until { host.presentedViewController?.transitionCoordinator == nil && host.presentedViewController is UINavigationController }
+                let nav = try testRequire(host.presentedViewController as? UINavigationController, "Player settings navigation")
+                let settings = try testRequire(nav.topViewController as? BackgroundPlaybackSettingsController, "Player settings table")
+                let rowIndex = IndexPath(row: 0, section: 0)
+                let row = try testRequire(settings.tableView.cellForRow(at: rowIndex), "Duration setting cell")
+                check("double-tap-settings-shows-current-value", row.accessibilityIdentifier == "playback.double-tap-seek" && row.detailTextLabel?.text == "10 秒" && row.accessoryType == .disclosureIndicator)
+                settings.tableView.delegate?.tableView?(settings.tableView, didSelectRowAt: rowIndex)
+                _ = await until { nav.topViewController !== settings && nav.transitionCoordinator == nil }
+                let options = try testRequire(nav.topViewController as? UITableViewController, "Duration choices")
+                let rows = options.tableView.visibleCells
+                check("double-tap-settings-options-and-default", rows.compactMap { $0.textLabel?.text } == ["5 秒", "10 秒", "15 秒", "30 秒"] && rows.filter { $0.accessoryType == .checkmark }.map { $0.accessibilityIdentifier } == ["playback.double-tap-seek.10"])
+                let choice = try testRequire(rows.first { $0.accessibilityIdentifier == "playback.double-tap-seek.30" }, "30-second choice")
+                let choiceIndex = try testRequire(options.tableView.indexPath(for: choice), "30-second index")
+                options.tableView.delegate?.tableView?(options.tableView, didSelectRowAt: choiceIndex)
+                let returned = await until { nav.topViewController === settings && nav.transitionCoordinator == nil }
+                check("double-tap-selection-returns-and-persists", returned && settings.tableView.cellForRow(at: rowIndex)?.detailTextLabel?.text == "30 秒" && PlaybackPreferences().doubleTapSeekSeconds == 30)
+                nav.dismiss(animated: false)
+                _ = await until { host.presentedViewController == nil }
+            }
+            for seconds in [10, 30] {
+                if seconds == 30 { try await selectThirtySeconds() }
+                var descriptor = session()
+                descriptor.episodes[0].position = 22
+                descriptor.rate = 0.5
+                let film = PlayerController(session: descriptor, origin: origin, cookies: [])
+                film.modalPresentationStyle = .fullScreen
+                host.present(film, animated: false)
+                _ = await until { playerControlsReady(film) }
+                let controls = try testRequire(descendants(film.view).compactMap { $0 as? HomeTVPlayerControls }.first, "Gesture controls")
+                let zf = try testRequire(controls.player, "Gesture player")
+                let engine = try testRequire(zf.currentPlayerManager as? HomeTVPlayerManager, "Gesture engine")
+                let ready = await until { engine.isPlaying && engine.currentTime >= 22 && engine.totalTime > 59 }
+                try testCheck(ready, "60-second player must restore 22-second position")
+                let player = try testRequire(engine.player, "Gesture AVPlayer")
+                let item = try testRequire(player.currentItem, "Gesture AVPlayerItem")
+                let cue = try testRequire(descendants(controls).first { $0.accessibilityIdentifier == "player.seek-feedback" } as? UILabel, "Gesture feedback")
+                let prefix = seconds == 10 ? "double-tap-portrait" : "double-tap-landscape"
+                if seconds == 30 {
+                    controls.rotateButton.sendActions(for: .touchUpInside)
+                    let rotated = await until { scene.interfaceOrientation.isLandscape && controls.landscapeLayout && controls.bounds.width > controls.bounds.height }
+                    try testCheck(rotated, "Landscape playback layout")
+                }
+                check(prefix + "-recognizer-installed", zf.gestureControl.doubleTap.numberOfTapsRequired == 2 && zf.gestureControl.doubleTap.view?.window != nil && zf.gestureControl.doubleTapped != nil)
+                let before = player.currentTime().seconds
+                doubleTap(controls, x: 0.78)
+                let forward = await until { abs(player.currentTime().seconds - before - Double(seconds)) < 0.5 }
+                check(prefix + "-right-seeks-while-playing", forward && engine.isPlaying && player.rate == 0.5 && cue.text == "快进 \(seconds) 秒" && cue.convert(cue.bounds, to: controls).midX > controls.bounds.midX)
+                doubleTap(controls, x: 0.5)
+                let paused = await until { !engine.isPlaying && player.rate == 0 }
+                let pauseTime = player.currentTime().seconds
+                check(prefix + "-center-pauses-in-place", paused && abs(pauseTime - before - Double(seconds)) < 0.6)
+                doubleTap(controls, x: 0.2)
+                let backward = await until { abs(player.currentTime().seconds - pauseTime + Double(seconds)) < 0.2 }
+                check(prefix + "-left-seeks-while-paused", backward && !engine.isPlaying && player.rate == 0 && cue.text == "后退 \(seconds) 秒" && cue.convert(cue.bounds, to: controls).midX < controls.bounds.midX)
+                if seconds == 30 {
+                    let stable = player.currentTime().seconds
+                    controls.revealControls()
+                    controls.lockButton.sendActions(for: .touchUpInside)
+                    doubleTap(controls, x: 0.2); doubleTap(controls, x: 0.5)
+                    await wait(0.2)
+                    check("double-tap-lock-blocks-seek-and-toggle", controls.controlsLocked && !engine.isPlaying && abs(player.currentTime().seconds - stable) < 0.1)
+                    controls.lockButton.sendActions(for: .touchUpInside)
+                    for action in [controls.moreButton, controls.episodesButton] {
+                        action.sendActions(for: .touchUpInside)
+                        _ = await until { controls.isHidden && film.children.contains { $0 is PlayerDrawerController } }
+                        let drawer = try testRequire(film.children.compactMap { $0 as? PlayerDrawerController }.first, "Gesture drawer")
+                        doubleTap(controls, x: 0.25); doubleTap(controls, x: 0.5)
+                        drawer.backdrop.sendActions(for: .touchUpInside)
+                        _ = await until { drawer.parent == nil }
+                        check("double-tap-drawer-blocks-" + (action === controls.moreButton ? "settings" : "episodes"), !controls.isHidden && !engine.isPlaying && abs(player.currentTime().seconds - stable) < 0.1)
+                    }
+                    doubleTap(controls, x: 0.2)
+                    let start = await until { abs(player.currentTime().seconds) < 0.1 }
+                    doubleTap(controls, x: 0.2)
+                    check("double-tap-clamps-at-start", start && !engine.isPlaying && cue.text == "已到片头")
+                    doubleTap(controls, x: 0.78); doubleTap(controls, x: 0.78)
+                    let end = await until { abs(player.currentTime().seconds - engine.totalTime) < 0.1 }
+                    await wait(0.3)
+                    doubleTap(controls, x: 0.78)
+                    check("double-tap-rapid-seeks-hold-end-on-same-episode", end && !engine.isPlaying && film.session.index == 0 && player.currentItem === item && cue.text == "已到片尾")
+                }
+                let resumeFrom = player.currentTime().seconds
+                doubleTap(controls, x: 0.5)
+                let playing = await until {
+                    engine.isPlaying && player.rate == 0.5 && (seconds == 30 ? player.currentTime().seconds < 1 : player.currentTime().seconds > resumeFrom + 0.1)
+                }
+                check(prefix + "-center-resumes-current-episode", playing && film.session.index == 0 && player.currentItem === item)
+                film.closePlayer()
+                _ = await until { host.presentedViewController == nil && scene.interfaceOrientation == .portrait }
+            }
+        }
         do {
             // Legacy scenarios deliberately exercise the opt-in pause policy.
             PlaybackPreferences().smallWindow = false; PlaybackPreferences().backgroundAudio = false
@@ -103,6 +241,11 @@ private final class EmptySeekableRangesItem: AVPlayerItem {
             if fault == "missing-reflection" || fault == "wrong-type" {
                 let reflected: Any? = fault == "wrong-type" ? "not a control" : Mirror(reflecting: host).children.first { $0.label == "missing" }?.value
                 _ = try testRequire(reflected as? HomeTVPlayerControls, "Missing or invalid reflected controls")
+            }
+            if CommandLine.arguments.contains("--double-tap-only") {
+                try await verifyDoubleTaps(host: host, origin: origin)
+                try writeReport("player-integration.json")
+                return
             }
             if ProcessInfo.processInfo.arguments.contains("--sleep-minute-only") {
                 // Real elapsed time, real menu action, real media. Slow the 20s
@@ -152,26 +295,28 @@ private final class EmptySeekableRangesItem: AVPlayerItem {
             let web = try testRequire(descendants(host.view).compactMap { $0 as? WKWebView }.first, "Missing browser web view")
             let navigation = try testRequire(descendants(host.view).compactMap { $0 as? UINavigationBar }.first, "Missing browser navigation bar")
             let tabItems = descendants(tabs).compactMap { $0 as? UIButton }.filter { $0.accessibilityIdentifier?.hasPrefix("browser.tab.") == true }.sorted { ($0.accessibilityIdentifier ?? "") < ($1.accessibilityIdentifier ?? "") }
-            try testCheck(tabItems.count == 4, "Expected home, live, HD and settings tabs")
+            try testCheck(tabItems.count == 5, "Expected home, downloads, live, HD and settings tabs")
             // Prerequisite injection runs the actual player lookup below without
             // also running unrelated navigation/seek scenarios on each injection.
             if !["missing-controls", "missing-player", "wrong-manager"].contains(fault ?? "") {
-            check("four-tabs-have-labels-and-icons", tabItems.map { $0.configuration?.title } == ["首页", "直播", "高清", "设置"] && tabItems.allSatisfy { $0.configuration?.image != nil })
+            check("five-tabs-have-labels-and-icons", tabItems.map { $0.configuration?.title } == ["首页", "缓存", "直播", "高清", "设置"] && tabItems.allSatisfy { $0.configuration?.image != nil })
             _ = await until { !web.isLoading }
-            tabItems[2].sendActions(for: .touchUpInside)
-            let hdLoaded = await until { !web.isLoading && web.url?.path == "/hd" && tabs.selectedIndex == 2 }
+            tabItems[1].sendActions(for: .touchUpInside)
+            check("downloads-tab-embeds-library", tabs.selectedIndex == 1 && !tabs.isHidden && host.children.contains { ($0 as? UINavigationController)?.topViewController is OfflineDownloadsController })
+            tabItems[3].sendActions(for: .touchUpInside)
+            let hdLoaded = await until { !web.isLoading && web.url?.path == "/hd" && tabs.selectedIndex == 3 }
             check("hd-tab-navigates-and-highlights", hdLoaded)
             let historyCount = web.backForwardList.backList.count
-            tabItems[2].sendActions(for: .touchUpInside); await wait()
+            tabItems[3].sendActions(for: .touchUpInside); await wait()
             check("repeated-hd-tab-preserves-document", !web.isLoading && web.backForwardList.backList.count == historyCount && web.url?.path == "/hd")
             snapshot("hd-tabs-portrait")
-            check("four-tabs-portrait-layout", tabs.bounds.height >= 56 + host.view.safeAreaInsets.bottom && web.frame.maxY <= tabs.frame.minY + 1 && navigation.isHidden && navigation.bounds.height < 1 && abs(web.frame.minY - host.view.safeAreaInsets.top) < 1)
+            check("five-tabs-portrait-layout", tabs.bounds.height >= 56 + host.view.safeAreaInsets.bottom && web.frame.maxY <= tabs.frame.minY + 1 && navigation.isHidden && navigation.bounds.height < 1 && abs(web.frame.minY - host.view.safeAreaInsets.top) < 1)
             scene.requestGeometryUpdate(.iOS(interfaceOrientations: .landscapeRight))
             _ = await until { scene.interfaceOrientation == .landscapeRight }; await wait(0.5)
             snapshot("hd-tabs-landscape")
-            check("four-tabs-landscape-layout", tabs.bounds.height >= 56 + host.view.safeAreaInsets.bottom && web.frame.maxY <= tabs.frame.minY + 1 && navigation.isHidden && navigation.bounds.height < 1 && abs(web.frame.minY - host.view.safeAreaInsets.top) < 1)
-            tabItems[3].sendActions(for: .touchUpInside)
-            let settingsLoaded = await until { !web.isLoading && web.url?.path == "/settings" && tabs.selectedIndex == 3 }
+            check("five-tabs-landscape-layout", tabs.bounds.height >= 56 + host.view.safeAreaInsets.bottom && web.frame.maxY <= tabs.frame.minY + 1 && navigation.isHidden && navigation.bounds.height < 1 && abs(web.frame.minY - host.view.safeAreaInsets.top) < 1)
+            tabItems[4].sendActions(for: .touchUpInside)
+            let settingsLoaded = await until { !web.isLoading && web.url?.path == "/settings" && tabs.selectedIndex == 4 }
             check("settings-after-hd-highlights-fourth-tab", settingsLoaded)
             tabItems[0].sendActions(for: .touchUpInside)
             _ = await until { !web.isLoading && tabs.selectedIndex == 0 }
@@ -184,7 +329,7 @@ private final class EmptySeekableRangesItem: AVPlayerItem {
                 let action = try testRequire(item.action, "Missing native back action")
                 UIApplication.shared.sendAction(action, to: item.target, from: item, for: nil)
             }
-            for (index, title) in [(0, "首页"), (1, "直播"), (2, "高清专区"), (3, "设置")] {
+            for (index, title) in [(0, "首页"), (2, "直播"), (3, "高清专区"), (4, "设置")] {
                 tabItems[index].sendActions(for: .touchUpInside)
                 let loaded = await until { !web.isLoading && navigation.topItem?.title == title }
                 check("navigation-root-\(index)", loaded && navigation.topItem?.leftBarButtonItem == nil && tabs.selectedIndex == index)
@@ -195,11 +340,11 @@ private final class EmptySeekableRangesItem: AVPlayerItem {
             try tapNavigationBack()
             let aboutBack = await until { navigation.topItem?.title == "设置" && web.url?.path == "/settings" }
             check("navigation-about-back-to-settings", aboutBack)
-            tabItems[2].sendActions(for: .touchUpInside)
+            tabItems[3].sendActions(for: .touchUpInside)
             _ = await until { !web.isLoading && web.url?.path == "/hd" }
             _ = try await web.evaluateJavaScript("window.navigationFixture='preserved';history.replaceState({},'', '/hd?site=hdzone');history.pushState({},'', '/hd/hdzone?url=fixture')")
             let detailReady = await until { navigation.topItem?.title == "资源详情" && navigation.topItem?.leftBarButtonItem != nil }
-            check("navigation-spa-detail-updates-title-and-tab", detailReady && tabs.selectedIndex == 2)
+            check("navigation-spa-detail-updates-title-and-tab", detailReady && tabs.selectedIndex == 3)
             await wait(0.5) // Capture after the system tab selection animation settles.
             snapshot("navigation-hd-detail-portrait")
             try tapNavigationBack()
@@ -252,7 +397,7 @@ private final class EmptySeekableRangesItem: AVPlayerItem {
                 return matches(navigation.standardAppearance.backgroundColor, "surface")
                     && matches(navigation.standardAppearance.titleTextAttributes[.foregroundColor] as? UIColor, "content")
                     && matches(tabs.backgroundColor, "surface")
-                    && matches(tabItems[tabs.selectedIndex].configuration?.baseForegroundColor, "accent") && matches(tabItems[(tabs.selectedIndex + 1) % 4].configuration?.baseForegroundColor, "muted")
+                    && matches(tabItems[tabs.selectedIndex].configuration?.baseForegroundColor, "accent") && matches(tabItems[(tabs.selectedIndex + 1) % tabItems.count].configuration?.baseForegroundColor, "muted")
                     && matches(host.view.backgroundColor, "surface") && matches(web.backgroundColor, "page")
             }
             let systemThemeBefore = try await web.evaluateJavaScript("matchMedia('(prefers-color-scheme: dark)').matches") as? Bool
@@ -263,7 +408,7 @@ private final class EmptySeekableRangesItem: AVPlayerItem {
                 check(dark ? "theme-dark-matches-web" : "theme-light-matches-web", try await nativeColorsMatchPage())
                 snapshot(dark ? "navigation-theme-dark" : "navigation-theme-light")
             }
-            tabItems[3].sendActions(for: .touchUpInside)
+            tabItems[4].sendActions(for: .touchUpInside)
             _ = await until { !web.isLoading && web.url?.path == "/settings" }
             let retainedColors = try await nativeColorsMatchPage()
             check("theme-retained-across-document-navigation", browser.preferredStatusBarStyle == .darkContent && retainedColors)
@@ -664,7 +809,7 @@ private final class EmptySeekableRangesItem: AVPlayerItem {
             _ = await until { scene.interfaceOrientation.isLandscape && controller.view.bounds.width > controller.view.bounds.height }; await wait()
             let lockedTime = engine.currentTime
             controls.lockButton.sendActions(for: .touchUpInside)
-            controls.gestureDoubleTapped(controlsPlayer.gestureControl)
+            doubleTap(controls, x: 0.5)
             check("lock-hides-actions-and-blocks-playback-gesture", controls.controlsLocked && !isVisible(controls.playButton) && isVisible(controls.lockButton) && !engine.isPlaying && abs(engine.currentTime - lockedTime) < 0.1)
             controls.lockButton.sendActions(for: .touchUpInside)
             check("unlock-restores-controls-without-resuming", !controls.controlsLocked && isVisible(controls.playButton) && !engine.isPlaying)
@@ -672,9 +817,9 @@ private final class EmptySeekableRangesItem: AVPlayerItem {
             check("controls-auto-hide", !controls.controlViewAppeared && !isVisible(controls.playButton))
             controls.gestureSingleTapped(controlsPlayer.gestureControl); await wait()
             check("tap-shows-controls", controls.controlViewAppeared && isVisible(controls.playButton))
-            controls.gestureDoubleTapped(controlsPlayer.gestureControl)
+            doubleTap(controls, x: 0.5)
             check("double-tap-resumes", engine.isPlaying)
-            controls.gestureDoubleTapped(controlsPlayer.gestureControl)
+            doubleTap(controls, x: 0.5)
             check("double-tap-pauses", !engine.isPlaying)
             engine.seek(toTime: 10, completionHandler: nil); await wait()
             check("seek-while-paused", abs(engine.currentTime - 10) < 0.5 && !engine.isPlaying)

@@ -78,6 +78,40 @@ describe('media probe requests', () => {
     await probeVideo(source, 'mp4', 1, new AbortController().signal);
     expect(api.detail).toHaveBeenCalledTimes(3);
   });
+  it('scans the selected episode and rendition, publishing video before the OCR hint', async () => {
+    const scan = vi.fn().mockResolvedValue(true);
+    vi.stubGlobal('window', { location: { origin: 'https://home.example' }, __LIBRETV_NATIVE__: { scanSubtitleFrames: scan } });
+    const base = 'https://cdn.example.org/';
+    vi.mocked(api.detail).mockResolvedValue({ episodes: [base + 'other.mp4', base + 'master.m3u8'], videoInfo: { sourceKey: 'test', sourceName: 'test' } });
+    vi.stubGlobal('fetch', async (url: string) => {
+      if (url === base + 'master.m3u8') return new Response('#EXTM3U\n#EXT-X-STREAM-INF:RESOLUTION=1280x720\nchosen.m3u8');
+      if (url === base + 'chosen.m3u8') return new Response('#EXTM3U\n#EXTINF:4\nsegment.ts');
+      return new Response(new Uint8Array(1024));
+    });
+    const early = vi.fn();
+    const result = await probeVideo(source, 'burned-in', 1, new AbortController().signal, early);
+    expect(scan).toHaveBeenCalledWith({ id: expect.any(String), url: base + 'chosen.m3u8' });
+    expect(early.mock.calls[0][0]).toMatchObject({ ok: true, subtitles: 'unknown' });
+    expect(early.mock.calls[0][0].burnedInSubtitleHint).toBeUndefined();
+    expect(result).toMatchObject({ ok: true, subtitles: 'unknown', burnedInSubtitleHint: true });
+  });
+  it('cancels the native scan on dismissal and never caches a late positive', async () => {
+    const scan = vi.fn().mockImplementationOnce(() => new Promise(() => {})).mockResolvedValue(false);
+    vi.stubGlobal('window', { location: { origin: 'https://home.example' }, __LIBRETV_NATIVE__: { scanSubtitleFrames: scan } });
+    vi.mocked(api.detail).mockResolvedValue({ episodes: ['https://cdn.example.org/video.mp4'], videoInfo: { sourceKey: 'test', sourceName: 'test' } });
+    vi.stubGlobal('fetch', async () => new Response(new Uint8Array(16)));
+    const controller = new AbortController();
+    const probing = probeVideo(source, 'cancel-ocr', 0, controller.signal);
+    await vi.waitFor(() => expect(scan).toHaveBeenCalledOnce());
+    controller.abort();
+    await expect(probing).rejects.toThrow();
+    expect(scan).toHaveBeenCalledWith({ id: scan.mock.calls[0][0].id, cancel: true });
+    scan.mockRejectedValueOnce(new Error('decoder unavailable'));
+    const retry = await probeVideo(source, 'cancel-ocr', 0, new AbortController().signal);
+    expect(retry.ok).toBe(true);
+    expect(retry.burnedInSubtitleHint).toBeUndefined();
+    expect(api.detail).toHaveBeenCalledTimes(2);
+  });
   it.each(['data:text/plain,WEBVTT', 'empty.vtt', 'error.vtt'])('does not verify unusable subtitle %s or fail its video', async uri => {
     vi.mocked(api.detail).mockResolvedValue({ episodes: ['https://cdn.example.org/master.m3u8'], videoInfo: { sourceKey: 'test', sourceName: 'test' } });
     vi.stubGlobal('fetch', vi.fn(async (url: string) => {

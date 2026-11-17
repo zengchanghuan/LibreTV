@@ -44,7 +44,7 @@ export function SourceRecommendation({ quality, recommended, onSelect, switching
       </div>
       <details className="mt-2 text-xs text-faint">
         <summary className="cursor-pointer">检测说明</summary>
-        <p className="mt-1 leading-5">字幕未确认不代表没有字幕；画面内嵌字幕可能无法识别。速度为当前网络抽样，不保证整片流畅，也不代表已核验影片身份。</p>
+        <p className="mt-1 leading-5">“疑似画面字幕”表示设备在多处画面的相近位置读到了变化的文字。抽样可能错过对白，“字幕未确认”的片源仍可能有字幕。速度为当前网络抽样，不保证整片流畅，也不代表已核验影片身份。</p>
       </details>
     </section>
   );

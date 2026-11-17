@@ -17,6 +17,7 @@ function preference(value: SourcePreference): number[] {
     p?.ok === false ? 3 : p?.ok ? slowMedia(p) || p.kbps === undefined || recentTrouble ? 1 : 0 : 2,
     hd && subtitles ? 0 : subtitles ? 1 : hd ? 2 : 3,
     subtitles && isChineseSubtitle(p?.subtitleLanguage) ? 0 : 1,
+    p?.burnedInSubtitleHint ? 0 : 1,
     // A label is a weak tie-breaker, below measured speed and confirmed tracks.
     (p?.ms ?? qualityScore(historyOnly)) + (p?.kbps ? 2_000_000 / Math.max(1, p.kbps) : 2000) + (historyOnly?.starts ? qualityScore(historyOnly) : 0),
     claims.height && claims.subtitles ? 0 : claims.height || claims.subtitles ? 1 : 2,
@@ -35,5 +36,7 @@ export function mediaPreferenceLabel(probe?: MediaProbe, remarks?: string): stri
     : probe?.subtitles === 'declared' ? '字幕轨待验证' : claims.subtitles ? '片源标注中字' : '字幕未确认';
   const speed = !probe ? '待测速' : !probe.ok ? '媒体测速未通过' :
     `抽样 ${probe.kbps === undefined ? '速度未确认' : `${(probe.kbps / 1000).toFixed(1)} Mbps`}${slowMedia(probe) ? ' · 偏慢' : ''}`;
-  return `${resolution} · ${subtitles} · ${speed}`;
+  const subtitleLabel = probe?.burnedInSubtitleHint
+    ? (subtitles === '字幕未确认' ? '疑似画面字幕' : `${subtitles} · 疑似画面字幕`) : subtitles;
+  return `${resolution} · ${subtitleLabel} · ${speed}`;
 }

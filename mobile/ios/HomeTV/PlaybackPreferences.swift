@@ -2,8 +2,26 @@ import Foundation
 
 /// Device-local preferences. Legacy explicit choices are preserved independently.
 struct PlaybackPreferences {
+    static let doubleTapSeekOptions = [5, 10, 15, 30]
+    private static let defaultDoubleTapSeekSeconds = 10
+    private static let doubleTapSeekKey = "playback.doubleTapSeekSeconds"
+
     let defaults: UserDefaults
     init(defaults: UserDefaults = .standard) { self.defaults = defaults }
+
+    var doubleTapSeekSeconds: Int {
+        get {
+            guard let seconds = defaults.object(forKey: Self.doubleTapSeekKey) as? Int,
+                  Self.doubleTapSeekOptions.contains(seconds) else {
+                return Self.defaultDoubleTapSeekSeconds
+            }
+            return seconds
+        }
+        nonmutating set {
+            let seconds = Self.doubleTapSeekOptions.contains(newValue) ? newValue : Self.defaultDoubleTapSeekSeconds
+            defaults.set(seconds, forKey: Self.doubleTapSeekKey)
+        }
+    }
     var smallWindow: Bool {
         get {
             if defaults.object(forKey: "playback.smallWindow") != nil { return defaults.bool(forKey: "playback.smallWindow") }

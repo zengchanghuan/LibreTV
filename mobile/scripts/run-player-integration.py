@@ -12,6 +12,7 @@ parser.add_argument("device")
 parser.add_argument("--sleep-minute-only", action="store_true", help="Verify the real one-minute menu and unattended stop")
 parser.add_argument("--navigation-only", action="store_true", help="Run browser navigation and tab layout checks only")
 parser.add_argument("--seek-only", action="store_true", help="Run seek and buffering recovery regressions only")
+parser.add_argument("--double-tap-only", action="store_true", help="Check double-tap seeking and its native settings page")
 parser.add_argument("--background-only", action="store_true", help="Run mini player, PiP, real background audio and interruption checks")
 parser.add_argument("--cache-only", action="store_true", help="Run multi-film queue, batch picker and offline media checks")
 parser.add_argument("--offline-only", action="store_true", help="Run download and offline playback checks only")
@@ -46,7 +47,7 @@ if browser_source.count(connect) != 1:
 browser.write_text(browser_source.replace(connect,
     'if let url = URL(string: "http://127.0.0.1:18085") { connect(url) }'))
 subprocess.run([sys.executable, str(project / 'scripts/generate-ios-project.py')], check=True)
-video = (project / ('ios/Tests/Fixtures/background.mp4' if args.background_only else 'ios/Tests/Fixtures/player.mp4')).read_bytes()
+video = (project / ('ios/Tests/Fixtures/background.mp4' if args.background_only or args.double_tap_only else 'ios/Tests/Fixtures/player.mp4')).read_bytes()
 # Exercise the real web theme palette without connecting to production.
 theme_css = (repo / 'src/app/globals.css').read_text().split('html,\nbody')[0]
 class Handler(BaseHTTPRequestHandler):
@@ -117,6 +118,8 @@ try:
         for name in ['player-integration.json', 'player-progress.json']:
             (container / name).unlink(missing_ok=True)
         launch_args = ['--harness-failure=' + fault] if fault else (['--sleep-minute-only'] if args.sleep_minute_only else ['--navigation-only'] if args.navigation_only else ['--seek-only'] if args.seek_only else ['--offline-only'] if args.offline_only else [])
+        if args.double_tap_only and not fault:
+            launch_args = ['--double-tap-only']
         # simctl resolves absolute output paths inside the simulator's data root.
         stderr_path = '/tmp/' + work.name + '/stderr-' + (fault or 'normal') + '.log'
         stdout_path = '/tmp/' + work.name + '/stdout-' + (fault or 'normal') + '.log'

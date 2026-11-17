@@ -12,7 +12,7 @@ final class HomeTabBar: UIView {
         super.init(frame: frame)
         accessibilityIdentifier = "browser.tabs"
         let stack = UIStackView(); stack.axis = .horizontal; stack.distribution = .fillEqually
-        let items = [("首页", "house"), ("直播", "play.tv"), ("高清", "4k.tv"), ("设置", "gearshape")]
+        let items = [("首页", "house"), ("缓存", "arrow.down.circle"), ("直播", "play.tv"), ("高清", "4k.tv"), ("设置", "gearshape")]
         for (index, item) in items.enumerated() {
             let button = UIButton(type: .system)
             var config = UIButton.Configuration.plain()
