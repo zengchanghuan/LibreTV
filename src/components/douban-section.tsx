@@ -115,7 +115,7 @@ export function RecommendSection({ visible, onPick, sources = [], section }: { v
       const person = peopleCollections.find(p => p.id === id);
       setDirectory(person ? person.role === 'actor' ? 'actors' : 'directors' : 'topics');
       setFilter(''); setCollection(id === 'topics' ? 'home' : id); setDiscovery(false);
-    }} /> : collection === democracyTopic.id ? <DemocracyTimeline onPick={onPick} /> : collection === koreanGrandSlamCollection.id ? <KoreanGrandSlam onPick={onPick} /> : selected ? <CollectionList collection={selected} onPick={onPick} /> :
+    }} /> : collection === democracyTopic.id ? <DemocracyTimeline sources={sources} /> : collection === koreanGrandSlamCollection.id ? <KoreanGrandSlam onPick={onPick} /> : selected ? <CollectionList collection={selected} onPick={onPick} /> :
       collection === 'korean' || collection === 'zhangyan' ? <KoreanThrillers onPick={onPick} zhangYan={collection === 'zhangyan'} /> :
       recommendSource === 'bangumi' ? <BangumiView onPick={onPick} /> :
       recommendSource === 'hot-list' ? <HotListView onPick={onPick} /> : <DoubanView onPick={onPick} />}
