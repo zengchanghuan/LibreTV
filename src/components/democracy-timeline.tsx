@@ -9,8 +9,9 @@ type Film = [title: string, year: number, kind?: 'movie' | 'tv' | 'documentary' 
 const events: { date: string; event: string; films: Film[] }[] = [
   { date: '1979年10月', event: '朴正熙遇刺', films: [['南山的部长们', 2020]] },
   { date: '1979年12月', event: '双十二军事叛乱', films: [['首尔之春', 2023]] },
-  { date: '1980年5月', event: '光州民主化运动', films: [['出租车司机', 2017], ['华丽的假期', 2007], ['花瓣', 1996]] },
+  { date: '1980年5月', event: '光州民主化运动', films: [['出租车司机', 2017], ['华丽的假期', 2007], ['花瓣', 1996], ['薄荷糖', 1999]] },
   { date: '1981年', event: '釜林事件', films: [['辩护人', 2013]] },
+  { date: '1985年', event: '南营洞刑讯事件', films: [['南营洞1985', 2012]] },
   { date: '1987年6月', event: '六月民主抗争', films: [['1987：黎明到来的那一天', 2017]] },
   { date: '1997—1998', event: '首次朝野和平轮替', films: [['金大中就职影像', 1998, 'archive']] },
   { date: '2006年前后', event: '光州事件二十六年后', films: [['26年', 2012]] },
