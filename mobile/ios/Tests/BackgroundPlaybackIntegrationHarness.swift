@@ -285,7 +285,11 @@ private enum BackgroundPlaybackMode: String, CaseIterable {
                 check("audio-toggle-keeps-small-window-enabled", PlaybackPreferences().smallWindow && PlaybackPreferences().backgroundAudio)
                 toggle.isOn = false; toggle.sendActions(for: .valueChanged)
             }
-            host.dismiss(animated: false); await wait()
+            await withCheckedContinuation { (dismissed: CheckedContinuation<Void, Never>) in
+                host.dismiss(animated: false) { dismissed.resume() }
+            }
+            let hostReady = await until { host.presentedViewController == nil && host.viewIfLoaded?.window != nil }
+            try testCheck(hostReady, "Settings must finish dismissal before opening the next player")
             BackgroundPlaybackMode.current = .pause
             let disabled = PlayerController(session: session("small-window-disabled"), origin: URL(string: "http://127.0.0.1:18085")!, cookies: [])
             coordinator.start(disabled, from: host); _ = await until { disabled.isPlaybackRunning }

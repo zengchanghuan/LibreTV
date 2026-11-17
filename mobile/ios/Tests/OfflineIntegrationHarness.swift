@@ -72,6 +72,7 @@ import WebKit
             await wait()
             let settingsButton = try testRequire(descendants(manager.view).compactMap { $0 as? UIButton }.first { $0.accessibilityIdentifier == "offline.open-settings" }, "Settings entry")
             let mainFilter = try testRequire(descendants(manager.view).compactMap { $0 as? UISegmentedControl }.first { $0.accessibilityIdentifier == "offline.filter" }, "Main tabs")
+            let queueTab = try testRequire((0..<mainFilter.numberOfSegments).first { mainFilter.titleForSegment(at: $0)?.hasPrefix("缓存中 ") == true }, "Download queue tab")
             check("main-page-keeps-settings-secondary", descendants(manager.view).compactMap { $0 as? UISegmentedControl }.count == 1 && descendants(manager.view).compactMap { $0 as? UISwitch }.isEmpty && settingsButton.convert(settingsButton.bounds, to: manager.view).minY >= mainFilter.convert(mainFilter.bounds, to: manager.view).maxY && settingsButton.bounds.height >= 44)
             try snapshot("cache-paused-portrait")
             check("manager-shows-task-actions", descendants(manager.view).compactMap { $0 as? UIButton }.filter { $0.title(for: .normal) == "继续" }.count == 3)
@@ -101,7 +102,7 @@ import WebKit
             let doneAction = try testRequire(done.action, "Settings done action")
             UIApplication.shared.sendAction(doneAction, to: done.target, from: done, for: nil)
             _ = await until { manager.presentedViewController == nil }; await wait(0.5)
-            check("settings-close-preserves-library", host.presentedViewController === nav && mainFilter.selectedSegmentIndex == 0 && downloads.videos.count == 3)
+            check("settings-close-preserves-library", host.presentedViewController === nav && mainFilter.selectedSegmentIndex == queueTab && downloads.videos.count == 3)
             check("landscape-list-has-visible-first-card", manager.tableView.visibleCells.first.map { manager.view.bounds.contains($0.convert($0.bounds, to: manager.view)) } == true)
             if let first = manager.tableView.visibleCells.first {
                 let cardFrame = first.convert(first.bounds, to: manager.view), tabsFrame = mainFilter.convert(mainFilter.bounds, to: manager.view)
@@ -234,7 +235,8 @@ import WebKit
             let complete = OfflineDownloadsController(); let completeNav = UINavigationController(rootViewController: complete)
             host.present(completeNav, animated: false); _ = await until { complete.viewIfLoaded?.window != nil }
             let filter = try testRequire(descendants(complete.view).compactMap { $0 as? UISegmentedControl }.first { $0.accessibilityIdentifier == "offline.filter" }, "Completed tab")
-            filter.selectedSegmentIndex = 1; filter.sendActions(for: .valueChanged); await wait()
+            let completedTab = try testRequire((0..<filter.numberOfSegments).first { filter.titleForSegment(at: $0)?.hasPrefix("已缓存 ") == true }, "Completed downloads tab")
+            filter.selectedSegmentIndex = completedTab; filter.sendActions(for: .valueChanged); await wait()
             let movieLabels = complete.tableView.visibleCells.flatMap { descendants($0).compactMap { $0 as? UILabel }.compactMap(\.text) }
             check("movie-title-is-inside-card", movieLabels.contains("1987：黎明到来的那一天") && !movieLabels.contains("电影"))
             check("completed-page-hides-queue-and-long-footer", !descendants(complete.view).contains { ($0 as? UILabel)?.text?.contains("强制退出") == true } && complete.tableView.tableHeaderView!.bounds.height < 180)

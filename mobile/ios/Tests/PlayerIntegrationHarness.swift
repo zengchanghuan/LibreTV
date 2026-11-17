@@ -292,6 +292,9 @@ private final class LocatedPlayerGesture: ZFPlayerGestureControl {
             _ = await until { scene.interfaceOrientation == .portrait && host.view.bounds.height > host.view.bounds.width }
             let browser = try testRequire(host as? BrowserController, "Missing browser host")
             let tabs = try testRequire(descendants(host.view).compactMap { $0 as? HomeTabBar }.first, "Missing native tabs")
+            func downloadsPage() -> OfflineDownloadsController? {
+                host.children.compactMap { ($0 as? UINavigationController)?.topViewController as? OfflineDownloadsController }.first
+            }
             let web = try testRequire(descendants(host.view).compactMap { $0 as? WKWebView }.first, "Missing browser web view")
             let navigation = try testRequire(descendants(host.view).compactMap { $0 as? UINavigationBar }.first, "Missing browser navigation bar")
             let tabItems = descendants(tabs).compactMap { $0 as? UIButton }.filter { $0.accessibilityIdentifier?.hasPrefix("browser.tab.") == true }.sorted { ($0.accessibilityIdentifier ?? "") < ($1.accessibilityIdentifier ?? "") }
@@ -302,7 +305,7 @@ private final class LocatedPlayerGesture: ZFPlayerGestureControl {
             check("five-tabs-have-labels-and-icons", tabItems.map { $0.configuration?.title } == ["首页", "缓存", "直播", "高清", "设置"] && tabItems.allSatisfy { $0.configuration?.image != nil })
             _ = await until { !web.isLoading }
             tabItems[1].sendActions(for: .touchUpInside)
-            check("downloads-tab-embeds-library", tabs.selectedIndex == 1 && !tabs.isHidden && host.children.contains { ($0 as? UINavigationController)?.topViewController is OfflineDownloadsController })
+            check("downloads-tab-embeds-library", tabs.selectedIndex == 1 && !tabs.isHidden && downloadsPage() != nil)
             tabItems[3].sendActions(for: .touchUpInside)
             let hdLoaded = await until { !web.isLoading && web.url?.path == "/hd" && tabs.selectedIndex == 3 }
             check("hd-tab-navigates-and-highlights", hdLoaded)
@@ -660,25 +663,24 @@ private final class LocatedPlayerGesture: ZFPlayerGestureControl {
                 _ = try await URLSession.shared.data(from: origin.appendingPathComponent("offline-test-block"))
                 // Exercise the real document-start bridge and the same Settings action.
                 _ = try await web.evaluateJavaScript("window.dispatchEvent(new Event('libretv:show-download-manager'))")
-                _ = await until { host.presentedViewController is UINavigationController }
-                let nav = try testRequire(host.presentedViewController as? UINavigationController, "Native download manager must open from Settings event")
-                let list = try testRequire(nav.topViewController as? OfflineDownloadsController, "Offline list")
+                _ = await until { downloadsPage() != nil }
+                let list = try testRequire(downloadsPage(), "Native download manager must open from Settings event")
                 _ = await until { list.viewIfLoaded?.window != nil }
-                check("settings-download-event-opens-native-library", list.title == "我的缓存")
+                check("settings-download-event-opens-native-library", tabs.selectedIndex == 1 && list.title == "我的缓存")
                 await wait(0.5); snapshot("offline-downloads-portrait")
                 for id in [downloadID, hlsID] where downloads.library?.playableURL(id) != nil {
                     list.play(id)
-                    _ = await until { list.presentedViewController is PlayerController }
-                    let offline = try testRequire(list.presentedViewController as? PlayerController, "Offline player")
+                    _ = await until { host.presentedViewController is PlayerController }
+                    let offline = try testRequire(host.presentedViewController as? PlayerController, "Offline player")
                     _ = await until { playerControlsReady(offline) }
                     let oc = try testRequire(Mirror(reflecting: offline).children.first { $0.label == "controls" }?.value as? HomeTVPlayerControls, "Offline controls")
                     let oe = try testRequire(oc.player?.currentPlayerManager as? ZFAVPlayerManager, "Offline engine")
                     let playing = await until { oe.isPlaying && oe.currentTime > 0.5 }
                     check(id == downloadID ? "mp4-plays-with-source-offline" : "hls-plays-with-source-offline", playing && oe.assetURL?.isFileURL == true && oc.downloadButton.isHidden)
-                    offline.closePlayer(); _ = await until { list.presentedViewController == nil }
+                    offline.closePlayer(); _ = await until { host.presentedViewController == nil }
                 }
                 check("offline-playback-persists-resume", (downloads.library?.video(downloadID)?.position ?? 0) > 0)
-                nav.dismiss(animated: false); _ = await until { host.presentedViewController == nil }
+                tabItems[0].sendActions(for: .touchUpInside); _ = await until { downloadsPage() == nil && !web.isLoading }
                 let localFile = try testRequire(downloads.library?.playableURL(downloadID), "Downloaded MP4 path")
                 let localHLS = try testRequire(downloads.library?.playableURL(hlsID), "Downloaded HLS path")
                 try downloads.delete(downloadID); try downloads.delete(hlsID)
@@ -695,10 +697,9 @@ private final class LocatedPlayerGesture: ZFPlayerGestureControl {
                 let offlineButton = try testRequire(descendants(host.view).compactMap { $0 as? UIButton }.first { $0.accessibilityIdentifier == "offline.open" }, "Offline entry button")
                 check("network-error-keeps-offline-entry", !offlineButton.isHidden)
                 offlineButton.sendActions(for: .touchUpInside)
-                _ = await until { host.presentedViewController is UINavigationController }
-                check("offline-entry-opens-without-web-page", (host.presentedViewController as? UINavigationController)?.topViewController is OfflineDownloadsController)
-                host.dismiss(animated: false); _ = await until { host.presentedViewController == nil }
-                web.reload(); _ = await until { !web.isLoading }
+                _ = await until { downloadsPage()?.viewIfLoaded?.window != nil }
+                check("offline-entry-opens-without-web-page", tabs.selectedIndex == 1 && downloadsPage()?.viewIfLoaded?.window != nil)
+                tabItems[0].sendActions(for: .touchUpInside); _ = await until { downloadsPage() == nil && !web.isLoading }
             }
             if CommandLine.arguments.contains("--offline-only") {
                 try writeReport("player-integration.json"); fflush(stdout); return
